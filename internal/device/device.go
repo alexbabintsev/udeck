@@ -57,6 +57,17 @@ func (d *Device) SendPacket(pkt [protocol.PacketSize]byte) error {
 	return nil
 }
 
+// SendPackets writes a sequence of HID frames (used for multi-packet
+// transfers such as OUT_SET_BUTTONS).
+func (d *Device) SendPackets(pkts [][protocol.PacketSize]byte) error {
+	for _, pkt := range pkts {
+		if err := d.SendPacket(pkt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ReadPacket reads up to PacketSize bytes from the device. Returns 0 and
 // no error on timeout.
 func (d *Device) ReadPacket(timeout time.Duration) ([]byte, error) {

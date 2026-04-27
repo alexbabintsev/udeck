@@ -91,6 +91,10 @@ func cmdDumpEvents() error {
 	}
 	defer dev.Close()
 
+	if err := initDevice(dev); err != nil {
+		return err
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -152,6 +156,10 @@ func cmdRun(args []string) error {
 	}
 	defer dev.Close()
 
+	if err := initDevice(dev); err != nil {
+		return err
+	}
+
 	if cfg.Device.Brightness != nil {
 		pkt, err := protocol.SetBrightnessPacket(*cfg.Device.Brightness)
 		if err != nil {
@@ -168,6 +176,20 @@ func cmdRun(args []string) error {
 
 	fmt.Println("running. Ctrl-C to exit.")
 	return readLoop(ctx, dev)
+}
+
+// initDevice sends an empty page ZIP to switch the D200 out of firmware
+// UI mode so that it emits IN_BUTTON HID frames.
+func initDevice(dev *device.Device) error {
+	zipData, err := protocol.EmptyPageZIP()
+	if err != nil {
+		return fmt.Errorf("build init zip: %w", err)
+	}
+	pkts := protocol.SetButtonsPackets(zipData)
+	if err := dev.SendPackets(pkts); err != nil {
+		return fmt.Errorf("send init: %w", err)
+	}
+	return nil
 }
 
 func readLoop(ctx context.Context, dev *device.Device) error {
