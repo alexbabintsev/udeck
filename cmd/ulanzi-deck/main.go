@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/actions"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/device"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/preflight"
@@ -72,8 +73,6 @@ func cmdInfo() error {
 
 	info, err := dev.Info(2 * time.Second)
 	if err != nil {
-		// Fall back to hidapi-reported strings if no IN_DEVICE_INFO frame
-		// arrives — the device may not push one until prompted.
 		fmt.Printf("(no IN_DEVICE_INFO frame: %v)\n", err)
 		return nil
 	}
@@ -91,7 +90,7 @@ func cmdDumpEvents() error {
 	}
 	defer dev.Close()
 
-	if err := initDevice(dev); err != nil {
+	if err := initDevice(dev, nil); err != nil {
 		return err
 	}
 
@@ -99,7 +98,7 @@ func cmdDumpEvents() error {
 	defer stop()
 
 	fmt.Println("listening for events. Ctrl-C to exit.")
-	return readLoop(ctx, dev)
+	return readLoop(ctx, dev, nil)
 }
 
 func cmdSetBrightness(args []string) error {
@@ -156,7 +155,7 @@ func cmdRun(args []string) error {
 	}
 	defer dev.Close()
 
-	if err := initDevice(dev); err != nil {
+	if err := initDevice(dev, cfg.Buttons); err != nil {
 		return err
 	}
 
@@ -171,28 +170,35 @@ func cmdRun(args []string) error {
 		fmt.Printf("applied brightness=%d\n", *cfg.Device.Brightness)
 	}
 
+	// Build index → action map for fast lookup on button press.
+	actionMap := make(map[int]*config.Action, len(cfg.Buttons))
+	for _, btn := range cfg.Buttons {
+		if btn.Action != nil {
+			actionMap[btn.HIDIndex()] = btn.Action
+		}
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	fmt.Println("running. Ctrl-C to exit.")
-	return readLoop(ctx, dev)
+	return readLoop(ctx, dev, actionMap)
 }
 
-// initDevice sends an empty page ZIP to switch the D200 out of firmware
-// UI mode so that it emits IN_BUTTON HID frames.
-func initDevice(dev *device.Device) error {
-	zipData, err := protocol.EmptyPageZIP()
+// initDevice uploads a page ZIP to switch the D200 into host mode.
+// Pass nil buttons for empty slots (dump-events); pass config buttons for run.
+func initDevice(dev *device.Device, buttons []config.Button) error {
+	pkts, err := protocol.SetButtonsFromConfig(buttons)
 	if err != nil {
-		return fmt.Errorf("build init zip: %w", err)
+		return fmt.Errorf("build page zip: %w", err)
 	}
-	pkts := protocol.SetButtonsPackets(zipData)
 	if err := dev.SendPackets(pkts); err != nil {
-		return fmt.Errorf("send init: %w", err)
+		return fmt.Errorf("send page zip: %w", err)
 	}
 	return nil
 }
 
-func readLoop(ctx context.Context, dev *device.Device) error {
+func readLoop(ctx context.Context, dev *device.Device, actionMap map[int]*config.Action) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -212,5 +218,13 @@ func readLoop(ctx context.Context, dev *device.Device) error {
 			continue
 		}
 		fmt.Println(ev.String())
+
+		if ev.Kind == protocol.EventButton && ev.Pressed {
+			if a, ok := actionMap[int(ev.Index)]; ok {
+				if err := actions.Run(a); err != nil {
+					fmt.Fprintf(os.Stderr, "action error: %v\n", err)
+				}
+			}
+		}
 	}
 }
