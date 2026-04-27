@@ -22,3 +22,15 @@ func TestShouldRetryOpenOtherErrors(t *testing.T) {
 		t.Fatal("did not expect device not found to be retried")
 	}
 }
+
+func TestShouldRetryWriteGeneralError(t *testing.T) {
+	if !shouldRetryWrite(errors.New("IOHIDDeviceSetReport failed: general error")) {
+		t.Fatal("expected general write error to be retried")
+	}
+}
+
+func TestShouldRetryWriteOtherErrors(t *testing.T) {
+	if shouldRetryWrite(errors.New("permission denied")) {
+		t.Fatal("did not expect permission denied to be retried")
+	}
+}

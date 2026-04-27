@@ -66,7 +66,7 @@ func TestValidateRejectsButtonWithActionAndDirectory(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
-	if !strings.Contains(err.Error(), "both action and directory") {
+	if !strings.Contains(err.Error(), "cannot combine action, directory, and widget") {
 		t.Fatalf("expected action/directory validation error, got %v", err)
 	}
 }
@@ -146,5 +146,44 @@ func TestValidateRejectsHTTPActionWithoutURL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "action.url is empty") {
 		t.Fatalf("expected missing url error, got %v", err)
+	}
+}
+
+func TestValidateRejectsUnknownWidgetType(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At:     [2]int{0, 0},
+				Widget: &Widget{Type: "unknown"},
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected widget validation error")
+	}
+	if !strings.Contains(err.Error(), `widget.type "unknown" unknown`) {
+		t.Fatalf("expected unknown widget error, got %v", err)
+	}
+}
+
+func TestValidateRejectsCombiningWidgetAndAction(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At:     [2]int{0, 0},
+				Action: &Action{Type: "shell", Cmd: "echo hi"},
+				Widget: &Widget{Type: "memory"},
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected widget/action validation error")
+	}
+	if !strings.Contains(err.Error(), "cannot combine action, directory, and widget") {
+		t.Fatalf("expected widget/action combination error, got %v", err)
 	}
 }

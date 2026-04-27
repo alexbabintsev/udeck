@@ -4,7 +4,7 @@ device:
     align: center
     color: "#F6F6F6"
     font_name: "Roboto"
-    show_title: true
+    show_title: false
     size: 11
     weight: 90
 
@@ -177,11 +177,13 @@ buttons:
       cmd: "open -a Notes"
 
   - at: [4, 1]
-    label: "Finder"
-    icon: test-icons/finder.png
-    action:
-      type: shell
-      cmd: "open ."
+    label: "Memory"
+    widget:
+      type: memory
+      apps:
+        - "Google Chrome"
+        - "Slack"
+        - "Telegram"
 
   - at: [0, 2]
     label: "Escape"

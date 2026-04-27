@@ -41,12 +41,21 @@ type Button struct {
 	Icon      string     `yaml:"icon,omitempty"` // path, ~ expanded
 	Action    *Action    `yaml:"action,omitempty"`
 	Directory *Directory `yaml:"directory,omitempty"`
+	Widget    *Widget    `yaml:"widget,omitempty"`
+	RuntimeID string     `yaml:"-"`
 }
 
 // Directory defines a nested page of buttons. When opened at runtime, a
 // synthetic "Back" button is injected automatically.
 type Directory struct {
 	Buttons []Button `yaml:"buttons,omitempty"`
+}
+
+// Widget defines a dynamic button that manages its own icon and press logic.
+type Widget struct {
+	Type   string   `yaml:"type"`
+	Apps   []string `yaml:"apps,omitempty"`
+	PollMS int      `yaml:"poll_ms,omitempty"`
 }
 
 // HIDIndex converts [col, row] to the flat button index the device uses.
@@ -86,6 +95,7 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+	assignButtonIDs(c.Buttons, "buttons")
 	resolveButtonPaths(c.Buttons, filepath.Dir(path))
 	if err := c.Validate(); err != nil {
 		return &c, err
@@ -138,8 +148,18 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 			return fmt.Errorf("%s[%d].at duplicates %s[%d].at: %v", path, i, path, prev, btn.At)
 		}
 		seen[btn.At] = i
-		if btn.Action != nil && btn.Directory != nil {
-			return fmt.Errorf("%s[%d] cannot have both action and directory", path, i)
+		modeCount := 0
+		if btn.Action != nil {
+			modeCount++
+		}
+		if btn.Directory != nil {
+			modeCount++
+		}
+		if btn.Widget != nil {
+			modeCount++
+		}
+		if modeCount > 1 {
+			return fmt.Errorf("%s[%d] cannot combine action, directory, and widget", path, i)
 		}
 		if a := btn.Action; a != nil {
 			switch a.Type {
@@ -157,6 +177,16 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 				}
 			default:
 				return fmt.Errorf("%s[%d].action.type %q unknown (shell|key|http)", path, i, a.Type)
+			}
+		}
+		if w := btn.Widget; w != nil {
+			switch w.Type {
+			case "memory":
+				if w.PollMS != 0 && w.PollMS < 1000 {
+					return fmt.Errorf("%s[%d].widget.poll_ms too small: %d", path, i, w.PollMS)
+				}
+			default:
+				return fmt.Errorf("%s[%d].widget.type %q unknown (memory)", path, i, w.Type)
 			}
 		}
 		if d := btn.Directory; d != nil {
@@ -181,6 +211,15 @@ func resolveButtonPaths(buttons []Button, baseDir string) {
 		}
 		if buttons[i].Directory != nil {
 			resolveButtonPaths(buttons[i].Directory.Buttons, baseDir)
+		}
+	}
+}
+
+func assignButtonIDs(buttons []Button, path string) {
+	for i := range buttons {
+		buttons[i].RuntimeID = fmt.Sprintf("%s[%d]", path, i)
+		if buttons[i].Directory != nil {
+			assignButtonIDs(buttons[i].Directory.Buttons, buttons[i].RuntimeID+".directory.buttons")
 		}
 	}
 }

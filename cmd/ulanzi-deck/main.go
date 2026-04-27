@@ -16,6 +16,7 @@ import (
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/device"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/preflight"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/widgets"
 )
 
 var backButton = config.Button{
@@ -103,7 +104,7 @@ func cmdDumpEvents() error {
 	defer stop()
 
 	fmt.Println("listening for events. Ctrl-C to exit.")
-	return readLoop(ctx, dev, nil)
+	return readLoop(ctx, dev, nil, nil)
 }
 
 func cmdSetBrightness(args []string) error {
@@ -161,8 +162,13 @@ func cmdRun(args []string) error {
 	defer dev.Close()
 
 	nav := newNavigator(cfg.Buttons)
+	widgetMgr, err := widgets.NewManager(cfg.Buttons)
+	if err != nil {
+		return fmt.Errorf("widgets: %w", err)
+	}
+	defer widgetMgr.Close()
 
-	if err := initDevice(dev, nav.currentButtons()); err != nil {
+	if err := initDevice(dev, widgetMgr.ResolveButtons(nav.currentButtons())); err != nil {
 		return err
 	}
 
@@ -189,7 +195,7 @@ func cmdRun(args []string) error {
 	defer stop()
 
 	fmt.Println("running. Ctrl-C to exit.")
-	return readLoop(ctx, dev, nav)
+	return readLoop(ctx, dev, nav, widgetMgr)
 }
 
 // initDevice uploads a page ZIP to switch the D200 into host mode.
@@ -205,12 +211,23 @@ func initDevice(dev *device.Device, buttons []config.Button) error {
 	return nil
 }
 
-func readLoop(ctx context.Context, dev *device.Device, nav *navigator) error {
+func readLoop(ctx context.Context, dev *device.Device, nav *navigator, widgetMgr *widgets.Manager) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		default:
+		}
+		if widgetMgr != nil {
+			select {
+			case id := <-widgetMgr.Updates():
+				if nav != nil && buttonVisible(nav.currentButtons(), id) {
+					if err := initDevice(dev, widgetMgr.ResolveButtons(nav.currentButtons())); err != nil {
+						return fmt.Errorf("update widgets: %w", err)
+					}
+				}
+			default:
+			}
 		}
 		raw, err := dev.ReadPacket(100 * time.Millisecond)
 		if err != nil {
@@ -234,10 +251,21 @@ func readLoop(ctx context.Context, dev *device.Device, nav *navigator) error {
 		}
 		changed, action := nav.handleEvent(int(ev.Index), ev.Pressed)
 		if changed {
-			if err := initDevice(dev, nav.currentButtons()); err != nil {
+			buttons := nav.currentButtons()
+			if widgetMgr != nil {
+				buttons = widgetMgr.ResolveButtons(buttons)
+			}
+			if err := initDevice(dev, buttons); err != nil {
 				return fmt.Errorf("update page: %w", err)
 			}
 			continue
+		}
+		if ev.Pressed && widgetMgr != nil {
+			if btn := nav.findButton(int(ev.Index)); btn != nil && btn.Widget != nil {
+				if widgetMgr.Press(btn.RuntimeID) {
+					continue
+				}
+			}
 		}
 		if action != nil {
 			if err := actions.Run(action); err != nil {
@@ -296,4 +324,23 @@ func (n *navigator) currentPageButtons() []config.Button {
 		return n.root
 	}
 	return n.stack[len(n.stack)-1].Buttons
+}
+
+func (n *navigator) findButton(index int) *config.Button {
+	for _, btn := range n.currentButtons() {
+		if btn.HIDIndex() == index {
+			b := btn
+			return &b
+		}
+	}
+	return nil
+}
+
+func buttonVisible(buttons []config.Button, id string) bool {
+	for _, btn := range buttons {
+		if btn.RuntimeID == id {
+			return true
+		}
+	}
+	return false
 }

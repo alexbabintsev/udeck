@@ -15,8 +15,10 @@ const (
 	VendorID  = 0x2207
 	ProductID = 0x0019
 
-	openRetries    = 6
-	openRetryDelay = 250 * time.Millisecond
+	openRetries     = 6
+	openRetryDelay  = 250 * time.Millisecond
+	writeRetries    = 4
+	writeRetryDelay = 120 * time.Millisecond
 )
 
 // Device wraps a HID handle for the Ulanzi D200.
@@ -60,14 +62,22 @@ func (d *Device) SendPacket(pkt [protocol.PacketSize]byte) error {
 	buf := make([]byte, 1+protocol.PacketSize)
 	// buf[0] is left at 0x00 (report ID).
 	copy(buf[1:], pkt[:])
-	n, err := d.dev.Write(buf)
-	if err != nil {
-		return fmt.Errorf("hid write: %w", err)
+	var lastErr error
+	for attempt := 0; attempt < writeRetries; attempt++ {
+		n, err := d.dev.Write(buf)
+		if err == nil {
+			if n != len(buf) {
+				return fmt.Errorf("short hid write: %d/%d", n, len(buf))
+			}
+			return nil
+		}
+		lastErr = err
+		if !shouldRetryWrite(err) || attempt == writeRetries-1 {
+			break
+		}
+		time.Sleep(writeRetryDelay)
 	}
-	if n != len(buf) {
-		return fmt.Errorf("short hid write: %d/%d", n, len(buf))
-	}
-	return nil
+	return fmt.Errorf("hid write: %w", lastErr)
 }
 
 // SendPackets writes a sequence of HID frames (used for multi-packet
@@ -139,6 +149,16 @@ func shouldRetryOpen(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "privilege violation") ||
+		strings.Contains(msg, "resource busy") ||
+		strings.Contains(msg, "busy")
+}
+
+func shouldRetryWrite(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "general error") ||
 		strings.Contains(msg, "resource busy") ||
 		strings.Contains(msg, "busy")
 }
