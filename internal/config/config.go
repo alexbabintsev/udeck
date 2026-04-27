@@ -56,7 +56,7 @@ func (b Button) HIDIndex() int {
 
 // Action is the handler fired when a button is pressed.
 type Action struct {
-	// Type is "shell" or "key".
+	// Type is "shell", "key", or "http".
 	Type string `yaml:"type"`
 
 	// Cmd is the shell command run for type=shell.
@@ -65,6 +65,9 @@ type Action struct {
 	// Key is a key name for type=key, e.g. "return", "space", "f5".
 	// Modifiers are space-separated prefixes: "cmd shift s".
 	Key string `yaml:"key,omitempty"`
+
+	// URL is the endpoint called for type=http.
+	URL string `yaml:"url,omitempty"`
 }
 
 type SmallViewBlock struct {
@@ -148,8 +151,12 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 				if a.Key == "" {
 					return fmt.Errorf("%s[%d].action.key is empty", path, i)
 				}
+			case "http":
+				if a.URL == "" {
+					return fmt.Errorf("%s[%d].action.url is empty", path, i)
+				}
 			default:
-				return fmt.Errorf("%s[%d].action.type %q unknown (shell|key)", path, i, a.Type)
+				return fmt.Errorf("%s[%d].action.type %q unknown (shell|key|http)", path, i, a.Type)
 			}
 		}
 		if d := btn.Directory; d != nil {

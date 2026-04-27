@@ -1,13 +1,19 @@
 package actions
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os/exec"
+	"strings"
+	"time"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 )
 
 var execCommand = exec.Command
+var httpClient = &http.Client{Timeout: 3 * time.Second}
 
 // Run fires the action associated with a button press.
 func Run(a *config.Action) error {
@@ -19,6 +25,8 @@ func Run(a *config.Action) error {
 		return runShell(a.Cmd)
 	case "key":
 		return sendKey(a.Key)
+	case "http":
+		return runHTTP(a.URL)
 	default:
 		return fmt.Errorf("unknown action type %q", a.Type)
 	}
@@ -30,4 +38,28 @@ func runShell(cmd string) error {
 		return fmt.Errorf("start shell action: %w", err)
 	}
 	return nil
+}
+
+func runHTTP(url string) error {
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return explainHTTPError(url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("http action status: %s", resp.Status)
+	}
+	return nil
+}
+
+func explainHTTPError(rawURL string, err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		msg := strings.ToLower(urlErr.Err.Error())
+		if strings.Contains(msg, "connection refused") || strings.Contains(msg, "timeout") {
+			return fmt.Errorf("http action request to %s failed: %v. Is the target local service running?", rawURL, urlErr.Err)
+		}
+	}
+	return fmt.Errorf("http action request to %s failed: %w", rawURL, err)
 }

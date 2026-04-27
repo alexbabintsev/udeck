@@ -1,0 +1,66 @@
+device:
+  brightness: 65
+
+buttons:
+  - at: [0, 0]
+    label: "Next Screen"
+    icon: test-icons/apps-folder.png
+    action:
+      type: http
+      url: "http://127.0.0.1:27655/action/moveToNextScreen"
+
+  - at: [1, 0]
+    label: "Rotate"
+    icon: test-icons/system-folder.png
+    action:
+      type: http
+      url: "http://127.0.0.1:27655/action/rotateDisplay"
+
+  - at: [2, 0]
+    label: "Left Half"
+    icon: test-icons/find.png
+    action:
+      type: http
+      url: "http://127.0.0.1:27655/action/windowLeftHalf"
+
+  - at: [3, 0]
+    label: "Right Half"
+    icon: test-icons/tab.png
+    action:
+      type: http
+      url: "http://127.0.0.1:27655/action/windowRightHalf"
+
+  - at: [4, 0]
+    label: "Maximize"
+    icon: test-icons/reload.png
+    action:
+      type: http
+      url: "http://127.0.0.1:27655/action/windowMaximize"
+
+  - at: [0, 1]
+    label: "Spotify"
+    icon: test-icons/media-folder.png
+    action:
+      type: http
+      url: "http://127.0.0.1:27655/action/spotifyPlayPause"
+
+  - at: [1, 1]
+    label: "Next Track"
+    icon: test-icons/browser.png
+    action:
+      type: http
+      url: "http://127.0.0.1:27655/action/spotifyNext"
+
+  - at: [2, 1]
+    label: "Sleep"
+    icon: test-icons/lock.png
+    action:
+      type: http
+      url: "http://127.0.0.1:27655/action/systemSleep"
+
+  - at: [3, 1]
+    label: "Shutdown"
+    icon: test-icons/screenshot.png
+    action:
+      type: http
+      url: "http://127.0.0.1:27655/action/systemShutdown"

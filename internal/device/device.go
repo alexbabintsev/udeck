@@ -3,6 +3,7 @@ package device
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	hid "github.com/sstallion/go-hid"
@@ -13,6 +14,9 @@ import (
 const (
 	VendorID  = 0x2207
 	ProductID = 0x0019
+
+	openRetries    = 6
+	openRetryDelay = 250 * time.Millisecond
 )
 
 // Device wraps a HID handle for the Ulanzi D200.
@@ -26,11 +30,20 @@ func Open() (*Device, error) {
 	if err := hid.Init(); err != nil {
 		return nil, fmt.Errorf("hid init: %w", err)
 	}
-	dev, err := hid.OpenFirst(VendorID, ProductID)
-	if err != nil {
-		return nil, fmt.Errorf("hid open %04x:%04x: %w", VendorID, ProductID, err)
+
+	var lastErr error
+	for attempt := 0; attempt < openRetries; attempt++ {
+		dev, err := hid.OpenFirst(VendorID, ProductID)
+		if err == nil {
+			return &Device{dev: dev}, nil
+		}
+		lastErr = err
+		if !shouldRetryOpen(err) || attempt == openRetries-1 {
+			break
+		}
+		time.Sleep(openRetryDelay)
 	}
-	return &Device{dev: dev}, nil
+	return nil, fmt.Errorf("hid open %04x:%04x: %w", VendorID, ProductID, lastErr)
 }
 
 func (d *Device) Close() error {
@@ -118,4 +131,14 @@ func (d *Device) Info(timeout time.Duration) (string, error) {
 		return string(payload), nil
 	}
 	return "", errors.New("no device info received within timeout")
+}
+
+func shouldRetryOpen(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "privilege violation") ||
+		strings.Contains(msg, "resource busy") ||
+		strings.Contains(msg, "busy")
 }

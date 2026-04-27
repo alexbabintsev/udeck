@@ -129,3 +129,22 @@ func TestLoadExampleTestConfig(t *testing.T) {
 		t.Fatal("expected example test config to contain buttons")
 	}
 }
+
+func TestValidateRejectsHTTPActionWithoutURL(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At:     [2]int{0, 0},
+				Action: &Action{Type: "http"},
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected http action validation error")
+	}
+	if !strings.Contains(err.Error(), "action.url is empty") {
+		t.Fatalf("expected missing url error, got %v", err)
+	}
+}
