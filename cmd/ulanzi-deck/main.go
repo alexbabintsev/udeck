@@ -18,6 +18,11 @@ import (
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
 )
 
+var backButton = config.Button{
+	At:    [2]int{3, 2},
+	Label: "Back",
+}
+
 const usage = `ulanzi-deck — minimal headless daemon for the Ulanzi D200
 
 Usage:
@@ -155,7 +160,9 @@ func cmdRun(args []string) error {
 	}
 	defer dev.Close()
 
-	if err := initDevice(dev, cfg.Buttons); err != nil {
+	nav := newNavigator(cfg.Buttons)
+
+	if err := initDevice(dev, nav.currentButtons()); err != nil {
 		return err
 	}
 
@@ -178,19 +185,11 @@ func cmdRun(args []string) error {
 		fmt.Printf("applied brightness=%d\n", *cfg.Device.Brightness)
 	}
 
-	// Build index → action map for fast lookup on button press.
-	actionMap := make(map[int]*config.Action, len(cfg.Buttons))
-	for _, btn := range cfg.Buttons {
-		if btn.Action != nil {
-			actionMap[btn.HIDIndex()] = btn.Action
-		}
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	fmt.Println("running. Ctrl-C to exit.")
-	return readLoop(ctx, dev, actionMap)
+	return readLoop(ctx, dev, nav)
 }
 
 // initDevice uploads a page ZIP to switch the D200 into host mode.
@@ -206,7 +205,7 @@ func initDevice(dev *device.Device, buttons []config.Button) error {
 	return nil
 }
 
-func readLoop(ctx context.Context, dev *device.Device, actionMap map[int]*config.Action) error {
+func readLoop(ctx context.Context, dev *device.Device, nav *navigator) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -227,12 +226,74 @@ func readLoop(ctx context.Context, dev *device.Device, actionMap map[int]*config
 		}
 		fmt.Println(ev.String())
 
-		if ev.Kind == protocol.EventButton && ev.Pressed {
-			if a, ok := actionMap[int(ev.Index)]; ok {
-				if err := actions.Run(a); err != nil {
-					fmt.Fprintf(os.Stderr, "action error: %v\n", err)
-				}
+		if ev.Kind != protocol.EventButton {
+			continue
+		}
+		if nav == nil {
+			continue
+		}
+		changed, action := nav.handleEvent(int(ev.Index), ev.Pressed)
+		if changed {
+			if err := initDevice(dev, nav.currentButtons()); err != nil {
+				return fmt.Errorf("update page: %w", err)
+			}
+			continue
+		}
+		if action != nil {
+			if err := actions.Run(action); err != nil {
+				fmt.Fprintf(os.Stderr, "action error: %v\n", err)
 			}
 		}
 	}
+}
+
+type navigator struct {
+	root  []config.Button
+	stack []*config.Directory
+}
+
+func newNavigator(root []config.Button) *navigator {
+	return &navigator{root: root}
+}
+
+func (n *navigator) currentButtons() []config.Button {
+	buttons := append([]config.Button(nil), n.currentPageButtons()...)
+	if len(n.stack) > 0 {
+		buttons = append(buttons, backButton)
+	}
+	return buttons
+}
+
+func (n *navigator) handleEvent(index int, pressed bool) (pageChanged bool, action *config.Action) {
+	for _, btn := range n.currentButtons() {
+		if btn.HIDIndex() != index {
+			continue
+		}
+		if len(n.stack) > 0 && btn.At == backButton.At && btn.Label == backButton.Label && btn.Directory == nil && btn.Action == nil {
+			if !pressed {
+				return false, nil
+			}
+			n.stack = n.stack[:len(n.stack)-1]
+			return true, nil
+		}
+		if btn.Directory != nil {
+			if !pressed {
+				return false, nil
+			}
+			n.stack = append(n.stack, btn.Directory)
+			return true, nil
+		}
+		if !pressed {
+			return false, nil
+		}
+		return false, btn.Action
+	}
+	return false, nil
+}
+
+func (n *navigator) currentPageButtons() []config.Button {
+	if len(n.stack) == 0 {
+		return n.root
+	}
+	return n.stack[len(n.stack)-1].Buttons
 }

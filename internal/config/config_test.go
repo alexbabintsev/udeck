@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -47,5 +48,84 @@ func TestValidateAcceptsHashPrefixedLabelColor(t *testing.T) {
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected valid color, got %v", err)
+	}
+}
+
+func TestValidateRejectsButtonWithActionAndDirectory(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At:        [2]int{0, 0},
+				Action:    &Action{Type: "shell", Cmd: "echo hi"},
+				Directory: &Directory{Buttons: []Button{{At: [2]int{1, 0}, Label: "Nested"}}},
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if !strings.Contains(err.Error(), "both action and directory") {
+		t.Fatalf("expected action/directory validation error, got %v", err)
+	}
+}
+
+func TestValidateRejectsDirectoryBackSlotConflict(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At:    [2]int{0, 0},
+				Label: "Folder",
+				Directory: &Directory{
+					Buttons: []Button{
+						{At: [2]int{3, 2}, Label: "Conflicts"},
+					},
+				},
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected back slot conflict validation error")
+	}
+	if !strings.Contains(err.Error(), "reserved Back button slot") {
+		t.Fatalf("expected back slot conflict error, got %v", err)
+	}
+}
+
+func TestValidateAcceptsNestedDirectory(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At:    [2]int{0, 0},
+				Label: "Folder",
+				Directory: &Directory{
+					Buttons: []Button{
+						{
+							At:     [2]int{0, 0},
+							Label:  "Nested",
+							Action: &Action{Type: "key", Key: "space"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected nested directory to validate, got %v", err)
+	}
+}
+
+func TestLoadExampleTestConfig(t *testing.T) {
+	path := filepath.Join("..", "..", "examples", "test-config.yaml")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("expected example test config to load, got %v", err)
+	}
+	if len(cfg.Buttons) == 0 {
+		t.Fatal("expected example test config to contain buttons")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -35,10 +36,17 @@ type LabelStyle struct {
 // Button describes one key slot on the deck.
 type Button struct {
 	// At is [col, row], zero-indexed. col ∈ [0,4], row ∈ [0,2].
-	At     [2]int  `yaml:"at"`
-	Label  string  `yaml:"label,omitempty"`
-	Icon   string  `yaml:"icon,omitempty"` // path, ~ expanded
-	Action *Action `yaml:"action,omitempty"`
+	At        [2]int     `yaml:"at"`
+	Label     string     `yaml:"label,omitempty"`
+	Icon      string     `yaml:"icon,omitempty"` // path, ~ expanded
+	Action    *Action    `yaml:"action,omitempty"`
+	Directory *Directory `yaml:"directory,omitempty"`
+}
+
+// Directory defines a nested page of buttons. When opened at runtime, a
+// synthetic "Back" button is injected automatically.
+type Directory struct {
+	Buttons []Button `yaml:"buttons,omitempty"`
 }
 
 // HIDIndex converts [col, row] to the flat button index the device uses.
@@ -75,6 +83,7 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+	resolveButtonPaths(c.Buttons, filepath.Dir(path))
 	if err := c.Validate(); err != nil {
 		return &c, err
 	}
@@ -99,31 +108,7 @@ func (c *Config) Validate() error {
 			}
 		}
 	}
-	seen := make(map[[2]int]int, len(c.Buttons))
-	for i, btn := range c.Buttons {
-		if btn.At[0] < 0 || btn.At[0] > 4 || btn.At[1] < 0 || btn.At[1] > 2 {
-			return fmt.Errorf("buttons[%d].at out of range: %v", i, btn.At)
-		}
-		if prev, ok := seen[btn.At]; ok {
-			return fmt.Errorf("buttons[%d].at duplicates buttons[%d].at: %v", i, prev, btn.At)
-		}
-		seen[btn.At] = i
-		if a := btn.Action; a != nil {
-			switch a.Type {
-			case "shell":
-				if a.Cmd == "" {
-					return fmt.Errorf("buttons[%d].action.cmd is empty", i)
-				}
-			case "key":
-				if a.Key == "" {
-					return fmt.Errorf("buttons[%d].action.key is empty", i)
-				}
-			default:
-				return fmt.Errorf("buttons[%d].action.type %q unknown (shell|key)", i, a.Type)
-			}
-		}
-	}
-	return nil
+	return validateButtons(c.Buttons, "buttons", false)
 }
 
 func validateHexColor(s string) error {
@@ -135,4 +120,60 @@ func validateHexColor(s string) error {
 		return fmt.Errorf("must be valid hex RRGGBB")
 	}
 	return nil
+}
+
+func validateButtons(buttons []Button, path string, reserveBack bool) error {
+	seen := make(map[[2]int]int, len(buttons))
+	for i, btn := range buttons {
+		if btn.At[0] < 0 || btn.At[0] > 4 || btn.At[1] < 0 || btn.At[1] > 2 {
+			return fmt.Errorf("%s[%d].at out of range: %v", path, i, btn.At)
+		}
+		if reserveBack && btn.At == [2]int{3, 2} {
+			return fmt.Errorf("%s[%d].at conflicts with reserved Back button slot: %v", path, i, btn.At)
+		}
+		if prev, ok := seen[btn.At]; ok {
+			return fmt.Errorf("%s[%d].at duplicates %s[%d].at: %v", path, i, path, prev, btn.At)
+		}
+		seen[btn.At] = i
+		if btn.Action != nil && btn.Directory != nil {
+			return fmt.Errorf("%s[%d] cannot have both action and directory", path, i)
+		}
+		if a := btn.Action; a != nil {
+			switch a.Type {
+			case "shell":
+				if a.Cmd == "" {
+					return fmt.Errorf("%s[%d].action.cmd is empty", path, i)
+				}
+			case "key":
+				if a.Key == "" {
+					return fmt.Errorf("%s[%d].action.key is empty", path, i)
+				}
+			default:
+				return fmt.Errorf("%s[%d].action.type %q unknown (shell|key)", path, i, a.Type)
+			}
+		}
+		if d := btn.Directory; d != nil {
+			if len(d.Buttons) == 0 {
+				return fmt.Errorf("%s[%d].directory.buttons is empty", path, i)
+			}
+			childPath := fmt.Sprintf("%s[%d].directory.buttons", path, i)
+			if err := validateButtons(d.Buttons, childPath, true); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func resolveButtonPaths(buttons []Button, baseDir string) {
+	for i := range buttons {
+		if buttons[i].Icon != "" && !filepath.IsAbs(buttons[i].Icon) && !strings.HasPrefix(buttons[i].Icon, "~/") {
+			if _, err := os.Stat(buttons[i].Icon); err != nil {
+				buttons[i].Icon = filepath.Join(baseDir, buttons[i].Icon)
+			}
+		}
+		if buttons[i].Directory != nil {
+			resolveButtonPaths(buttons[i].Directory.Buttons, baseDir)
+		}
+	}
 }

@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"math/rand"
+	"sort"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
@@ -13,8 +15,8 @@ import (
 
 // ButtonSlot is the per-key payload written into the ZIP manifest.
 type buttonSlot struct {
-	State     int           `json:"State"`
-	ViewParam []viewParam   `json:"ViewParam"`
+	State     int         `json:"State"`
+	ViewParam []viewParam `json:"ViewParam"`
 }
 
 type viewParam struct {
@@ -49,7 +51,7 @@ func PageZIP(buttons []config.Button) ([]byte, error) {
 			vp.Text = btn.Label
 		}
 		if btn.Icon != "" {
-			iconFile := fmt.Sprintf("btn_%d_%d.jpg", col, row)
+			iconFile := fmt.Sprintf("btn_%d_%d_%08x.jpg", col, row, buttonIconID(btn))
 			jpeg, err := icons.Load(btn.Icon)
 			if err != nil {
 				return nil, fmt.Errorf("button [%d,%d] icon: %w", col, row, err)
@@ -109,12 +111,28 @@ func buildPageZIPRaw(manifest []byte, iconData map[string][]byte, dummy []byte) 
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
 
-	for name, data := range iconData {
+	// dummy must be written first so changing its size actually shifts the
+	// following file payloads relative to packet boundaries.
+	df, err := w.Create("dummy.txt")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := df.Write(dummy); err != nil {
+		return nil, err
+	}
+
+	names := make([]string, 0, len(iconData))
+	for name := range iconData {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
 		f, err := w.Create("icons/" + name)
 		if err != nil {
 			return nil, err
 		}
-		if _, err := f.Write(data); err != nil {
+		if _, err := f.Write(iconData[name]); err != nil {
 			return nil, err
 		}
 	}
@@ -127,17 +145,16 @@ func buildPageZIPRaw(manifest []byte, iconData map[string][]byte, dummy []byte) 
 		return nil, err
 	}
 
-	// dummy always present; grows until chunk boundaries are clean.
-	df, err := w.Create("dummy.txt")
-	if err != nil {
-		return nil, err
-	}
-	if _, err := df.Write(dummy); err != nil {
-		return nil, err
-	}
-
 	if err := w.Close(); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func buttonIconID(btn config.Button) uint32 {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(btn.Icon))
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write([]byte(btn.Label))
+	return h.Sum32()
 }
