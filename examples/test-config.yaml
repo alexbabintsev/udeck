@@ -17,30 +17,34 @@ buttons:
         - at: [0, 0]
           label: "Terminal"
           icon: test-icons/terminal.png
-          action:
-            type: shell
-            cmd: "open -a Terminal"
+          on:
+            tap:
+              type: shell
+              cmd: "open -a Terminal"
 
         - at: [1, 0]
           label: "Browser"
           icon: test-icons/browser.png
-          action:
-            type: shell
-            cmd: "open -a 'Google Chrome'"
+          on:
+            tap:
+              type: shell
+              cmd: "open -a 'Google Chrome'"
 
         - at: [2, 0]
           label: "Notes"
           icon: test-icons/notes.png
-          action:
-            type: shell
-            cmd: "open -a Notes"
+          on:
+            tap:
+              type: shell
+              cmd: "open -a Notes"
 
         - at: [0, 1]
           label: "Finder"
           icon: test-icons/finder.png
-          action:
-            type: shell
-            cmd: "open ."
+          on:
+            tap:
+              type: shell
+              cmd: "open ."
 
   - at: [1, 0]
     label: "Work"
@@ -50,30 +54,34 @@ buttons:
         - at: [0, 0]
           label: "README"
           icon: test-icons/readme.png
-          action:
-            type: shell
-            cmd: "open README.md"
+          on:
+            tap:
+              type: shell
+              cmd: "open README.md"
 
         - at: [1, 0]
           label: "Marker"
           icon: test-icons/marker.png
-          action:
-            type: shell
-            cmd: "date '+%F %T' >> /tmp/ulanzi-deck-test.log"
+          on:
+            tap:
+              type: shell
+              cmd: "date '+%F %T' >> /tmp/ulanzi-deck-test.log"
 
         - at: [2, 0]
           label: "Find"
           icon: test-icons/find.png
-          action:
-            type: key
-            key: "cmd f"
+          on:
+            tap:
+              type: key
+              key: "cmd f"
 
         - at: [0, 1]
           label: "New Tab"
           icon: test-icons/tab.png
-          action:
-            type: key
-            key: "cmd t"
+          on:
+            tap:
+              type: key
+              key: "cmd t"
 
   - at: [2, 0]
     label: "System"
@@ -83,100 +91,164 @@ buttons:
         - at: [0, 0]
           label: "Reload"
           icon: test-icons/reload.png
-          action:
-            type: key
-            key: "cmd r"
+          on:
+            tap:
+              type: key
+              key: "cmd r"
 
         - at: [1, 0]
           label: "Escape"
           icon: test-icons/escape.png
-          action:
-            type: key
-            key: "esc"
+          on:
+            tap:
+              type: key
+              key: "esc"
 
         - at: [2, 0]
           label: "Mute"
           icon: test-icons/mute.png
-          action:
-            type: key
-            key: "cmd shift m"
+          on:
+            tap:
+              type: key
+              key: "cmd shift m"
 
         - at: [0, 1]
           label: "Lock"
           icon: test-icons/lock.png
-          action:
-            type: key
-            key: "ctrl cmd q"
+          on:
+            tap:
+              type: key
+              key: "ctrl cmd q"
 
         - at: [1, 1]
           label: "Shot"
           icon: test-icons/screenshot.png
-          action:
-            type: key
-            key: "cmd shift 4"
+          on:
+            tap:
+              type: key
+              key: "cmd shift 4"
 
   - at: [3, 0]
-    label: "Media"
+    label: "Spotify"
     icon: test-icons/media-folder.png
     directory:
       buttons:
         - at: [0, 0]
-          label: "Play"
-          icon: test-icons/space.png
-          action:
-            type: key
-            key: "space"
+          widget:
+            type: spotify_play_pause
 
         - at: [1, 0]
-          label: "Browser"
-          icon: test-icons/browser.png
-          action:
-            type: shell
-            cmd: "open -a 'Google Chrome'"
+          widget:
+            type: spotify_next
 
         - at: [2, 0]
-          label: "Notes"
-          icon: test-icons/notes.png
-          action:
-            type: shell
-            cmd: "open -a Notes"
+          widget:
+            type: spotify_artwork
+
+        - at: [0, 1]
+          label: "Open App"
+          icon: test-icons/browser.png
+          on:
+            tap:
+              type: shell
+              cmd: "open -a Spotify"
 
   - at: [4, 0]
-    label: "Reload"
-    icon: test-icons/reload.png
-    action:
-      type: key
-      key: "cmd r"
+    label: "Hammers"
+    icon: test-icons/browser.png
+    directory:
+      buttons:
+        - at: [0, 0]
+          label: "Next Scr"
+          icon: test-icons/apps-folder.png
+          on:
+            tap:
+              type: http
+              url: "http://127.0.0.1:27655/action/moveToNextScreen"
+
+        - at: [1, 0]
+          label: "Rotate"
+          icon: test-icons/system-folder.png
+          on:
+            tap:
+              type: http
+              url: "http://127.0.0.1:27655/action/rotateDisplay"
+
+        - at: [2, 0]
+          label: "Left"
+          icon: test-icons/find.png
+          on:
+            tap:
+              type: http
+              url: "http://127.0.0.1:27655/action/windowLeftHalf"
+
+        - at: [0, 1]
+          label: "Right"
+          icon: test-icons/tab.png
+          on:
+            tap:
+              type: http
+              url: "http://127.0.0.1:27655/action/windowRightHalf"
+
+        - at: [1, 1]
+          label: "Max"
+          icon: test-icons/reload.png
+          on:
+            tap:
+              type: http
+              url: "http://127.0.0.1:27655/action/windowMaximize"
+
+        - at: [2, 1]
+          label: "Sleep"
+          icon: test-icons/lock.png
+          on:
+            tap:
+              type: http
+              url: "http://127.0.0.1:27655/action/systemSleep"
 
   - at: [0, 1]
-    label: "Find"
-    icon: test-icons/find.png
-    action:
-      type: key
-      key: "cmd f"
+    label: "Gestures"
+    icon: test-icons/tab.png
+    directory:
+      buttons:
+        - at: [0, 0]
+          label: "Tap"
+          icon: test-icons/reload.png
+          on:
+            tap:
+              type: key
+              key: "cmd r"
+
+        - at: [1, 0]
+          label: "Double"
+          icon: test-icons/tab.png
+          on:
+            tap:
+              type: key
+              key: "cmd t"
+            double_press:
+              type: shell
+              cmd: "open README.md"
+
+        - at: [2, 0]
+          label: "Long"
+          icon: test-icons/marker.png
+          on:
+            long_press:
+              type: shell
+              cmd: "date '+%F %T long-press' >> /tmp/ulanzi-deck-test.log"
+            long_press_ms: 700
+
+        - at: [0, 1]
+          label: "Repeat"
+          icon: test-icons/space.png
+          on:
+            repeat:
+              type: key
+              key: "space"
+            repeat_every_ms: 180
 
   - at: [1, 1]
-    label: "Play"
-    icon: test-icons/space.png
-    action:
-      type: key
-      key: "space"
-
-  - at: [2, 1]
-    label: "New Tab"
-    icon: test-icons/tab.png
-    action:
-      type: key
-      key: "cmd t"
-
-  - at: [3, 1]
-    label: "Notes"
-    icon: test-icons/notes.png
-    action:
-      type: shell
-      cmd: "open -a Notes"
-
-  - at: [4, 1]
     label: "Memory"
     widget:
       type: memory
@@ -185,30 +257,50 @@ buttons:
         - "Slack"
         - "Telegram"
 
+  - at: [2, 1]
+    label: "Notes"
+    icon: test-icons/notes.png
+    on:
+      tap:
+        type: shell
+        cmd: "open -a Notes"
+
+  - at: [3, 1]
+    label: "Browser"
+    icon: test-icons/browser.png
+    on:
+      tap:
+        type: shell
+        cmd: "open -a 'Google Chrome'"
+
+  - at: [4, 1]
+    label: "Play"
+    icon: test-icons/space.png
+    on:
+      tap:
+        type: key
+        key: "space"
+
   - at: [0, 2]
-    label: "Escape"
-    icon: test-icons/escape.png
-    action:
-      type: key
-      key: "esc"
+    label: "Find"
+    icon: test-icons/find.png
+    on:
+      tap:
+        type: key
+        key: "cmd f"
 
   - at: [1, 2]
     label: "Mute"
     icon: test-icons/mute.png
-    action:
-      type: key
-      key: "cmd shift m"
+    on:
+      tap:
+        type: key
+        key: "cmd shift m"
 
   - at: [2, 2]
     label: "Lock"
     icon: test-icons/lock.png
-    action:
-      type: key
-      key: "ctrl cmd q"
-
-  - at: [3, 2]
-    label: "Shot"
-    icon: test-icons/screenshot.png
-    action:
-      type: key
-      key: "cmd shift 4"
+    on:
+      tap:
+        type: key
+        key: "ctrl cmd q"

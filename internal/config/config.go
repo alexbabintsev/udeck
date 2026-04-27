@@ -39,7 +39,7 @@ type Button struct {
 	At        [2]int     `yaml:"at"`
 	Label     string     `yaml:"label,omitempty"`
 	Icon      string     `yaml:"icon,omitempty"` // path, ~ expanded
-	Action    *Action    `yaml:"action,omitempty"`
+	On        *Handlers  `yaml:"on,omitempty"`
 	Directory *Directory `yaml:"directory,omitempty"`
 	Widget    *Widget    `yaml:"widget,omitempty"`
 	RuntimeID string     `yaml:"-"`
@@ -56,6 +56,18 @@ type Widget struct {
 	Type   string   `yaml:"type"`
 	Apps   []string `yaml:"apps,omitempty"`
 	PollMS int      `yaml:"poll_ms,omitempty"`
+}
+
+// Handlers defines interaction handlers for a button. This is only valid
+// for action buttons and is mutually exclusive with Directory/Widget.
+type Handlers struct {
+	Tap           *Action `yaml:"tap,omitempty"`
+	DoublePress   *Action `yaml:"double_press,omitempty"`
+	LongPress     *Action `yaml:"long_press,omitempty"`
+	Repeat        *Action `yaml:"repeat,omitempty"`
+	LongPressMS   int     `yaml:"long_press_ms,omitempty"`
+	DoublePressMS int     `yaml:"double_press_ms,omitempty"`
+	RepeatEveryMS int     `yaml:"repeat_every_ms,omitempty"`
 }
 
 // HIDIndex converts [col, row] to the flat button index the device uses.
@@ -149,7 +161,7 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 		}
 		seen[btn.At] = i
 		modeCount := 0
-		if btn.Action != nil {
+		if btn.On != nil {
 			modeCount++
 		}
 		if btn.Directory != nil {
@@ -159,24 +171,45 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 			modeCount++
 		}
 		if modeCount > 1 {
-			return fmt.Errorf("%s[%d] cannot combine action, directory, and widget", path, i)
+			return fmt.Errorf("%s[%d] cannot combine on, directory, and widget", path, i)
 		}
-		if a := btn.Action; a != nil {
-			switch a.Type {
-			case "shell":
-				if a.Cmd == "" {
-					return fmt.Errorf("%s[%d].action.cmd is empty", path, i)
+		if tr := btn.On; tr != nil {
+			actionCount := 0
+			if tr.Tap != nil {
+				actionCount++
+				if err := validateAction(tr.Tap, fmt.Sprintf("%s[%d].on.tap", path, i)); err != nil {
+					return err
 				}
-			case "key":
-				if a.Key == "" {
-					return fmt.Errorf("%s[%d].action.key is empty", path, i)
+			}
+			if tr.DoublePress != nil {
+				actionCount++
+				if err := validateAction(tr.DoublePress, fmt.Sprintf("%s[%d].on.double_press", path, i)); err != nil {
+					return err
 				}
-			case "http":
-				if a.URL == "" {
-					return fmt.Errorf("%s[%d].action.url is empty", path, i)
+			}
+			if tr.LongPress != nil {
+				actionCount++
+				if err := validateAction(tr.LongPress, fmt.Sprintf("%s[%d].on.long_press", path, i)); err != nil {
+					return err
 				}
-			default:
-				return fmt.Errorf("%s[%d].action.type %q unknown (shell|key|http)", path, i, a.Type)
+			}
+			if tr.Repeat != nil {
+				actionCount++
+				if err := validateAction(tr.Repeat, fmt.Sprintf("%s[%d].on.repeat", path, i)); err != nil {
+					return err
+				}
+			}
+			if actionCount == 0 {
+				return fmt.Errorf("%s[%d].on has no actions", path, i)
+			}
+			if tr.LongPressMS != 0 && tr.LongPressMS < 100 {
+				return fmt.Errorf("%s[%d].on.long_press_ms too small: %d", path, i, tr.LongPressMS)
+			}
+			if tr.DoublePressMS != 0 && tr.DoublePressMS < 100 {
+				return fmt.Errorf("%s[%d].on.double_press_ms too small: %d", path, i, tr.DoublePressMS)
+			}
+			if tr.RepeatEveryMS != 0 && tr.RepeatEveryMS < 50 {
+				return fmt.Errorf("%s[%d].on.repeat_every_ms too small: %d", path, i, tr.RepeatEveryMS)
 			}
 		}
 		if w := btn.Widget; w != nil {
@@ -198,6 +231,26 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func validateAction(a *Action, path string) error {
+	switch a.Type {
+	case "shell":
+		if a.Cmd == "" {
+			return fmt.Errorf("%s.cmd is empty", path)
+		}
+	case "key":
+		if a.Key == "" {
+			return fmt.Errorf("%s.key is empty", path)
+		}
+	case "http":
+		if a.URL == "" {
+			return fmt.Errorf("%s.url is empty", path)
+		}
+	default:
+		return fmt.Errorf("%s.type %q unknown (shell|key|http)", path, a.Type)
 	}
 	return nil
 }

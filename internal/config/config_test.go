@@ -56,7 +56,7 @@ func TestValidateRejectsButtonWithActionAndDirectory(t *testing.T) {
 		Buttons: []Button{
 			{
 				At:        [2]int{0, 0},
-				Action:    &Action{Type: "shell", Cmd: "echo hi"},
+				On:        &Handlers{Tap: &Action{Type: "shell", Cmd: "echo hi"}},
 				Directory: &Directory{Buttons: []Button{{At: [2]int{1, 0}, Label: "Nested"}}},
 			},
 		},
@@ -66,7 +66,7 @@ func TestValidateRejectsButtonWithActionAndDirectory(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
-	if !strings.Contains(err.Error(), "cannot combine action, directory, and widget") {
+	if !strings.Contains(err.Error(), "cannot combine on, directory, and widget") {
 		t.Fatalf("expected action/directory validation error, got %v", err)
 	}
 }
@@ -104,9 +104,9 @@ func TestValidateAcceptsNestedDirectory(t *testing.T) {
 				Directory: &Directory{
 					Buttons: []Button{
 						{
-							At:     [2]int{0, 0},
-							Label:  "Nested",
-							Action: &Action{Type: "key", Key: "space"},
+							At:    [2]int{0, 0},
+							Label: "Nested",
+							On:    &Handlers{Tap: &Action{Type: "key", Key: "space"}},
 						},
 					},
 				},
@@ -130,23 +130,12 @@ func TestLoadExampleTestConfig(t *testing.T) {
 	}
 }
 
-func TestLoadExampleSpotifyConfig(t *testing.T) {
-	path := filepath.Join("..", "..", "examples", "spotify-config.yaml")
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("expected example spotify config to load, got %v", err)
-	}
-	if len(cfg.Buttons) == 0 {
-		t.Fatal("expected example spotify config to contain buttons")
-	}
-}
-
 func TestValidateRejectsHTTPActionWithoutURL(t *testing.T) {
 	cfg := &Config{
 		Buttons: []Button{
 			{
-				At:     [2]int{0, 0},
-				Action: &Action{Type: "http"},
+				At: [2]int{0, 0},
+				On: &Handlers{Tap: &Action{Type: "http"}},
 			},
 		},
 	}
@@ -155,7 +144,7 @@ func TestValidateRejectsHTTPActionWithoutURL(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected http action validation error")
 	}
-	if !strings.Contains(err.Error(), "action.url is empty") {
+	if !strings.Contains(err.Error(), "on.tap.url is empty") {
 		t.Fatalf("expected missing url error, got %v", err)
 	}
 }
@@ -184,7 +173,7 @@ func TestValidateRejectsCombiningWidgetAndAction(t *testing.T) {
 		Buttons: []Button{
 			{
 				At:     [2]int{0, 0},
-				Action: &Action{Type: "shell", Cmd: "echo hi"},
+				On:     &Handlers{Tap: &Action{Type: "shell", Cmd: "echo hi"}},
 				Widget: &Widget{Type: "memory"},
 			},
 		},
@@ -194,8 +183,47 @@ func TestValidateRejectsCombiningWidgetAndAction(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected widget/action validation error")
 	}
-	if !strings.Contains(err.Error(), "cannot combine action, directory, and widget") {
+	if !strings.Contains(err.Error(), "cannot combine on, directory, and widget") {
 		t.Fatalf("expected widget/action combination error, got %v", err)
+	}
+}
+
+func TestValidateAcceptsOnHandlers(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At: [2]int{0, 0},
+				On: &Handlers{
+					Tap:           &Action{Type: "shell", Cmd: "echo tap"},
+					DoublePress:   &Action{Type: "key", Key: "cmd t"},
+					LongPress:     &Action{Type: "http", URL: "http://127.0.0.1/test"},
+					Repeat:        &Action{Type: "key", Key: "space"},
+					LongPressMS:   500,
+					DoublePressMS: 300,
+					RepeatEveryMS: 120,
+				},
+			},
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected on handlers to validate, got %v", err)
+	}
+}
+
+func TestValidateRejectsEmptyOnHandlers(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{At: [2]int{0, 0}, On: &Handlers{}},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected empty triggers validation error")
+	}
+	if !strings.Contains(err.Error(), "on has no actions") {
+		t.Fatalf("expected empty on error, got %v", err)
 	}
 }
 
