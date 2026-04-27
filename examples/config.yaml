@@ -1,0 +1,17 @@
+# ulanzi-deck v1 example config.
+# v1 uses only `device.brightness`. Other fields parse but are ignored.
+
+device:
+  brightness: 70
+
+buttons:
+  - at: [0, 0]
+    label: "Term"
+    icon: ~/decks/icons/term.png
+    action:
+      type: shell
+      cmd: "open -a Terminal"
+
+smallview:
+  mode: stats
+  refresh_ms: 1000
