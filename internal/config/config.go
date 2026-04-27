@@ -181,12 +181,12 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 		}
 		if w := btn.Widget; w != nil {
 			switch w.Type {
-			case "memory":
+			case "memory", "spotify_play_pause", "spotify_next", "spotify_artwork":
 				if w.PollMS != 0 && w.PollMS < 1000 {
 					return fmt.Errorf("%s[%d].widget.poll_ms too small: %d", path, i, w.PollMS)
 				}
 			default:
-				return fmt.Errorf("%s[%d].widget.type %q unknown (memory)", path, i, w.Type)
+				return fmt.Errorf("%s[%d].widget.type %q unknown (memory|spotify_play_pause|spotify_next|spotify_artwork)", path, i, w.Type)
 			}
 		}
 		if d := btn.Directory; d != nil {

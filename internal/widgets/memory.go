@@ -5,7 +5,6 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -141,13 +140,8 @@ func (w *MemoryWidget) render() error {
 		drawCenteredFace(img, "MEMORY", memoryWidgetW/2, memoryWidgetH-18, color.RGBA{0x90, 0x90, 0x90, 0xff}, basicfont.Face7x13)
 	}
 
-	f, err := os.Create(w.iconPath)
-	if err != nil {
-		return fmt.Errorf("create memory widget icon: %w", err)
-	}
-	defer f.Close()
-	if err := png.Encode(f, img); err != nil {
-		return fmt.Errorf("encode memory widget icon: %w", err)
+	if err := writePNGAtomic(w.iconPath, img); err != nil {
+		return fmt.Errorf("write memory widget icon: %w", err)
 	}
 	return nil
 }

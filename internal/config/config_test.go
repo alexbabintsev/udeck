@@ -130,6 +130,17 @@ func TestLoadExampleTestConfig(t *testing.T) {
 	}
 }
 
+func TestLoadExampleSpotifyConfig(t *testing.T) {
+	path := filepath.Join("..", "..", "examples", "spotify-config.yaml")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("expected example spotify config to load, got %v", err)
+	}
+	if len(cfg.Buttons) == 0 {
+		t.Fatal("expected example spotify config to contain buttons")
+	}
+}
+
 func TestValidateRejectsHTTPActionWithoutURL(t *testing.T) {
 	cfg := &Config{
 		Buttons: []Button{
@@ -185,5 +196,19 @@ func TestValidateRejectsCombiningWidgetAndAction(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "cannot combine action, directory, and widget") {
 		t.Fatalf("expected widget/action combination error, got %v", err)
+	}
+}
+
+func TestValidateAcceptsSpotifyWidgets(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{At: [2]int{0, 0}, Widget: &Widget{Type: "spotify_play_pause"}},
+			{At: [2]int{1, 0}, Widget: &Widget{Type: "spotify_next"}},
+			{At: [2]int{2, 0}, Widget: &Widget{Type: "spotify_artwork", PollMS: 2000}},
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected spotify widgets to validate, got %v", err)
 	}
 }

@@ -16,6 +16,7 @@ type Manager struct {
 	mu      sync.RWMutex
 	items   map[string]Widget
 	updates chan string
+	spotify *SpotifyService
 }
 
 func NewManager(buttons []config.Button) (*Manager, error) {
@@ -35,6 +36,9 @@ func (m *Manager) Close() error {
 	defer m.mu.Unlock()
 	for _, item := range m.items {
 		_ = item.Close()
+	}
+	if m.spotify != nil {
+		_ = m.spotify.Close()
 	}
 	return nil
 }
@@ -83,6 +87,21 @@ func (m *Manager) addButtons(buttons []config.Button) error {
 			switch btn.Widget.Type {
 			case "memory":
 				item, err = NewMemoryWidget(btn.RuntimeID, btn.Widget, m.notify)
+			case "spotify_play_pause", "spotify_next", "spotify_artwork":
+				if m.spotify == nil {
+					m.spotify, err = NewSpotifyService(btn.Widget.PollMS)
+					if err != nil {
+						return err
+					}
+				}
+				switch btn.Widget.Type {
+				case "spotify_play_pause":
+					item, err = NewSpotifyPlayPauseWidget(btn.RuntimeID, m.spotify, m.notify)
+				case "spotify_next":
+					item, err = NewSpotifyNextWidget(btn.RuntimeID, m.spotify, m.notify)
+				case "spotify_artwork":
+					item, err = NewSpotifyArtworkWidget(btn.RuntimeID, m.spotify, m.notify)
+				}
 			}
 			if err != nil {
 				return err
