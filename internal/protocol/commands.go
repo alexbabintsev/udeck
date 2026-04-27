@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -39,6 +40,46 @@ func SetButtonsPackets(zipData []byte) [][PacketSize]byte {
 		pkts = append(pkts, EncodeContinuation(zipData[i:end]))
 	}
 	return pkts
+}
+
+// SetLabelStylePacket builds the OUT_SET_LABEL_STYLE frame from config.
+// Unset fields fall back to device defaults.
+func SetLabelStylePacket(s *config.LabelStyle) ([PacketSize]byte, error) {
+	style := map[string]any{
+		"Align":     "bottom",
+		"Color":     0xFFFFFF,
+		"FontName":  "Roboto",
+		"ShowTitle": true,
+		"Size":      10,
+		"Weight":    80,
+	}
+	if s != nil {
+		if s.Align != "" {
+			style["Align"] = s.Align
+		}
+		if s.Color != "" {
+			var c int64
+			fmt.Sscanf(s.Color, "%x", &c)
+			style["Color"] = c
+		}
+		if s.FontName != "" {
+			style["FontName"] = s.FontName
+		}
+		if s.ShowTitle != nil {
+			style["ShowTitle"] = *s.ShowTitle
+		}
+		if s.Size != nil {
+			style["Size"] = *s.Size
+		}
+		if s.Weight != nil {
+			style["Weight"] = *s.Weight
+		}
+	}
+	payload, err := json.Marshal(style)
+	if err != nil {
+		return [PacketSize]byte{}, err
+	}
+	return EncodePacket(CmdSetLabelStyle, payload), nil
 }
 
 // SetButtonsFromConfig builds a page ZIP from config buttons and encodes

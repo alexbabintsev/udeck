@@ -159,6 +159,14 @@ func cmdRun(args []string) error {
 		return err
 	}
 
+	pkt, err := protocol.SetLabelStylePacket(cfg.Device.LabelStyle)
+	if err != nil {
+		return fmt.Errorf("set label style: %w", err)
+	}
+	if err := dev.SendPacket(pkt); err != nil {
+		return fmt.Errorf("set label style: %w", err)
+	}
+
 	if cfg.Device.Brightness != nil {
 		pkt, err := protocol.SetBrightnessPacket(*cfg.Device.Brightness)
 		if err != nil {

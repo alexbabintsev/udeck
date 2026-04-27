@@ -15,7 +15,19 @@ type Config struct {
 }
 
 type DeviceConfig struct {
-	Brightness *int `yaml:"brightness,omitempty"`
+	Brightness *int         `yaml:"brightness,omitempty"`
+	LabelStyle *LabelStyle  `yaml:"label_style,omitempty"`
+}
+
+// LabelStyle controls button label rendering. All fields optional;
+// unset fields use device defaults.
+type LabelStyle struct {
+	Align     string `yaml:"align,omitempty"`      // "top" | "bottom" | "center"
+	Color     string `yaml:"color,omitempty"`      // hex RRGGBB, e.g. "FFFFFF"
+	FontName  string `yaml:"font_name,omitempty"`  // "Roboto"
+	ShowTitle *bool  `yaml:"show_title,omitempty"` // default true
+	Size      *int   `yaml:"size,omitempty"`       // font size, default 10
+	Weight    *int   `yaml:"weight,omitempty"`     // font weight, default 80
 }
 
 // Button describes one key slot on the deck.
