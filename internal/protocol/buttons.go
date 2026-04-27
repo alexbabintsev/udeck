@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
@@ -65,8 +66,15 @@ func PageZIP(buttons []config.Button) ([]byte, error) {
 		return nil, fmt.Errorf("marshal manifest: %w", err)
 	}
 
-	for pad := 0; pad <= 4096; pad++ {
-		data, err := buildPageZIPRaw(manifestJSON, iconData, bytes.Repeat([]byte(" "), pad))
+	// Each attempt adds one more random byte to the dummy, shifting all
+	// icon DEFLATE streams by one position relative to chunk boundaries.
+	// Worst case: lcm(1024, iconData) attempts — in practice < 1024.
+	for size := 0; size <= 1024; size++ {
+		var dummy []byte
+		if size > 0 {
+			dummy = randomASCII(size)
+		}
+		data, err := buildPageZIPRaw(manifestJSON, iconData, dummy)
 		if err != nil {
 			return nil, err
 		}
@@ -74,7 +82,17 @@ func PageZIP(buttons []config.Button) ([]byte, error) {
 			return data, nil
 		}
 	}
-	return nil, fmt.Errorf("could not build valid ZIP after padding attempts")
+	return nil, fmt.Errorf("could not build valid ZIP after 1024 padding attempts")
+}
+
+const asciiChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+func randomASCII(n int) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = asciiChars[rand.Intn(len(asciiChars))]
+	}
+	return b
 }
 
 // zipChunksValid returns false if any chunk-boundary byte is 0x00 or 0x7C.
@@ -91,16 +109,8 @@ func buildPageZIPRaw(manifest []byte, iconData map[string][]byte, dummy []byte) 
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
 
-	mf, err := w.Create("page/manifest.json")
-	if err != nil {
-		return nil, err
-	}
-	if _, err := mf.Write(manifest); err != nil {
-		return nil, err
-	}
-
 	for name, data := range iconData {
-		f, err := w.Create("page/icons/" + name)
+		f, err := w.Create("icons/" + name)
 		if err != nil {
 			return nil, err
 		}
@@ -109,14 +119,21 @@ func buildPageZIPRaw(manifest []byte, iconData map[string][]byte, dummy []byte) 
 		}
 	}
 
-	if len(dummy) > 0 {
-		df, err := w.Create("page/dummy.txt")
-		if err != nil {
-			return nil, err
-		}
-		if _, err := df.Write(dummy); err != nil {
-			return nil, err
-		}
+	mf, err := w.Create("manifest.json")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := mf.Write(manifest); err != nil {
+		return nil, err
+	}
+
+	// dummy always present; grows until chunk boundaries are clean.
+	df, err := w.Create("dummy.txt")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := df.Write(dummy); err != nil {
+		return nil, err
 	}
 
 	if err := w.Close(); err != nil {
