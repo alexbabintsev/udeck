@@ -24,6 +24,11 @@ var backButton = config.Button{
 	Label: "Back",
 }
 
+const (
+	deviceKeepaliveInterval = 30 * time.Second
+	deviceRecoverRetries    = 2
+)
+
 const usage = `ulanzi-deck — minimal headless daemon for the Ulanzi D200
 
 Usage:
@@ -104,7 +109,7 @@ func cmdDumpEvents() error {
 	defer stop()
 
 	fmt.Println("listening for events. Ctrl-C to exit.")
-	return readLoop(ctx, dev, nil, nil)
+	return readLoop(ctx, nil, dev, nil, nil)
 }
 
 func cmdSetBrightness(args []string) error {
@@ -168,26 +173,11 @@ func cmdRun(args []string) error {
 	}
 	defer widgetMgr.Close()
 
-	if err := initDevice(dev, widgetMgr.ResolveButtons(nav.currentButtons())); err != nil {
+	if err := applyDeviceState(dev, cfg, widgetMgr.ResolveButtons(nav.currentButtons())); err != nil {
 		return err
 	}
 
-	pkt, err := protocol.SetLabelStylePacket(cfg.Device.LabelStyle)
-	if err != nil {
-		return fmt.Errorf("set label style: %w", err)
-	}
-	if err := dev.SendPacket(pkt); err != nil {
-		return fmt.Errorf("set label style: %w", err)
-	}
-
 	if cfg.Device.Brightness != nil {
-		pkt, err := protocol.SetBrightnessPacket(*cfg.Device.Brightness)
-		if err != nil {
-			return err
-		}
-		if err := dev.SendPacket(pkt); err != nil {
-			return fmt.Errorf("set brightness: %w", err)
-		}
 		fmt.Printf("applied brightness=%d\n", *cfg.Device.Brightness)
 	}
 
@@ -195,7 +185,7 @@ func cmdRun(args []string) error {
 	defer stop()
 
 	fmt.Println("running. Ctrl-C to exit.")
-	return readLoop(ctx, dev, nav, widgetMgr)
+	return readLoop(ctx, cfg, dev, nav, widgetMgr)
 }
 
 // initDevice uploads a page ZIP to switch the D200 into host mode.
@@ -211,27 +201,50 @@ func initDevice(dev *device.Device, buttons []config.Button) error {
 	return nil
 }
 
-func readLoop(ctx context.Context, dev *device.Device, nav *navigator, widgetMgr *widgets.Manager) error {
+func readLoop(ctx context.Context, cfg *config.Config, dev *device.Device, nav *navigator, widgetMgr *widgets.Manager) error {
+	lastKeepalive := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		default:
 		}
+		if nav != nil && time.Since(lastKeepalive) >= deviceKeepaliveInterval {
+			if err := refreshCurrentPage(cfg, dev, nav, widgetMgr); err != nil {
+				if recovered, recErr := recoverDevice(cfg, &dev, nav, widgetMgr, err); recovered {
+					lastKeepalive = time.Now()
+					continue
+				} else if recErr != nil {
+					return recErr
+				}
+			}
+			lastKeepalive = time.Now()
+		}
 		if widgetMgr != nil {
 			select {
 			case id := <-widgetMgr.Updates():
 				if nav != nil && buttonVisible(nav.currentButtons(), id) {
-					if err := initDevice(dev, widgetMgr.ResolveButtons(nav.currentButtons())); err != nil {
-						return fmt.Errorf("update widgets: %w", err)
+					if err := refreshCurrentPage(cfg, dev, nav, widgetMgr); err != nil {
+						if recovered, recErr := recoverDevice(cfg, &dev, nav, widgetMgr, fmt.Errorf("update widgets: %w", err)); recovered {
+							lastKeepalive = time.Now()
+							continue
+						} else if recErr != nil {
+							return recErr
+						}
 					}
+					lastKeepalive = time.Now()
 				}
 			default:
 			}
 		}
 		raw, err := dev.ReadPacket(100 * time.Millisecond)
 		if err != nil {
-			return err
+			if recovered, recErr := recoverDevice(cfg, &dev, nav, widgetMgr, err); recovered {
+				lastKeepalive = time.Now()
+				continue
+			} else if recErr != nil {
+				return recErr
+			}
 		}
 		if len(raw) == 0 {
 			continue
@@ -251,18 +264,21 @@ func readLoop(ctx context.Context, dev *device.Device, nav *navigator, widgetMgr
 		}
 		changed, action := nav.handleEvent(int(ev.Index), ev.Pressed)
 		if changed {
-			buttons := nav.currentButtons()
-			if widgetMgr != nil {
-				buttons = widgetMgr.ResolveButtons(buttons)
+			if err := refreshCurrentPage(cfg, dev, nav, widgetMgr); err != nil {
+				if recovered, recErr := recoverDevice(cfg, &dev, nav, widgetMgr, fmt.Errorf("update page: %w", err)); recovered {
+					lastKeepalive = time.Now()
+					continue
+				} else if recErr != nil {
+					return recErr
+				}
 			}
-			if err := initDevice(dev, buttons); err != nil {
-				return fmt.Errorf("update page: %w", err)
-			}
+			lastKeepalive = time.Now()
 			continue
 		}
 		if ev.Pressed && widgetMgr != nil {
 			if btn := nav.findButton(int(ev.Index)); btn != nil && btn.Widget != nil {
 				if widgetMgr.Press(btn.RuntimeID) {
+					lastKeepalive = time.Now()
 					continue
 				}
 			}
@@ -271,8 +287,74 @@ func readLoop(ctx context.Context, dev *device.Device, nav *navigator, widgetMgr
 			if err := actions.Run(action); err != nil {
 				fmt.Fprintf(os.Stderr, "action error: %v\n", err)
 			}
+			lastKeepalive = time.Now()
 		}
 	}
+}
+
+func refreshCurrentPage(cfg *config.Config, dev *device.Device, nav *navigator, widgetMgr *widgets.Manager) error {
+	buttons := nav.currentButtons()
+	if widgetMgr != nil {
+		buttons = widgetMgr.ResolveButtons(buttons)
+	}
+	return applyDeviceState(dev, cfg, buttons)
+}
+
+func applyDeviceState(dev *device.Device, cfg *config.Config, buttons []config.Button) error {
+	if err := initDevice(dev, buttons); err != nil {
+		return err
+	}
+
+	pkt, err := protocol.SetLabelStylePacket(cfg.Device.LabelStyle)
+	if err != nil {
+		return fmt.Errorf("set label style: %w", err)
+	}
+	if err := dev.SendPacket(pkt); err != nil {
+		return fmt.Errorf("set label style: %w", err)
+	}
+
+	if cfg.Device.Brightness != nil {
+		pkt, err := protocol.SetBrightnessPacket(*cfg.Device.Brightness)
+		if err != nil {
+			return err
+		}
+		if err := dev.SendPacket(pkt); err != nil {
+			return fmt.Errorf("set brightness: %w", err)
+		}
+	}
+	return nil
+}
+
+func recoverDevice(cfg *config.Config, dev **device.Device, nav *navigator, widgetMgr *widgets.Manager, cause error) (bool, error) {
+	if nav == nil {
+		return false, cause
+	}
+	fmt.Fprintf(os.Stderr, "recovering device after error: %v\n", cause)
+	if *dev != nil {
+		_ = (*dev).Close()
+	}
+	var lastErr error
+	for attempt := 0; attempt < deviceRecoverRetries; attempt++ {
+		reopened, err := device.Open()
+		if err != nil {
+			lastErr = err
+			time.Sleep(300 * time.Millisecond)
+			continue
+		}
+		*dev = reopened
+		if err := refreshCurrentPage(cfg, reopened, nav, widgetMgr); err != nil {
+			lastErr = err
+			_ = reopened.Close()
+			time.Sleep(300 * time.Millisecond)
+			continue
+		}
+		fmt.Fprintln(os.Stderr, "device recovered")
+		return true, nil
+	}
+	if lastErr != nil {
+		return false, fmt.Errorf("device recovery failed after %v: %w", cause, lastErr)
+	}
+	return false, cause
 }
 
 type navigator struct {
