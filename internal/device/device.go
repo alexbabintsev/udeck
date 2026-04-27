@@ -63,6 +63,9 @@ func (d *Device) ReadPacket(timeout time.Duration) ([]byte, error) {
 	buf := make([]byte, protocol.PacketSize)
 	n, err := d.dev.ReadWithTimeout(buf, timeout)
 	if err != nil {
+		if errors.Is(err, hid.ErrTimeout) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("hid read: %w", err)
 	}
 	if n == 0 {
