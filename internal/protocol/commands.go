@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 )
@@ -58,8 +59,10 @@ func SetLabelStylePacket(s *config.LabelStyle) ([PacketSize]byte, error) {
 			style["Align"] = s.Align
 		}
 		if s.Color != "" {
-			var c int64
-			fmt.Sscanf(s.Color, "%x", &c)
+			c, err := parseHexColor(s.Color)
+			if err != nil {
+				return [PacketSize]byte{}, fmt.Errorf("invalid label color: %w", err)
+			}
 			style["Color"] = c
 		}
 		if s.FontName != "" {
@@ -90,4 +93,16 @@ func SetButtonsFromConfig(buttons []config.Button) ([][PacketSize]byte, error) {
 		return nil, err
 	}
 	return SetButtonsPackets(zipData), nil
+}
+
+func parseHexColor(s string) (uint64, error) {
+	s = strings.TrimPrefix(strings.TrimSpace(s), "#")
+	if len(s) != 6 {
+		return 0, fmt.Errorf("must be exactly 6 hex digits")
+	}
+	c, err := strconv.ParseUint(s, 16, 32)
+	if err != nil {
+		return 0, fmt.Errorf("must be valid hex RRGGBB")
+	}
+	return c, nil
 }

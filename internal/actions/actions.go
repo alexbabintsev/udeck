@@ -7,6 +7,8 @@ import (
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 )
 
+var execCommand = exec.Command
+
 // Run fires the action associated with a button press.
 func Run(a *config.Action) error {
 	if a == nil {
@@ -23,7 +25,9 @@ func Run(a *config.Action) error {
 }
 
 func runShell(cmd string) error {
-	c := exec.Command("sh", "-c", cmd)
-	c.Start()
+	c := execCommand("sh", "-c", cmd)
+	if err := c.Start(); err != nil {
+		return fmt.Errorf("start shell action: %w", err)
+	}
 	return nil
 }

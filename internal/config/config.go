@@ -1,8 +1,10 @@
 package config
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -15,8 +17,8 @@ type Config struct {
 }
 
 type DeviceConfig struct {
-	Brightness *int         `yaml:"brightness,omitempty"`
-	LabelStyle *LabelStyle  `yaml:"label_style,omitempty"`
+	Brightness *int        `yaml:"brightness,omitempty"`
+	LabelStyle *LabelStyle `yaml:"label_style,omitempty"`
 }
 
 // LabelStyle controls button label rendering. All fields optional;
@@ -86,10 +88,26 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("device.brightness out of range: %d", b)
 		}
 	}
+	if c.Device.LabelStyle != nil {
+		s := c.Device.LabelStyle
+		if s.Align != "" && s.Align != "top" && s.Align != "bottom" && s.Align != "center" {
+			return fmt.Errorf("device.label_style.align %q unknown (top|bottom|center)", s.Align)
+		}
+		if s.Color != "" {
+			if err := validateHexColor(s.Color); err != nil {
+				return fmt.Errorf("device.label_style.color: %w", err)
+			}
+		}
+	}
+	seen := make(map[[2]int]int, len(c.Buttons))
 	for i, btn := range c.Buttons {
 		if btn.At[0] < 0 || btn.At[0] > 4 || btn.At[1] < 0 || btn.At[1] > 2 {
 			return fmt.Errorf("buttons[%d].at out of range: %v", i, btn.At)
 		}
+		if prev, ok := seen[btn.At]; ok {
+			return fmt.Errorf("buttons[%d].at duplicates buttons[%d].at: %v", i, prev, btn.At)
+		}
+		seen[btn.At] = i
 		if a := btn.Action; a != nil {
 			switch a.Type {
 			case "shell":
@@ -104,6 +122,17 @@ func (c *Config) Validate() error {
 				return fmt.Errorf("buttons[%d].action.type %q unknown (shell|key)", i, a.Type)
 			}
 		}
+	}
+	return nil
+}
+
+func validateHexColor(s string) error {
+	s = strings.TrimPrefix(strings.TrimSpace(s), "#")
+	if len(s) != 6 {
+		return fmt.Errorf("must be exactly 6 hex digits")
+	}
+	if _, err := hex.DecodeString(s); err != nil {
+		return fmt.Errorf("must be valid hex RRGGBB")
 	}
 	return nil
 }
