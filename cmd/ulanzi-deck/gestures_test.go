@@ -44,22 +44,22 @@ func TestGestureManagerDoubleTap(t *testing.T) {
 	}
 }
 
-func TestGestureManagerLongPressAndRepeat(t *testing.T) {
+func TestGestureManagerHoldAndRepeat(t *testing.T) {
 	gm := newGestureManager()
 	btn := config.Button{
 		RuntimeID: "buttons[0]",
 		On: &config.Handlers{
-			LongPress:     &config.Action{Type: "shell", Cmd: "echo long"},
+			Hold:          &config.Action{Type: "shell", Cmd: "echo long"},
 			Repeat:        &config.Action{Type: "shell", Cmd: "echo repeat"},
-			LongPressMS:   300,
+			HoldMS:        300,
 			RepeatEveryMS: 100,
 		},
 	}
 	now := time.Unix(100, 0)
 	_ = gm.HandleEvent(&btn, true, now)
 	got := gm.Tick([]config.Button{btn}, now.Add(320*time.Millisecond))
-	if got != btn.On.LongPress {
-		t.Fatalf("expected long press action, got %#v", got)
+	if got != btn.On.Hold {
+		t.Fatalf("expected hold action, got %#v", got)
 	}
 	got = gm.Tick([]config.Button{btn}, now.Add(430*time.Millisecond))
 	if got != btn.On.Repeat {

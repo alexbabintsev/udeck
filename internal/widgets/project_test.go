@@ -32,7 +32,12 @@ func TestProjectWidgetLifecycleScripts(t *testing.T) {
 		Widget: &config.Widget{
 			Type:        "project",
 			ProjectDir:  dir,
-			LongPressMS: 600,
+			HoldMS:      600,
+			On: &config.WidgetOn{
+				Tap:       "start",
+				DoubleTap: "focus",
+				Hold:      "stop",
+			},
 		},
 	}
 	w, err := NewProjectWidget("buttons[0]", btn, config.ProjectWidgetSettings{
@@ -53,10 +58,10 @@ func TestProjectWidgetLifecycleScripts(t *testing.T) {
 		t.Fatalf("unexpected script env: %q", string(got))
 	}
 
-	w.HandleGesture(ig.Tap)
+	w.HandleGesture(ig.DoubleTap)
 	waitForFile(t, focusFile)
 
-	w.HandleGesture(ig.LongPress)
+	w.HandleGesture(ig.Hold)
 	waitForMissingFile(t, runningFile)
 }
 

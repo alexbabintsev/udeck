@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	defaultLongPressMS   = 500
+	defaultHoldMS        = 500
 	defaultDoubleTapMS   = 300
 	defaultRepeatEveryMS = 200
 )
@@ -62,9 +62,9 @@ func handlerOptions(tr *config.Handlers) ig.Options {
 	return ig.Options{
 		HasTap:         tr.Tap != nil,
 		HasDoubleTap:   tr.DoubleTap != nil,
-		HasLongPress:   tr.LongPress != nil,
+		HasHold:        tr.Hold != nil,
 		HasRepeat:      tr.Repeat != nil,
-		LongPressDelay: longPressDuration(tr),
+		HoldDelay:      holdDuration(tr),
 		DoubleTapDelay: doubleTapDuration(tr),
 		RepeatEvery:    repeatEveryDuration(tr),
 	}
@@ -76,8 +76,8 @@ func actionForKind(tr *config.Handlers, kind ig.Kind) *config.Action {
 		return tr.Tap
 	case ig.DoubleTap:
 		return tr.DoubleTap
-	case ig.LongPress:
-		return tr.LongPress
+	case ig.Hold:
+		return tr.Hold
 	case ig.Repeat:
 		return tr.Repeat
 	default:
@@ -85,10 +85,10 @@ func actionForKind(tr *config.Handlers, kind ig.Kind) *config.Action {
 	}
 }
 
-func longPressDuration(tr *config.Handlers) time.Duration {
-	ms := tr.LongPressMS
+func holdDuration(tr *config.Handlers) time.Duration {
+	ms := tr.HoldMS
 	if ms <= 0 {
-		ms = defaultLongPressMS
+		ms = defaultHoldMS
 	}
 	return time.Duration(ms) * time.Millisecond
 }

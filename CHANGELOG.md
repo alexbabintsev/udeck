@@ -15,6 +15,8 @@ actual development milestones rather than formal releases.
   omitted.
 - Added `project` widget support with tmux-backed status and
   `start/stop/focus` shell scripts.
+- Project widgets can now remap gestures explicitly, for example
+  `tap: start` and `hold: stop`.
 - Added global `widgets.project` defaults for terminal/editor selection,
   passed into project scripts and used by fallback focus behavior.
 - Added `editor_subdir` support for project widgets and the derived
@@ -29,7 +31,7 @@ actual development milestones rather than formal releases.
   the config, avoiding cold-start lag when entering Spotify pages.
 - Polished widget rendering for Spotify and Memory states.
 - Gesture handling now uses a shared engine for action buttons and
-  widgets, with `double_tap` and hold-time `long_press` behavior.
+  widgets, with `double_tap` and hold-time `hold` behavior.
 
 ## v2 Workbench
 
@@ -49,7 +51,7 @@ actual development milestones rather than formal releases.
 - Unified `on:` button handler model with:
   - `tap`
   - `double_tap`
-  - `long_press`
+  - `hold`
   - `repeat`
 - Config hot reload during `run`.
 - Canonical demo profile in [examples/test-config.yaml](/Volumes/Black/Projects/ulanzi-deck-go/examples/test-config.yaml:1).

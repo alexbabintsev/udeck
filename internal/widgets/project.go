@@ -26,7 +26,7 @@ import (
 
 const (
 	defaultProjectPollMS      = 3000
-	defaultProjectLongPressMS = 700
+	defaultProjectHoldMS      = 700
 	projectScriptTimeout      = 20 * time.Second
 )
 
@@ -60,6 +60,7 @@ type ProjectWidget struct {
 	terminal     string
 	editor       string
 	editorSubdir string
+	bindings     map[ig.Kind]projectAction
 
 	mu         sync.Mutex
 	running    bool
@@ -98,6 +99,7 @@ func NewProjectWidget(id string, btn config.Button, settings config.ProjectWidge
 		terminal:     strings.TrimSpace(settings.Terminal),
 		editor:       strings.TrimSpace(settings.Editor),
 		editorSubdir: projectEditorSubdir(settings.EditorSubdir, wcfg.EditorSubdir),
+		bindings:     projectGestureBindings(wcfg),
 	}
 	if btn.Icon != "" {
 		w.seedIcon = loadWidgetSeedIcon(btn.Icon)
@@ -122,16 +124,15 @@ func (w *ProjectWidget) HandleGesture(kind ig.Kind) {
 	w.mu.Unlock()
 
 	switch kind {
-	case ig.LongPress:
-		if running {
-			w.trigger(projectActionStop)
-		}
-	case ig.Tap:
-		if running {
-			w.trigger(projectActionFocus)
+	case ig.Tap, ig.DoubleTap, ig.Hold, ig.Repeat:
+		action := w.bindings[kind]
+		if action == projectActionNone {
 			return
 		}
-		w.trigger(projectActionStart)
+		if action == projectActionStop && !running {
+			return
+		}
+		w.trigger(action)
 	}
 }
 
@@ -313,9 +314,35 @@ func projectEditorSubdir(globalValue, localValue string) string {
 	return strings.Trim(strings.TrimSpace(globalValue), "/")
 }
 
-func projectLongPressDuration(ms int) time.Duration {
+func projectGestureBindings(wcfg *config.Widget) map[ig.Kind]projectAction {
+	if wcfg != nil && wcfg.On != nil {
+		out := map[ig.Kind]projectAction{}
+		if wcfg.On.Tap != "" {
+			out[ig.Tap] = projectAction(strings.TrimSpace(wcfg.On.Tap))
+		}
+		if wcfg.On.DoubleTap != "" {
+			out[ig.DoubleTap] = projectAction(strings.TrimSpace(wcfg.On.DoubleTap))
+		}
+		if wcfg.On.Hold != "" {
+			out[ig.Hold] = projectAction(strings.TrimSpace(wcfg.On.Hold))
+		}
+		if wcfg.On.Repeat != "" {
+			out[ig.Repeat] = projectAction(strings.TrimSpace(wcfg.On.Repeat))
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return map[ig.Kind]projectAction{
+		ig.Tap:       projectActionStart,
+		ig.DoubleTap: projectActionFocus,
+		ig.Hold:      projectActionStop,
+	}
+}
+
+func projectHoldDuration(ms int) time.Duration {
 	if ms <= 0 {
-		ms = defaultProjectLongPressMS
+		ms = defaultProjectHoldMS
 	}
 	return time.Duration(ms) * time.Millisecond
 }

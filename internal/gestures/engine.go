@@ -8,17 +8,17 @@ const (
 	None      Kind = ""
 	Tap       Kind = "tap"
 	DoubleTap Kind = "double_tap"
-	LongPress Kind = "long_press"
+	Hold      Kind = "hold"
 	Repeat    Kind = "repeat"
 )
 
 type Options struct {
 	HasTap       bool
 	HasDoubleTap bool
-	HasLongPress bool
+	HasHold      bool
 	HasRepeat    bool
 
-	LongPressDelay time.Duration
+	HoldDelay      time.Duration
 	DoubleTapDelay time.Duration
 	RepeatEvery    time.Duration
 }
@@ -76,11 +76,11 @@ func (e *Engine) HandleEvent(id string, opts Options, pressed bool, now time.Tim
 	}
 	st.pressed = false
 	held := now.Sub(st.pressAt)
-	if opts.HasLongPress && !st.longFired && held >= opts.LongPressDelay {
+	if opts.HasHold && !st.longFired && held >= opts.HoldDelay {
 		st.longFired = true
 		st.secondTap = false
 		st.tapPending = false
-		return LongPress
+		return Hold
 	}
 	if st.longFired {
 		st.secondTap = false
@@ -110,14 +110,14 @@ func (e *Engine) Tick(bindings []Binding, now time.Time) (string, Kind) {
 		}
 		opts := binding.Options
 		if st.pressed {
-			if opts.HasLongPress && !st.longFired && now.Sub(st.pressAt) >= opts.LongPressDelay {
+			if opts.HasHold && !st.longFired && now.Sub(st.pressAt) >= opts.HoldDelay {
 				st.longFired = true
 				st.secondTap = false
 				st.tapPending = false
 				if opts.HasRepeat {
 					st.nextRepeat = now.Add(opts.RepeatEvery)
 				}
-				return binding.ID, LongPress
+				return binding.ID, Hold
 			}
 			if opts.HasRepeat && !st.nextRepeat.IsZero() && !now.Before(st.nextRepeat) {
 				st.nextRepeat = now.Add(opts.RepeatEvery)
@@ -142,8 +142,8 @@ func (e *Engine) state(id string) *state {
 }
 
 func initialRepeatDelay(opts Options) time.Duration {
-	if opts.HasLongPress {
-		return opts.LongPressDelay
+	if opts.HasHold {
+		return opts.HoldDelay
 	}
 	return opts.RepeatEvery
 }

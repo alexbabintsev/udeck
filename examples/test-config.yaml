@@ -1,16 +1,16 @@
 device:
   brightness: 65
   label_style:
-    align: center
+    align: top
     color: "#F6F6F6"
     font_name: "Roboto"
-    show_title: false
-    size: 11
+    show_title: true
+    size: 7
     weight: 90
 
 widgets:
   project:
-    terminal: "Ghostty"
+    terminal: "iTerm"
     editor: "PhpStorm"
     editor_subdir: "www"
 
@@ -18,7 +18,7 @@ buttons:
   - at: [0, 0]
     label: "Apps"
     icon: test-icons/apps-folder.png
-    directory:
+    folder:
       buttons:
         - at: [0, 0]
           label: "Terminal"
@@ -55,7 +55,7 @@ buttons:
   - at: [1, 0]
     label: "Work"
     icon: test-icons/work-folder.png
-    directory:
+    folder:
       buttons:
         - at: [0, 0]
           label: "README"
@@ -92,7 +92,7 @@ buttons:
   - at: [2, 0]
     label: "System"
     icon: test-icons/system-folder.png
-    directory:
+    folder:
       buttons:
         - at: [0, 0]
           label: "Reload"
@@ -137,7 +137,7 @@ buttons:
   - at: [3, 0]
     label: "Spotify"
     icon: test-icons/media-folder.png
-    directory:
+    folder:
       buttons:
         - at: [0, 0]
           widget:
@@ -162,7 +162,7 @@ buttons:
   - at: [4, 0]
     label: "Hammers"
     icon: test-icons/browser.png
-    directory:
+    folder:
       buttons:
         - at: [0, 0]
           label: "Next Scr"
@@ -215,7 +215,7 @@ buttons:
   - at: [0, 1]
     label: "Gestures"
     icon: test-icons/tab.png
-    directory:
+    folder:
       buttons:
         - at: [0, 0]
           label: "Tap"
@@ -240,10 +240,10 @@ buttons:
           label: "Long"
           icon: test-icons/marker.png
           on:
-            long_press:
+            hold:
               type: shell
-              cmd: "date '+%F %T long-press' >> /tmp/ulanzi-deck-test.log"
-            long_press_ms: 700
+              cmd: "date '+%F %T hold' >> /tmp/ulanzi-deck-test.log"
+            hold_ms: 700
 
         - at: [0, 1]
           label: "Repeat"
@@ -314,7 +314,7 @@ buttons:
   - at: [3, 2]
     label: "Projects"
     icon: test-icons/work-folder.png
-    directory:
+    folder:
       buttons:
         - at: [0, 0]
           label: "Demo"
@@ -322,4 +322,8 @@ buttons:
           widget:
             type: project
             project_dir: /Users/alexbabintsev/Projects/babintsev
-            long_press_ms: 800
+            hold_ms: 500
+            on:
+              tap: start
+              double_tap: focus
+              hold: stop

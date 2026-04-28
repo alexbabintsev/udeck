@@ -51,13 +51,13 @@ func TestValidateAcceptsHashPrefixedLabelColor(t *testing.T) {
 	}
 }
 
-func TestValidateRejectsButtonWithActionAndDirectory(t *testing.T) {
+func TestValidateRejectsButtonWithActionAndFolder(t *testing.T) {
 	cfg := &Config{
 		Buttons: []Button{
 			{
-				At:        [2]int{0, 0},
-				On:        &Handlers{Tap: &Action{Type: "shell", Cmd: "echo hi"}},
-				Directory: &Directory{Buttons: []Button{{At: [2]int{1, 0}, Label: "Nested"}}},
+				At:     [2]int{0, 0},
+				On:     &Handlers{Tap: &Action{Type: "shell", Cmd: "echo hi"}},
+				Folder: &Folder{Buttons: []Button{{At: [2]int{1, 0}, Label: "Nested"}}},
 			},
 		},
 	}
@@ -66,18 +66,18 @@ func TestValidateRejectsButtonWithActionAndDirectory(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
-	if !strings.Contains(err.Error(), "cannot combine on, directory, and widget") {
-		t.Fatalf("expected action/directory validation error, got %v", err)
+	if !strings.Contains(err.Error(), "cannot combine on, folder, and widget") {
+		t.Fatalf("expected action/folder validation error, got %v", err)
 	}
 }
 
-func TestValidateRejectsDirectoryBackSlotConflict(t *testing.T) {
+func TestValidateRejectsFolderBackSlotConflict(t *testing.T) {
 	cfg := &Config{
 		Buttons: []Button{
 			{
 				At:    [2]int{0, 0},
 				Label: "Folder",
-				Directory: &Directory{
+				Folder: &Folder{
 					Buttons: []Button{
 						{At: [2]int{3, 2}, Label: "Conflicts"},
 					},
@@ -95,13 +95,13 @@ func TestValidateRejectsDirectoryBackSlotConflict(t *testing.T) {
 	}
 }
 
-func TestValidateAcceptsNestedDirectory(t *testing.T) {
+func TestValidateAcceptsNestedFolder(t *testing.T) {
 	cfg := &Config{
 		Buttons: []Button{
 			{
 				At:    [2]int{0, 0},
 				Label: "Folder",
-				Directory: &Directory{
+				Folder: &Folder{
 					Buttons: []Button{
 						{
 							At:    [2]int{0, 0},
@@ -115,7 +115,7 @@ func TestValidateAcceptsNestedDirectory(t *testing.T) {
 	}
 
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("expected nested directory to validate, got %v", err)
+		t.Fatalf("expected nested folder to validate, got %v", err)
 	}
 }
 
@@ -183,7 +183,7 @@ func TestValidateRejectsCombiningWidgetAndAction(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected widget/action validation error")
 	}
-	if !strings.Contains(err.Error(), "cannot combine on, directory, and widget") {
+	if !strings.Contains(err.Error(), "cannot combine on, folder, and widget") {
 		t.Fatalf("expected widget/action combination error, got %v", err)
 	}
 }
@@ -196,9 +196,9 @@ func TestValidateAcceptsOnHandlers(t *testing.T) {
 				On: &Handlers{
 					Tap:           &Action{Type: "shell", Cmd: "echo tap"},
 					DoubleTap:     &Action{Type: "key", Key: "cmd t"},
-					LongPress:     &Action{Type: "http", URL: "http://127.0.0.1/test"},
+					Hold:          &Action{Type: "http", URL: "http://127.0.0.1/test"},
 					Repeat:        &Action{Type: "key", Key: "space"},
-					LongPressMS:   500,
+					HoldMS:        500,
 					DoubleTapMS:   300,
 					RepeatEveryMS: 120,
 				},
@@ -249,6 +249,11 @@ func TestValidateAcceptsProjectWidget(t *testing.T) {
 				Widget: &Widget{
 					Type:       "project",
 					ProjectDir: "/tmp/demo-project",
+					On: &WidgetOn{
+						Tap:       "start",
+						DoubleTap: "focus",
+						Hold:      "stop",
+					},
 				},
 			},
 		},
@@ -256,6 +261,31 @@ func TestValidateAcceptsProjectWidget(t *testing.T) {
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected project widget to validate, got %v", err)
+	}
+}
+
+func TestValidateRejectsUnknownProjectWidgetGestureAction(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At: [2]int{0, 0},
+				Widget: &Widget{
+					Type:       "project",
+					ProjectDir: "/tmp/demo-project",
+					On: &WidgetOn{
+						Tap: "launch",
+					},
+				},
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected invalid project widget gesture action error")
+	}
+	if !strings.Contains(err.Error(), `widget.on.tap "launch" unknown`) {
+		t.Fatalf("expected invalid project widget gesture action error, got %v", err)
 	}
 }
 
@@ -284,7 +314,7 @@ func TestIconPathsCollectsNestedUniqueIcons(t *testing.T) {
 			{At: [2]int{0, 0}, Icon: "/tmp/root.png"},
 			{
 				At: [2]int{1, 0},
-				Directory: &Directory{
+				Folder: &Folder{
 					Buttons: []Button{
 						{At: [2]int{0, 0}, Icon: "/tmp/nested.png"},
 						{At: [2]int{1, 0}, Icon: "/tmp/root.png"},

@@ -43,7 +43,7 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
 - Unified button handlers via `on:`
   - `tap`
   - `double_tap`
-  - `long_press`
+  - `hold`
   - `repeat`
 - Action types:
   - `shell`
@@ -130,7 +130,7 @@ Current config surface:
   - `label`: button text
   - `icon`: local image path; `~/...` is expanded; images are resized to
     `196x196` and encoded as JPEG before upload
-  - `directory.buttons`: nested page; runtime injects a `Back` button
+  - `folder.buttons`: nested page; runtime injects a `Back` button
   - `widget`
     - `type: memory`
       - `apps`: optional app list restarted on press
@@ -145,17 +145,22 @@ Current config surface:
         directory name
       - `editor_subdir`: optional per-project override for the editor
         target subdirectory
-      - `long_press_ms`: optional stop threshold override
+      - `on`: optional gesture mapping for project widgets
+        - `tap`: `start | stop | focus`
+        - `double_tap`: `start | stop | focus`
+        - `hold`: `start | stop | focus`
+        - `repeat`: `start | stop | focus`
+      - `hold_ms`: optional stop threshold override
       - `scripts.start`: optional override for the start script path
       - `scripts.stop`: optional override for the stop script path
       - `scripts.focus`: optional override for the focus script path
   - `on`
     - `tap`
     - `double_tap`
-    - `long_press`
+    - `hold`
     - `repeat`
     - optional timing overrides:
-      - `long_press_ms`
+      - `hold_ms`
       - `double_tap_ms`
       - `repeat_every_ms`
   - each handler uses an action payload:
@@ -187,7 +192,7 @@ buttons:
   - at: [0, 0]
     label: "Folder"
     icon: test-icons/apps-folder.png
-    directory:
+    folder:
       buttons:
         - at: [0, 0]
           label: "Terminal"
@@ -207,7 +212,11 @@ buttons:
     widget:
       type: project
       project_dir: project-demo
-      long_press_ms: 800
+      on:
+        tap: start
+        double_tap: focus
+        hold: stop
+      hold_ms: 800
 
   - at: [4, 1]
     label: "Double"
@@ -234,14 +243,16 @@ Notes:
 - Gesture semantics:
   - `tap` fires on release
   - `double_tap` fires on the second tap
-  - `long_press` fires as soon as the hold threshold is reached
-  - `repeat` starts after the long-press threshold when both are set
+  - `hold` fires as soon as the hold threshold is reached
+  - `repeat` starts after the hold threshold when both are set
 - Widgets write icons atomically so page refreshes do not race on partial
   PNG files.
 - Project widgets detect status from a tmux session and run
   `start` / `stop` / `focus` scripts from the configured project
   directory. By default those paths are `<project_dir>/start`,
   `<project_dir>/stop`, and `<project_dir>/focus`.
+- Project widgets can remap gestures explicitly with `widget.on`, for
+  example `tap: start`, `double_tap: focus`, `hold: stop`.
 - Project widgets inherit optional global defaults from `widgets.project`
   and pass them into scripts as `PROJECT_TERMINAL` and
   `PROJECT_EDITOR`.

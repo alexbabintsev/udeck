@@ -27,23 +27,23 @@ func TestEngineDoubleTapFiresOnSecondRelease(t *testing.T) {
 	}
 }
 
-func TestEngineLongPressFiresDuringHold(t *testing.T) {
+func TestEngineHoldFiresDuringHold(t *testing.T) {
 	e := New()
 	opts := Options{
 		HasTap:         true,
-		HasLongPress:   true,
+		HasHold:        true,
 		HasRepeat:      true,
-		LongPressDelay: 300 * time.Millisecond,
+		HoldDelay:      300 * time.Millisecond,
 		RepeatEvery:    100 * time.Millisecond,
 	}
 	now := time.Unix(100, 0)
 	_ = e.HandleEvent("a", opts, true, now)
 	id, kind := e.Tick([]Binding{{ID: "a", Options: opts}}, now.Add(320*time.Millisecond))
-	if id != "a" || kind != LongPress {
-		t.Fatalf("expected long press during hold, got id=%q kind=%q", id, kind)
+	if id != "a" || kind != Hold {
+		t.Fatalf("expected hold during press, got id=%q kind=%q", id, kind)
 	}
 	id, kind = e.Tick([]Binding{{ID: "a", Options: opts}}, now.Add(430*time.Millisecond))
 	if id != "a" || kind != Repeat {
-		t.Fatalf("expected repeat after long press, got id=%q kind=%q", id, kind)
+		t.Fatalf("expected repeat after hold, got id=%q kind=%q", id, kind)
 	}
 }

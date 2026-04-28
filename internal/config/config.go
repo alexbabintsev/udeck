@@ -47,18 +47,18 @@ type LabelStyle struct {
 // Button describes one key slot on the deck.
 type Button struct {
 	// At is [col, row], zero-indexed. col ∈ [0,4], row ∈ [0,2].
-	At        [2]int     `yaml:"at"`
-	Label     string     `yaml:"label,omitempty"`
-	Icon      string     `yaml:"icon,omitempty"` // path, ~ expanded
-	On        *Handlers  `yaml:"on,omitempty"`
-	Directory *Directory `yaml:"directory,omitempty"`
-	Widget    *Widget    `yaml:"widget,omitempty"`
-	RuntimeID string     `yaml:"-"`
+	At        [2]int    `yaml:"at"`
+	Label     string    `yaml:"label,omitempty"`
+	Icon      string    `yaml:"icon,omitempty"` // path, ~ expanded
+	On        *Handlers `yaml:"on,omitempty"`
+	Folder    *Folder   `yaml:"folder,omitempty"`
+	Widget    *Widget   `yaml:"widget,omitempty"`
+	RuntimeID string    `yaml:"-"`
 }
 
-// Directory defines a nested page of buttons. When opened at runtime, a
+// Folder defines a nested page of buttons. When opened at runtime, a
 // synthetic "Back" button is injected automatically.
-type Directory struct {
+type Folder struct {
 	Buttons []Button `yaml:"buttons,omitempty"`
 }
 
@@ -71,7 +71,8 @@ type Widget struct {
 	Session      string        `yaml:"session,omitempty"`
 	EditorSubdir string        `yaml:"editor_subdir,omitempty"`
 	Scripts      WidgetScripts `yaml:"scripts,omitempty"`
-	LongPressMS  int           `yaml:"long_press_ms,omitempty"`
+	On           *WidgetOn     `yaml:"on,omitempty"`
+	HoldMS       int           `yaml:"hold_ms,omitempty"`
 }
 
 type WidgetScripts struct {
@@ -80,14 +81,21 @@ type WidgetScripts struct {
 	Focus string `yaml:"focus,omitempty"`
 }
 
+type WidgetOn struct {
+	Tap       string `yaml:"tap,omitempty"`
+	DoubleTap string `yaml:"double_tap,omitempty"`
+	Hold      string `yaml:"hold,omitempty"`
+	Repeat    string `yaml:"repeat,omitempty"`
+}
+
 // Handlers defines interaction handlers for a button. This is only valid
-// for action buttons and is mutually exclusive with Directory/Widget.
+// for action buttons and is mutually exclusive with Folder/Widget.
 type Handlers struct {
 	Tap           *Action `yaml:"tap,omitempty"`
 	DoubleTap     *Action `yaml:"double_tap,omitempty"`
-	LongPress     *Action `yaml:"long_press,omitempty"`
+	Hold          *Action `yaml:"hold,omitempty"`
 	Repeat        *Action `yaml:"repeat,omitempty"`
-	LongPressMS   int     `yaml:"long_press_ms,omitempty"`
+	HoldMS        int     `yaml:"hold_ms,omitempty"`
 	DoubleTapMS   int     `yaml:"double_tap_ms,omitempty"`
 	RepeatEveryMS int     `yaml:"repeat_every_ms,omitempty"`
 }
@@ -195,14 +203,14 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 		if btn.On != nil {
 			modeCount++
 		}
-		if btn.Directory != nil {
+		if btn.Folder != nil {
 			modeCount++
 		}
 		if btn.Widget != nil {
 			modeCount++
 		}
 		if modeCount > 1 {
-			return fmt.Errorf("%s[%d] cannot combine on, directory, and widget", path, i)
+			return fmt.Errorf("%s[%d] cannot combine on, folder, and widget", path, i)
 		}
 		if tr := btn.On; tr != nil {
 			actionCount := 0
@@ -218,9 +226,9 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 					return err
 				}
 			}
-			if tr.LongPress != nil {
+			if tr.Hold != nil {
 				actionCount++
-				if err := validateAction(tr.LongPress, fmt.Sprintf("%s[%d].on.long_press", path, i)); err != nil {
+				if err := validateAction(tr.Hold, fmt.Sprintf("%s[%d].on.hold", path, i)); err != nil {
 					return err
 				}
 			}
@@ -233,8 +241,8 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 			if actionCount == 0 {
 				return fmt.Errorf("%s[%d].on has no actions", path, i)
 			}
-			if tr.LongPressMS != 0 && tr.LongPressMS < 100 {
-				return fmt.Errorf("%s[%d].on.long_press_ms too small: %d", path, i, tr.LongPressMS)
+			if tr.HoldMS != 0 && tr.HoldMS < 100 {
+				return fmt.Errorf("%s[%d].on.hold_ms too small: %d", path, i, tr.HoldMS)
 			}
 			if tr.DoubleTapMS != 0 && tr.DoubleTapMS < 100 {
 				return fmt.Errorf("%s[%d].on.double_tap_ms too small: %d", path, i, tr.DoubleTapMS)
@@ -256,18 +264,21 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 				if w.PollMS != 0 && w.PollMS < 1000 {
 					return fmt.Errorf("%s[%d].widget.poll_ms too small: %d", path, i, w.PollMS)
 				}
-				if w.LongPressMS != 0 && w.LongPressMS < 100 {
-					return fmt.Errorf("%s[%d].widget.long_press_ms too small: %d", path, i, w.LongPressMS)
+				if w.HoldMS != 0 && w.HoldMS < 100 {
+					return fmt.Errorf("%s[%d].widget.hold_ms too small: %d", path, i, w.HoldMS)
+				}
+				if err := validateProjectWidgetOn(w.On, fmt.Sprintf("%s[%d].widget.on", path, i)); err != nil {
+					return err
 				}
 			default:
 				return fmt.Errorf("%s[%d].widget.type %q unknown (memory|spotify_play_pause|spotify_next|spotify_artwork|project)", path, i, w.Type)
 			}
 		}
-		if d := btn.Directory; d != nil {
+		if d := btn.Folder; d != nil {
 			if len(d.Buttons) == 0 {
-				return fmt.Errorf("%s[%d].directory.buttons is empty", path, i)
+				return fmt.Errorf("%s[%d].folder.buttons is empty", path, i)
 			}
-			childPath := fmt.Sprintf("%s[%d].directory.buttons", path, i)
+			childPath := fmt.Sprintf("%s[%d].folder.buttons", path, i)
 			if err := validateButtons(d.Buttons, childPath, true); err != nil {
 				return err
 			}
@@ -296,6 +307,50 @@ func validateAction(a *Action, path string) error {
 	return nil
 }
 
+func validateProjectWidgetOn(on *WidgetOn, path string) error {
+	if on == nil {
+		return nil
+	}
+	count := 0
+	if on.Tap != "" {
+		count++
+		if err := validateProjectWidgetActionName(on.Tap, path+".tap"); err != nil {
+			return err
+		}
+	}
+	if on.DoubleTap != "" {
+		count++
+		if err := validateProjectWidgetActionName(on.DoubleTap, path+".double_tap"); err != nil {
+			return err
+		}
+	}
+	if on.Hold != "" {
+		count++
+		if err := validateProjectWidgetActionName(on.Hold, path+".hold"); err != nil {
+			return err
+		}
+	}
+	if on.Repeat != "" {
+		count++
+		if err := validateProjectWidgetActionName(on.Repeat, path+".repeat"); err != nil {
+			return err
+		}
+	}
+	if count == 0 {
+		return fmt.Errorf("%s has no gestures", path)
+	}
+	return nil
+}
+
+func validateProjectWidgetActionName(value string, path string) error {
+	switch strings.TrimSpace(value) {
+	case "start", "stop", "focus":
+		return nil
+	default:
+		return fmt.Errorf("%s %q unknown (start|stop|focus)", path, value)
+	}
+}
+
 func resolveButtonPaths(buttons []Button, baseDir string) {
 	for i := range buttons {
 		if buttons[i].Icon != "" && !filepath.IsAbs(buttons[i].Icon) && !strings.HasPrefix(buttons[i].Icon, "~/") {
@@ -307,8 +362,8 @@ func resolveButtonPaths(buttons []Button, baseDir string) {
 			!filepath.IsAbs(buttons[i].Widget.ProjectDir) && !strings.HasPrefix(buttons[i].Widget.ProjectDir, "~/") {
 			buttons[i].Widget.ProjectDir = filepath.Join(baseDir, buttons[i].Widget.ProjectDir)
 		}
-		if buttons[i].Directory != nil {
-			resolveButtonPaths(buttons[i].Directory.Buttons, baseDir)
+		if buttons[i].Folder != nil {
+			resolveButtonPaths(buttons[i].Folder.Buttons, baseDir)
 		}
 	}
 }
@@ -316,8 +371,8 @@ func resolveButtonPaths(buttons []Button, baseDir string) {
 func assignButtonIDs(buttons []Button, path string) {
 	for i := range buttons {
 		buttons[i].RuntimeID = fmt.Sprintf("%s[%d]", path, i)
-		if buttons[i].Directory != nil {
-			assignButtonIDs(buttons[i].Directory.Buttons, buttons[i].RuntimeID+".directory.buttons")
+		if buttons[i].Folder != nil {
+			assignButtonIDs(buttons[i].Folder.Buttons, buttons[i].RuntimeID+".folder.buttons")
 		}
 	}
 }
@@ -330,8 +385,8 @@ func collectIconPaths(buttons []Button, seen map[string]struct{}, out *[]string)
 				*out = append(*out, btn.Icon)
 			}
 		}
-		if btn.Directory != nil {
-			collectIconPaths(btn.Directory.Buttons, seen, out)
+		if btn.Folder != nil {
+			collectIconPaths(btn.Folder.Buttons, seen, out)
 		}
 	}
 }

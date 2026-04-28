@@ -166,8 +166,8 @@ func (m *Manager) collectDefs(buttons []config.Button) {
 				btn:  btn,
 			}
 		}
-		if btn.Directory != nil {
-			m.collectDefs(btn.Directory.Buttons)
+		if btn.Folder != nil {
+			m.collectDefs(btn.Folder.Buttons)
 		}
 	}
 }
@@ -236,10 +236,29 @@ func (m *Manager) gestureOptions(id string) (ig.Options, bool) {
 	}
 	switch def.kind {
 	case "project":
+		opts := ig.Options{HoldDelay: projectHoldDuration(def.btn.Widget.HoldMS)}
+		on := def.btn.Widget.On
+		if on == nil {
+			opts.HasTap = true
+			opts.HasDoubleTap = true
+			opts.HasHold = true
+			return opts, true
+		}
+		opts.HasTap = on.Tap != ""
+		opts.HasDoubleTap = on.DoubleTap != ""
+		opts.HasHold = on.Hold != ""
+		opts.HasRepeat = on.Repeat != ""
+		if opts.HasRepeat {
+			opts.RepeatEvery = opts.HoldDelay
+		}
 		return ig.Options{
-			HasTap:         true,
-			HasLongPress:   true,
-			LongPressDelay: projectLongPressDuration(def.btn.Widget.LongPressMS),
+			HasTap:         opts.HasTap,
+			HasDoubleTap:   opts.HasDoubleTap,
+			HasHold:        opts.HasHold,
+			HasRepeat:      opts.HasRepeat,
+			HoldDelay:      opts.HoldDelay,
+			DoubleTapDelay: 300 * time.Millisecond,
+			RepeatEvery:    opts.RepeatEvery,
 		}, true
 	case "memory", "spotify_play_pause", "spotify_next", "spotify_artwork":
 		return ig.Options{HasTap: true}, true
