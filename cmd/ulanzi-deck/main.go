@@ -27,6 +27,7 @@ var backButton = config.Button{
 const (
 	deviceKeepaliveInterval = 30 * time.Second
 	deviceRecoverRetries    = 2
+	wakeRecoverRetries      = 10
 )
 
 const usage = `ulanzi-deck — minimal headless daemon for the Ulanzi D200
@@ -204,16 +205,48 @@ func initDevice(dev *device.Device, buttons []config.Button) error {
 
 func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *device.Device, nav *navigator, gestures *gestureManager, widgetMgr *widgets.Manager) error {
 	lastKeepalive := time.Now()
+	sleeping := false
 	var reloader *configReloader
 	if cfgPath != "" {
 		reloader = newConfigReloader(cfgPath)
 		defer reloader.Close()
 	}
+	power, _ := newPowerWatcher(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		default:
+		}
+		if power != nil {
+			select {
+			case evt, ok := <-power.Events():
+				if ok {
+					switch evt {
+					case powerEventSleep:
+						fmt.Fprintln(os.Stderr, "system sleep detected; dimming and closing device")
+						sleeping = true
+						prepareDeviceForSleep(cfg, dev)
+					case powerEventWake:
+						fmt.Fprintln(os.Stderr, "system wake detected; restoring device")
+						sleeping = false
+						if recovered, recErr := recoverDeviceWithRetries(cfg, &dev, nav, widgetMgr, errors.New("wake restore"), wakeRecoverRetries); recovered {
+							lastKeepalive = time.Now()
+						} else if recErr != nil {
+							fmt.Fprintf(os.Stderr, "wake recovery failed: %v\n", recErr)
+						}
+					case powerEventShutdown:
+						fmt.Fprintln(os.Stderr, "system shutdown detected; dimming and closing device")
+						prepareDeviceForSleep(cfg, dev)
+						return nil
+					}
+				}
+			default:
+			}
+		}
+		if sleeping {
+			time.Sleep(200 * time.Millisecond)
+			continue
 		}
 		if reloader != nil {
 			select {
@@ -382,26 +415,30 @@ func applyDeviceState(dev *device.Device, cfg *config.Config, buttons []config.B
 }
 
 func recoverDevice(cfg *config.Config, dev **device.Device, nav *navigator, widgetMgr *widgets.Manager, cause error) (bool, error) {
+	return recoverDeviceWithRetries(cfg, dev, nav, widgetMgr, cause, deviceRecoverRetries)
+}
+
+func recoverDeviceWithRetries(cfg *config.Config, dev **device.Device, nav *navigator, widgetMgr *widgets.Manager, cause error, retries int) (bool, error) {
 	if nav == nil {
 		return false, cause
 	}
 	fmt.Fprintf(os.Stderr, "recovering device after error: %v\n", cause)
 	if *dev != nil {
-		_ = (*dev).Close()
+		(*dev).Detach()
 	}
 	var lastErr error
-	for attempt := 0; attempt < deviceRecoverRetries; attempt++ {
+	for attempt := 0; attempt < retries; attempt++ {
 		reopened, err := device.Open()
 		if err != nil {
 			lastErr = err
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 			continue
 		}
 		*dev = reopened
 		if err := refreshCurrentPage(cfg, reopened, nav, widgetMgr); err != nil {
 			lastErr = err
-			_ = reopened.Close()
-			time.Sleep(300 * time.Millisecond)
+			reopened.Detach()
+			time.Sleep(500 * time.Millisecond)
 			continue
 		}
 		fmt.Fprintln(os.Stderr, "device recovered")
@@ -411,6 +448,17 @@ func recoverDevice(cfg *config.Config, dev **device.Device, nav *navigator, widg
 		return false, fmt.Errorf("device recovery failed after %v: %w", cause, lastErr)
 	}
 	return false, cause
+}
+
+func prepareDeviceForSleep(cfg *config.Config, dev *device.Device) {
+	if dev == nil {
+		return
+	}
+	pkt, err := protocol.SetBrightnessPacket(0)
+	if err == nil {
+		_ = dev.SendPacket(pkt)
+	}
+	_ = dev.Close()
 }
 
 type navigator struct {
