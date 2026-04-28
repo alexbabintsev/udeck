@@ -346,9 +346,21 @@ Notes:
 - Project widgets also compute `PROJECT_EDITOR_TARGET`, which resolves to
   either `<project_dir>` or `<project_dir>/<editor_subdir>` depending on
   global and per-widget config.
+- The built-in fallback `focus` behavior tries to open a new terminal tab
+  and run `tmux attach-session -t <session>` for `iTerm` and `Terminal`.
+  Other terminals currently fall back to opening the project directory.
 - The demo project scripts also honor `PROJECT_CHROME_PROJECT`,
   `SLATE_CLI_PATH`, and `SLATE_EXT_ID` so they can open/close a Chrome
   project through Slate when that tooling is available.
+- The demo `start` script is idempotent: if the tmux session already
+  exists, it jumps straight to `focus`. On first launch it creates a
+  three-pane `main` window and starts:
+  - `PROJECT_WEB_CMD`
+  - `PROJECT_QUEUE_CMD`
+  - `PROJECT_CLAUDE_CMD`
+- The defaults for those demo commands match the current Laravel-style
+  workflow: `npm run dev`, `php85 artisan queue:listen`, and `claude`
+  inside `PROJECT_EDITOR_TARGET`.
 - Project scripts are invoked through `/bin/sh`, so they do not need the
   executable bit as long as the script contents are valid shell.
 - Spotify widgets use one internal shared service inside the

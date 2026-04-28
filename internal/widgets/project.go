@@ -25,9 +25,9 @@ import (
 )
 
 const (
-	defaultProjectPollMS      = 3000
-	defaultProjectHoldMS      = 700
-	projectScriptTimeout      = 20 * time.Second
+	defaultProjectPollMS = 3000
+	defaultProjectHoldMS = 700
+	projectScriptTimeout = 20 * time.Second
 )
 
 var (
@@ -226,6 +226,7 @@ func (w *ProjectWidget) runScript(scriptPath string) error {
 		"PROJECT_EDITOR="+w.editor,
 		"PROJECT_EDITOR_SUBDIR="+w.editorSubdir,
 		"PROJECT_EDITOR_TARGET="+w.editorTarget(),
+		"PROJECT_CHROME_PROJECT="+filepath.Base(w.projectDir),
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -469,7 +470,22 @@ func (w *ProjectWidget) focusFallback() error {
 	if app == "" {
 		app = "Terminal"
 	}
-	cmd := projectExecCommandContext(context.Background(), "/usr/bin/open", "-a", app, w.projectDir)
+	ctx, cancel := context.WithTimeout(context.Background(), projectScriptTimeout)
+	defer cancel()
+
+	if prog, args, ok := terminalAttachInvocation(app, projectAttachCommand(w.projectDir, w.session)); ok {
+		cmd := projectExecCommandContext(ctx, prog, args...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			msg := strings.TrimSpace(string(out))
+			if msg == "" {
+				return err
+			}
+			return fmt.Errorf("%w: %s", err, msg)
+		}
+		return nil
+	}
+
+	cmd := projectExecCommandContext(ctx, "/usr/bin/open", "-a", app, w.projectDir)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		msg := strings.TrimSpace(string(out))
 		if msg == "" {
@@ -506,6 +522,45 @@ func (w *ProjectWidget) editorTarget() string {
 		return w.projectDir
 	}
 	return filepath.Join(w.projectDir, w.editorSubdir)
+}
+
+func projectAttachCommand(projectDir, session string) string {
+	return fmt.Sprintf("cd %s && exec tmux attach-session -t %s", shellSingleQuote(projectDir), shellSingleQuote(session))
+}
+
+func terminalAttachInvocation(app, shellCmd string) (string, []string, bool) {
+	switch lower := strings.ToLower(strings.TrimSpace(app)); lower {
+	case "iterm", "iterm2":
+		return "/usr/bin/osascript", []string{
+			"-e", fmt.Sprintf(`tell application %q
+	activate
+	if (count of windows) = 0 then
+		create window with default profile
+	end if
+	tell current window
+		create tab with default profile
+		tell current session of current tab to write text %q
+	end tell
+end tell`, app, shellCmd),
+		}, true
+	case "terminal", "apple terminal":
+		return "/usr/bin/osascript", []string{
+			"-e", fmt.Sprintf(`tell application "Terminal"
+	activate
+	if (count of windows) = 0 then
+		do script %q
+	else
+		do script %q in front window
+	end if
+end tell`, shellCmd, shellCmd),
+		}, true
+	default:
+		return "", nil, false
+	}
+}
+
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func tmuxHasSession(session string) (bool, error) {

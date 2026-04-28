@@ -2,6 +2,38 @@
 set -eu
 
 PROJECT_DIR="${PROJECT_DIR:-$(CDPATH= cd -- "$(dirname "$0")" && pwd)}"
+PROJECT_SESSION="${PROJECT_SESSION:-$(basename "$PROJECT_DIR" | tr '.: ' '___')}"
 PROJECT_TERMINAL="${PROJECT_TERMINAL:-Terminal}"
+ATTACH_CMD="cd '$PROJECT_DIR' && exec tmux attach-session -t '$PROJECT_SESSION'"
 
-/usr/bin/open -a "$PROJECT_TERMINAL" "$PROJECT_DIR" >/dev/null 2>&1 || true
+case "$PROJECT_TERMINAL" in
+  iTerm|iTerm2)
+    /usr/bin/osascript <<EOF >/dev/null 2>&1 || true
+tell application "$PROJECT_TERMINAL"
+  activate
+  if (count of windows) = 0 then
+    create window with default profile
+  end if
+  tell current window
+    create tab with default profile
+    tell current session of current tab to write text "$ATTACH_CMD"
+  end tell
+end tell
+EOF
+    ;;
+  Terminal|"Apple Terminal")
+    /usr/bin/osascript <<EOF >/dev/null 2>&1 || true
+tell application "Terminal"
+  activate
+  if (count of windows) = 0 then
+    do script "$ATTACH_CMD"
+  else
+    do script "$ATTACH_CMD" in front window
+  end if
+end tell
+EOF
+    ;;
+  *)
+    /usr/bin/open -a "$PROJECT_TERMINAL" "$PROJECT_DIR" >/dev/null 2>&1 || true
+    ;;
+esac

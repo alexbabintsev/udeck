@@ -3,6 +3,7 @@ package widgets
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,9 +31,9 @@ func TestProjectWidgetLifecycleScripts(t *testing.T) {
 	btn := config.Button{
 		Label: "Demo",
 		Widget: &config.Widget{
-			Type:        "project",
-			ProjectDir:  dir,
-			HoldMS:      600,
+			Type:       "project",
+			ProjectDir: dir,
+			HoldMS:     600,
 			On: &config.WidgetOn{
 				Tap:       "start",
 				DoubleTap: "focus",
@@ -76,6 +77,44 @@ func TestProjectWidgetRequiresStartScript(t *testing.T) {
 	}
 	if _, err := NewProjectWidget("buttons[0]", btn, config.ProjectWidgetSettings{}, func(string) {}); err == nil {
 		t.Fatal("expected missing start script error")
+	}
+}
+
+func TestProjectAttachCommandQuotesPaths(t *testing.T) {
+	cmd := projectAttachCommand("/tmp/my project", "demo:session")
+	want := "cd '/tmp/my project' && exec tmux attach-session -t 'demo:session'"
+	if cmd != want {
+		t.Fatalf("unexpected attach command:\nwant: %s\ngot:  %s", want, cmd)
+	}
+}
+
+func TestTerminalAttachInvocationSupportsITermAndTerminal(t *testing.T) {
+	tests := []struct {
+		app        string
+		wantMarker string
+	}{
+		{app: "iTerm", wantMarker: "create tab with default profile"},
+		{app: "Terminal", wantMarker: `do script "tmux attach-session -t demo"`},
+	}
+
+	for _, tt := range tests {
+		prog, args, ok := terminalAttachInvocation(tt.app, "tmux attach-session -t demo")
+		if !ok {
+			t.Fatalf("%s should be supported", tt.app)
+		}
+		if prog != "/usr/bin/osascript" {
+			t.Fatalf("%s should use osascript, got %s", tt.app, prog)
+		}
+		if len(args) != 2 || args[0] != "-e" {
+			t.Fatalf("%s should pass one AppleScript block, got %#v", tt.app, args)
+		}
+		if !strings.Contains(args[1], tt.wantMarker) {
+			t.Fatalf("%s script missing marker %q:\n%s", tt.app, tt.wantMarker, args[1])
+		}
+	}
+
+	if _, _, ok := terminalAttachInvocation("Ghostty", "tmux attach-session -t demo"); ok {
+		t.Fatal("Ghostty should fall back to plain open")
 	}
 }
 

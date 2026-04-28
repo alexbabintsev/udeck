@@ -4,22 +4,52 @@ set -eu
 PROJECT_DIR="${PROJECT_DIR:-$(CDPATH= cd -- "$(dirname "$0")" && pwd)}"
 PROJECT_SESSION="${PROJECT_SESSION:-$(basename "$PROJECT_DIR" | tr '.: ' '___')}"
 SHELL_BIN="${SHELL:-/bin/zsh}"
+PROJECT_TERMINAL="${PROJECT_TERMINAL:-Terminal}"
 PROJECT_EDITOR="${PROJECT_EDITOR:-}"
 PROJECT_EDITOR_TARGET="${PROJECT_EDITOR_TARGET:-$PROJECT_DIR}"
 PROJECT_CHROME_PROJECT="${PROJECT_CHROME_PROJECT:-$(basename "$PROJECT_DIR")}"
 SLATE_CLI_PATH="${SLATE_CLI_PATH:-/Volumes/Black/Projects/chrome-projects/cli/slate}"
 SLATE_EXT_ID="${SLATE_EXT_ID:-jdkjlgbfdjgleildnodgnknmakniinjm}"
+PROJECT_WEB_CMD="${PROJECT_WEB_CMD:-cd \"$PROJECT_EDITOR_TARGET\" && npm run dev}"
+PROJECT_QUEUE_CMD="${PROJECT_QUEUE_CMD:-cd \"$PROJECT_EDITOR_TARGET\" && php85 artisan queue:listen}"
+PROJECT_CLAUDE_CMD="${PROJECT_CLAUDE_CMD:-cd \"$PROJECT_EDITOR_TARGET\" && claude}"
+FOCUS_SCRIPT="${PROJECT_DIR}/focus"
 
-if tmux has-session -t "$PROJECT_SESSION" 2>/dev/null; then
-  exit 0
+ensure_window() {
+  WINDOW_NAME="$1"
+  WINDOW_CMD="$2"
+
+  if tmux list-windows -t "$PROJECT_SESSION" -F '#W' | grep -Fx "$WINDOW_NAME" >/dev/null 2>&1; then
+    return
+  fi
+
+  tmux new-window -d -t "$PROJECT_SESSION" -n "$WINDOW_NAME" -c "$PROJECT_DIR"
+  tmux send-keys -t "$PROJECT_SESSION:$WINDOW_NAME" "$WINDOW_CMD" C-m
+}
+
+if ! tmux has-session -t "$PROJECT_SESSION" 2>/dev/null; then
+  tmux new-session -d -s "$PROJECT_SESSION" -n main -c "$PROJECT_DIR"
+  tmux split-window -v -t "$PROJECT_SESSION:0.0" -c "$PROJECT_DIR"
+  tmux select-pane -t "$PROJECT_SESSION:0.0"
+  tmux split-window -h -t "$PROJECT_SESSION:0.0" -c "$PROJECT_DIR"
+
+  tmux send-keys -t "$PROJECT_SESSION:0.0" "$PROJECT_WEB_CMD" C-m
+  tmux send-keys -t "$PROJECT_SESSION:0.1" "$PROJECT_QUEUE_CMD" C-m
+  tmux send-keys -t "$PROJECT_SESSION:0.2" "$PROJECT_CLAUDE_CMD" C-m
+
+  ensure_window "shell" "$SHELL_BIN -l"
+
+  if [ -n "$PROJECT_EDITOR" ]; then
+    /usr/bin/open -a "$PROJECT_EDITOR" "$PROJECT_EDITOR_TARGET" >/dev/null 2>&1 || true
+  fi
+
+  if [ -x "$SLATE_CLI_PATH" ]; then
+    SLATE_EXT_ID="$SLATE_EXT_ID" /usr/bin/env bash "$SLATE_CLI_PATH" open "$PROJECT_CHROME_PROJECT" >/dev/null 2>&1 || true
+  fi
 fi
 
-tmux new-session -d -s "$PROJECT_SESSION" -c "$PROJECT_DIR" "$SHELL_BIN -l"
-
-if [ -n "$PROJECT_EDITOR" ]; then
-  /usr/bin/open -a "$PROJECT_EDITOR" "$PROJECT_EDITOR_TARGET" >/dev/null 2>&1 || true
-fi
-
-if [ -x "$SLATE_CLI_PATH" ]; then
-  SLATE_EXT_ID="$SLATE_EXT_ID" /usr/bin/env bash "$SLATE_CLI_PATH" open "$PROJECT_CHROME_PROJECT" >/dev/null 2>&1 || true
+if [ -f "$FOCUS_SCRIPT" ]; then
+  /bin/sh "$FOCUS_SCRIPT" >/dev/null 2>&1 || true
+elif [ -n "$PROJECT_TERMINAL" ]; then
+  /usr/bin/open -a "$PROJECT_TERMINAL" "$PROJECT_DIR" >/dev/null 2>&1 || true
 fi

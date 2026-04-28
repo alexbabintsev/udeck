@@ -29,6 +29,12 @@ actual development milestones rather than formal releases.
   [examples/project-demo](/Volumes/Black/Projects/ulanzi-deck-go/examples/project-demo:1).
 - Demo project `start` / `stop` scripts now also open/close a Chrome
   project through Slate when available.
+- Project fallback focus now attaches to the running tmux session in a
+  new `iTerm` or `Terminal` tab instead of only opening the project
+  directory.
+- Demo project `start` is now idempotent, opens the attached terminal
+  tab through `focus`, and boots the default `tmux` service layout for
+  `npm run dev`, `php85 artisan queue:listen`, and `claude`.
 - Widget instances are created on first page visit and then cached for
   the lifetime of the active config.
 - Spotify shared runtime is now prewarmed when Spotify widgets exist in
