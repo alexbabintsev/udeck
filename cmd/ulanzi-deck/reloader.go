@@ -2,31 +2,35 @@ package main
 
 import (
 	"os"
+	"sync"
 	"time"
 )
 
 const configReloadPollInterval = 1 * time.Second
 
 type configReloader struct {
-	path    string
+	mu      sync.RWMutex
+	paths   []string
+	state   map[string]fileState
 	changes chan struct{}
 	stop    chan struct{}
 	done    chan struct{}
-	lastMod time.Time
-	lastLen int64
 }
 
-func newConfigReloader(path string) *configReloader {
+type fileState struct {
+	exists bool
+	mod    time.Time
+	size   int64
+}
+
+func newConfigReloader(path string, iconPaths []string) *configReloader {
 	r := &configReloader{
-		path:    path,
+		state:   map[string]fileState{},
 		changes: make(chan struct{}, 1),
 		stop:    make(chan struct{}),
 		done:    make(chan struct{}),
 	}
-	if info, err := os.Stat(path); err == nil {
-		r.lastMod = info.ModTime()
-		r.lastLen = info.Size()
-	}
+	r.setPaths(path, iconPaths)
 	go r.loop()
 	return r
 }
@@ -40,6 +44,12 @@ func (r *configReloader) Close() {
 	<-r.done
 }
 
+func (r *configReloader) UpdatePaths(path string, iconPaths []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.setPathsLocked(path, iconPaths)
+}
+
 func (r *configReloader) loop() {
 	defer close(r.done)
 	ticker := time.NewTicker(configReloadPollInterval)
@@ -49,20 +59,69 @@ func (r *configReloader) loop() {
 		case <-r.stop:
 			return
 		case <-ticker.C:
-			info, err := os.Stat(r.path)
-			if err != nil {
-				continue
-			}
-			mod := info.ModTime()
-			size := info.Size()
-			if mod.After(r.lastMod) || size != r.lastLen {
-				r.lastMod = mod
-				r.lastLen = size
+			if r.pollChanged() {
 				select {
 				case r.changes <- struct{}{}:
 				default:
 				}
 			}
 		}
+	}
+}
+
+func (r *configReloader) pollChanged() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, path := range r.paths {
+		next := statFile(path)
+		prev := r.state[path]
+		if next != prev {
+			r.state[path] = next
+			return true
+		}
+	}
+	return false
+}
+
+func (r *configReloader) setPaths(path string, iconPaths []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.setPathsLocked(path, iconPaths)
+}
+
+func (r *configReloader) setPathsLocked(path string, iconPaths []string) {
+	paths := make([]string, 0, 1+len(iconPaths))
+	seen := map[string]struct{}{}
+	add := func(p string) {
+		if p == "" {
+			return
+		}
+		if _, ok := seen[p]; ok {
+			return
+		}
+		seen[p] = struct{}{}
+		paths = append(paths, p)
+	}
+	add(path)
+	for _, p := range iconPaths {
+		add(p)
+	}
+	nextState := make(map[string]fileState, len(paths))
+	for _, p := range paths {
+		nextState[p] = statFile(p)
+	}
+	r.paths = paths
+	r.state = nextState
+}
+
+func statFile(path string) fileState {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fileState{}
+	}
+	return fileState{
+		exists: true,
+		mod:    info.ModTime(),
+		size:   info.Size(),
 	}
 }

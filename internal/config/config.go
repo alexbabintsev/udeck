@@ -96,6 +96,15 @@ type SmallViewBlock struct {
 	RefreshMS int    `yaml:"refresh_ms,omitempty"`
 }
 
+// IconPaths returns all configured static icon paths, including icons in
+// nested directories. Paths are returned in first-seen order.
+func (c *Config) IconPaths() []string {
+	var out []string
+	seen := map[string]struct{}{}
+	collectIconPaths(c.Buttons, seen, &out)
+	return out
+}
+
 // Load reads + parses a YAML config file. Returns a non-nil *Config and
 // any validation error.
 func Load(path string) (*Config, error) {
@@ -273,6 +282,20 @@ func assignButtonIDs(buttons []Button, path string) {
 		buttons[i].RuntimeID = fmt.Sprintf("%s[%d]", path, i)
 		if buttons[i].Directory != nil {
 			assignButtonIDs(buttons[i].Directory.Buttons, buttons[i].RuntimeID+".directory.buttons")
+		}
+	}
+}
+
+func collectIconPaths(buttons []Button, seen map[string]struct{}, out *[]string) {
+	for _, btn := range buttons {
+		if btn.Icon != "" {
+			if _, ok := seen[btn.Icon]; !ok {
+				seen[btn.Icon] = struct{}{}
+				*out = append(*out, btn.Icon)
+			}
+		}
+		if btn.Directory != nil {
+			collectIconPaths(btn.Directory.Buttons, seen, out)
 		}
 	}
 }

@@ -9,6 +9,10 @@ actual development milestones rather than formal releases.
 
 - Keep updating this section for user-visible changes that have not been
   grouped into a tagged release yet.
+- Added hot reload for configured static icon files, not just the YAML
+  config file.
+- `run` now defaults to `examples/test-config.yaml` when `--config` is
+  omitted.
 
 ## v2 Workbench
 

@@ -75,15 +75,19 @@ Then:
 ./ulanzi-deck dump-events
 ./ulanzi-deck set-brightness 70
 ./ulanzi-deck run --config examples/test-config.yaml
+./ulanzi-deck run
 ```
 
 `run` uploads the configured button layout, switches the device into
 host-controlled mode, applies label style / brightness, starts listening
 for button events, hot-reloads the config when the YAML changes, and
+hot-reloads static button icons when their image files change, and
 periodically refreshes device state to avoid falling back into the
 firmware screensaver. On macOS it also listens for system sleep, wake,
 and shutdown notifications so it can dim/close the device cleanly before
 sleep and restore the current page after wake.
+
+If `--config` is omitted, `run` uses `examples/test-config.yaml`.
 
 If something goes wrong on the device (frozen display, garbled output),
 **unplug the USB cable** to power-cycle. No persistent damage is
@@ -190,6 +194,8 @@ Notes:
 - `http` actions are useful for local automation bridges such as
   Hammerspoon.
 - `run` hot-reloads the YAML config automatically when the file changes.
+- `run` also watches configured static icon files and reloads the page
+  when those assets change on disk.
 - Widgets write icons atomically so page refreshes do not race on partial
   PNG files.
 - Spotify widgets use one internal shared service inside the

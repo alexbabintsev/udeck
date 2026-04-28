@@ -28,6 +28,7 @@ const (
 	deviceKeepaliveInterval = 30 * time.Second
 	deviceRecoverRetries    = 2
 	wakeRecoverRetries      = 10
+	defaultConfigPath       = "examples/test-config.yaml"
 )
 
 const usage = `ulanzi-deck — minimal headless daemon for the Ulanzi D200
@@ -36,10 +37,13 @@ Usage:
   ulanzi-deck info
   ulanzi-deck dump-events
   ulanzi-deck set-brightness <0..100>
-  ulanzi-deck run --config <path.yaml>
+  ulanzi-deck run [--config <path.yaml>]
 
 Note: Ulanzi Studio holds an exclusive HID lock. Quit it before running:
   osascript -e 'tell application "Ulanzi Studio" to quit'
+
+If --config is omitted for run, the default is:
+  ` + defaultConfigPath + `
 `
 
 func main() {
@@ -152,7 +156,7 @@ func cmdRun(args []string) error {
 		return err
 	}
 	if *cfgPath == "" {
-		return errors.New("--config is required")
+		*cfgPath = defaultConfigPath
 	}
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
@@ -208,7 +212,7 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 	sleeping := false
 	var reloader *configReloader
 	if cfgPath != "" {
-		reloader = newConfigReloader(cfgPath)
+		reloader = newConfigReloader(cfgPath, cfg.IconPaths())
 		defer reloader.Close()
 	}
 	power, _ := newPowerWatcher(ctx)
@@ -272,6 +276,7 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 							nav = nextNav
 							gestures = nextGestures
 							widgetMgr = nextWidgetMgr
+							reloader.UpdatePaths(cfgPath, nextCfg.IconPaths())
 							lastKeepalive = time.Now()
 							fmt.Fprintln(os.Stderr, "config reloaded")
 						}

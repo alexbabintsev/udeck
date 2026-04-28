@@ -240,3 +240,28 @@ func TestValidateAcceptsSpotifyWidgets(t *testing.T) {
 		t.Fatalf("expected spotify widgets to validate, got %v", err)
 	}
 }
+
+func TestIconPathsCollectsNestedUniqueIcons(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{At: [2]int{0, 0}, Icon: "/tmp/root.png"},
+			{
+				At: [2]int{1, 0},
+				Directory: &Directory{
+					Buttons: []Button{
+						{At: [2]int{0, 0}, Icon: "/tmp/nested.png"},
+						{At: [2]int{1, 0}, Icon: "/tmp/root.png"},
+					},
+				},
+			},
+		},
+	}
+
+	got := cfg.IconPaths()
+	if len(got) != 2 {
+		t.Fatalf("expected 2 unique icon paths, got %d: %v", len(got), got)
+	}
+	if got[0] != "/tmp/root.png" || got[1] != "/tmp/nested.png" {
+		t.Fatalf("unexpected icon paths order/content: %v", got)
+	}
+}
