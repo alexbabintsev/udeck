@@ -13,6 +13,9 @@ actual development milestones rather than formal releases.
   config file.
 - `run` now defaults to `examples/test-config.yaml` when `--config` is
   omitted.
+- Widget runtimes now activate lazily for the currently visible page
+  instead of all widget definitions in the config tree.
+- Polished widget rendering for Spotify and Memory states.
 
 ## v2 Workbench
 

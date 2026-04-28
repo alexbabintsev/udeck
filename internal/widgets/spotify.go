@@ -37,6 +37,8 @@ var (
 )
 
 type spotifySnapshot struct {
+	Running   bool
+	State     string
 	TrackID   string
 	TrackName string
 	Artist    string
@@ -49,21 +51,19 @@ type spotifySubscriber interface {
 }
 
 type SpotifyService struct {
-	mu           sync.RWMutex
-	snapshot     spotifySnapshot
-	subscribers  []spotifySubscriber
-	cancel       context.CancelFunc
-	wg           sync.WaitGroup
-	requestCh    chan struct{}
-	notifierDone chan struct{}
+	mu          sync.RWMutex
+	snapshot    spotifySnapshot
+	subscribers []spotifySubscriber
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
+	requestCh   chan struct{}
 }
 
 func NewSpotifyService(pollMS int) (*SpotifyService, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &SpotifyService{
-		cancel:       cancel,
-		requestCh:    make(chan struct{}, 1),
-		notifierDone: make(chan struct{}),
+		cancel:    cancel,
+		requestCh: make(chan struct{}, 1),
 	}
 
 	s.wg.Add(1)
@@ -165,6 +165,8 @@ func (s *SpotifyService) refresh() {
 	trackChanged := next.TrackID != prev.TrackID
 	if trackChanged && next.TrackID != "" {
 		next.Artwork = fetchSpotifyArtwork(next.TrackID)
+	} else if next.TrackID == "" {
+		next.Artwork = nil
 	} else {
 		next.Artwork = prev.Artwork
 	}
@@ -183,7 +185,7 @@ func (s *SpotifyService) refresh() {
 }
 
 func spotifyChanged(a, b spotifySnapshot) bool {
-	if a.TrackID != b.TrackID || a.TrackName != b.TrackName || a.Artist != b.Artist || a.Playing != b.Playing {
+	if a.Running != b.Running || a.State != b.State || a.TrackID != b.TrackID || a.TrackName != b.TrackName || a.Artist != b.Artist || a.Playing != b.Playing {
 		return true
 	}
 	return (a.Artwork == nil) != (b.Artwork == nil)
@@ -200,10 +202,10 @@ func fetchSpotifySnapshot() (spotifySnapshot, error) {
 func spotifyStateScript() string {
 	return `if application "Spotify" is running then
 tell application "Spotify"
-return ((id of current track) & "||" & (player state as string) & "||" & (name of current track) & "||" & (artist of current track))
+return ("1||" & (player state as string) & "||" & (id of current track) & "||" & (name of current track) & "||" & (artist of current track))
 end tell
 else
-return ""
+return "0||||"
 end if`
 }
 
@@ -212,15 +214,18 @@ func parseSpotifyState(out string) spotifySnapshot {
 	if out == "" {
 		return spotifySnapshot{}
 	}
-	parts := strings.SplitN(out, "||", 4)
-	if len(parts) != 4 {
+	parts := strings.SplitN(out, "||", 5)
+	if len(parts) != 5 {
 		return spotifySnapshot{}
 	}
+	state := strings.TrimSpace(parts[1])
 	return spotifySnapshot{
-		TrackID:   strings.TrimSpace(parts[0]),
-		Playing:   strings.TrimSpace(parts[1]) == "playing",
-		TrackName: strings.TrimSpace(parts[2]),
-		Artist:    strings.TrimSpace(parts[3]),
+		Running:   strings.TrimSpace(parts[0]) == "1",
+		State:     state,
+		TrackID:   strings.TrimSpace(parts[2]),
+		Playing:   state == "playing",
+		TrackName: strings.TrimSpace(parts[3]),
+		Artist:    strings.TrimSpace(parts[4]),
 	}
 }
 
@@ -343,12 +348,10 @@ func (w *SpotifyPlayPauseWidget) Press() { w.service.PlayPause() }
 
 func (w *SpotifyPlayPauseWidget) spotifyUpdate(s spotifySnapshot) {
 	img := image.NewRGBA(image.Rect(0, 0, icons.IconWidth, icons.IconHeight))
-	draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{0x09, 0x14, 0x0d, 0xff}}, image.Point{}, draw.Src)
-	accent := color.RGBA{0x1d, 0xb9, 0x54, 0xff}
-	if !s.Playing {
-		accent = color.RGBA{0xf4, 0xf4, 0xf4, 0xff}
-	}
-	drawScaledCenteredText(img, statusTitle(s.Playing), image.Rect(18, 26, icons.IconWidth-18, 78), accent)
+	drawWidgetGradient(img, color.RGBA{0x08, 0x13, 0x0d, 0xff}, color.RGBA{0x11, 0x25, 0x17, 0xff})
+	accent := spotifyAccent(s)
+	drawSmallBadge(img, spotifyStatusChip(s), accent)
+	drawScaledCenteredText(img, spotifyPlayPauseTitle(s), image.Rect(18, 34, icons.IconWidth-18, 88), accent)
 	drawPlayPauseGlyph(img, s.Playing, accent)
 	drawCenteredFace(img, shortenLine(trackLine(s), 15), icons.IconWidth/2, icons.IconHeight-18, color.RGBA{0xc0, 0xc0, 0xc0, 0xff}, basicfont.Face7x13)
 	if err := w.writeImage(img); err == nil {
@@ -374,9 +377,10 @@ func (w *SpotifyNextWidget) Press() { w.service.NextTrack() }
 
 func (w *SpotifyNextWidget) spotifyUpdate(s spotifySnapshot) {
 	img := image.NewRGBA(image.Rect(0, 0, icons.IconWidth, icons.IconHeight))
-	draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{0x10, 0x10, 0x10, 0xff}}, image.Point{}, draw.Src)
-	accent := color.RGBA{0x1d, 0xb9, 0x54, 0xff}
-	drawScaledCenteredText(img, "NEXT", image.Rect(18, 20, icons.IconWidth-18, 70), accent)
+	drawWidgetGradient(img, color.RGBA{0x10, 0x10, 0x10, 0xff}, color.RGBA{0x18, 0x18, 0x18, 0xff})
+	accent := spotifyAccent(s)
+	drawSmallBadge(img, spotifyStatusChip(s), accent)
+	drawScaledCenteredText(img, "NEXT", image.Rect(18, 28, icons.IconWidth-18, 78), accent)
 	drawNextGlyph(img, accent)
 	drawCenteredFace(img, shortenLine(trackLine(s), 15), icons.IconWidth/2, icons.IconHeight-18, color.RGBA{0xc0, 0xc0, 0xc0, 0xff}, basicfont.Face7x13)
 	if err := w.writeImage(img); err == nil {
@@ -404,10 +408,13 @@ func (w *SpotifyArtworkWidget) spotifyUpdate(s spotifySnapshot) {
 	img := image.NewRGBA(image.Rect(0, 0, icons.IconWidth, icons.IconHeight))
 	if s.Artwork != nil {
 		xdraw.BiLinear.Scale(img, img.Bounds(), s.Artwork, s.Artwork.Bounds(), draw.Over, nil)
+		drawTopScrim(img)
 		drawBottomScrim(img)
+		drawPlaybackBadge(img, s)
 	} else {
-		draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{0x12, 0x12, 0x12, 0xff}}, image.Point{}, draw.Src)
-		drawScaledCenteredText(img, "SPOTIFY", image.Rect(20, 26, icons.IconWidth-20, 92), color.RGBA{0x1d, 0xb9, 0x54, 0xff})
+		drawWidgetGradient(img, color.RGBA{0x12, 0x12, 0x12, 0xff}, color.RGBA{0x0d, 0x19, 0x10, 0xff})
+		drawSmallBadge(img, spotifyStatusChip(s), spotifyAccent(s))
+		drawScaledCenteredText(img, spotifyArtworkTitle(s), image.Rect(20, 38, icons.IconWidth-20, 98), spotifyAccent(s))
 	}
 	drawCenteredFace(img, shortenLine(displayTrackTitle(s), 18), icons.IconWidth/2, icons.IconHeight-30, color.RGBA{0xff, 0xff, 0xff, 0xff}, basicfont.Face7x13)
 	drawCenteredFace(img, shortenLine(displayArtist(s), 18), icons.IconWidth/2, icons.IconHeight-14, color.RGBA{0xd0, 0xd0, 0xd0, 0xff}, basicfont.Face7x13)
@@ -416,11 +423,52 @@ func (w *SpotifyArtworkWidget) spotifyUpdate(s spotifySnapshot) {
 	}
 }
 
-func statusTitle(playing bool) string {
-	if playing {
+func spotifyPlayPauseTitle(s spotifySnapshot) string {
+	if !s.Running {
+		return "OPEN"
+	}
+	if s.Playing {
 		return "PAUSE"
 	}
 	return "PLAY"
+}
+
+func spotifyArtworkTitle(s spotifySnapshot) string {
+	if !s.Running {
+		return "SPOTIFY"
+	}
+	switch s.State {
+	case "paused":
+		return "PAUSED"
+	case "stopped":
+		return "READY"
+	default:
+		return "NOW"
+	}
+}
+
+func spotifyStatusChip(s spotifySnapshot) string {
+	if !s.Running {
+		return "OFF"
+	}
+	switch s.State {
+	case "playing":
+		return "LIVE"
+	case "paused":
+		return "PAUSED"
+	default:
+		return "READY"
+	}
+}
+
+func spotifyAccent(s spotifySnapshot) color.RGBA {
+	if !s.Running {
+		return color.RGBA{0xb8, 0xbc, 0xc3, 0xff}
+	}
+	if s.Playing {
+		return color.RGBA{0x1d, 0xb9, 0x54, 0xff}
+	}
+	return color.RGBA{0xe8, 0xe8, 0xe8, 0xff}
 }
 
 func trackLine(s spotifySnapshot) string {
@@ -430,12 +478,21 @@ func trackLine(s spotifySnapshot) string {
 	if s.TrackID != "" {
 		return "READY"
 	}
+	if s.Running {
+		return "OPEN APP"
+	}
 	return spotifyFallbackName
 }
 
 func displayTrackTitle(s spotifySnapshot) string {
 	if s.TrackName != "" {
 		return s.TrackName
+	}
+	if !s.Running {
+		return spotifyFallbackName
+	}
+	if s.State == "stopped" {
+		return "Nothing Playing"
 	}
 	return spotifyFallbackName
 }
@@ -444,13 +501,19 @@ func displayArtist(s spotifySnapshot) string {
 	if s.Artist != "" {
 		return s.Artist
 	}
-	if s.TrackID != "" {
-		if s.Playing {
-			return "Playing"
-		}
-		return "Paused"
+	if !s.Running {
+		return "Not Running"
 	}
-	return "Not Running"
+	switch s.State {
+	case "playing":
+		return "Playing"
+	case "paused":
+		return "Paused"
+	case "stopped":
+		return "Ready"
+	default:
+		return "Open App"
+	}
 }
 
 func shortenLine(s string, max int) string {
@@ -485,6 +548,46 @@ func drawNextGlyph(img *image.RGBA, clr color.Color) {
 		draw.Draw(img, image.Rect(86+x, top, 88+x, bottom), &image.Uniform{clr}, image.Point{}, draw.Src)
 	}
 	draw.Draw(img, image.Rect(138, 88, 152, 138), &image.Uniform{clr}, image.Point{}, draw.Src)
+}
+
+func drawWidgetGradient(img *image.RGBA, top, bottom color.RGBA) {
+	for y := 0; y < icons.IconHeight; y++ {
+		ratio := float64(y) / float64(icons.IconHeight-1)
+		c := color.RGBA{
+			R: uint8(float64(top.R)*(1-ratio) + float64(bottom.R)*ratio),
+			G: uint8(float64(top.G)*(1-ratio) + float64(bottom.G)*ratio),
+			B: uint8(float64(top.B)*(1-ratio) + float64(bottom.B)*ratio),
+			A: 0xff,
+		}
+		draw.Draw(img, image.Rect(0, y, icons.IconWidth, y+1), &image.Uniform{c}, image.Point{}, draw.Src)
+	}
+}
+
+func drawSmallBadge(img *image.RGBA, text string, clr color.Color) {
+	draw.Draw(img, image.Rect(14, 12, 78, 28), &image.Uniform{color.RGBA{0, 0, 0, 0xaa}}, image.Point{}, draw.Over)
+	drawCenteredFace(img, text, 46, 24, clr, basicfont.Face7x13)
+}
+
+func drawTopScrim(img *image.RGBA) {
+	for y := 0; y < 42; y++ {
+		alpha := uint8((42 - y) * 120 / 42)
+		draw.Draw(img, image.Rect(0, y, icons.IconWidth, y+1), &image.Uniform{color.RGBA{0, 0, 0, alpha}}, image.Point{}, draw.Over)
+	}
+}
+
+func drawPlaybackBadge(img *image.RGBA, s spotifySnapshot) {
+	accent := spotifyAccent(s)
+	draw.Draw(img, image.Rect(146, 12, 182, 34), &image.Uniform{color.RGBA{0, 0, 0, 0x96}}, image.Point{}, draw.Over)
+	if s.Playing {
+		draw.Draw(img, image.Rect(157, 16, 162, 30), &image.Uniform{accent}, image.Point{}, draw.Src)
+		draw.Draw(img, image.Rect(166, 16, 171, 30), &image.Uniform{accent}, image.Point{}, draw.Src)
+		return
+	}
+	for x := 0; x < 11; x++ {
+		top := 16 + x/2
+		bottom := 30 - x/2
+		draw.Draw(img, image.Rect(156+x, top, 157+x, bottom), &image.Uniform{accent}, image.Point{}, draw.Src)
+	}
 }
 
 func drawBottomScrim(img *image.RGBA) {

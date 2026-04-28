@@ -126,16 +126,20 @@ func (w *MemoryWidget) render() error {
 	w.mu.RLock()
 	percent := w.percent
 	busy := w.busy
+	hasApps := len(w.apps) > 0
 	w.mu.RUnlock()
 
 	img := image.NewRGBA(image.Rect(0, 0, memoryWidgetW, memoryWidgetH))
-	draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{0, 0, 0, 0xff}}, image.Point{}, draw.Src)
+	drawMemoryGradient(img)
 
 	col := memoryColor(percent)
-	drawScaledCenteredText(img, fmt.Sprintf("%d%%", percent), image.Rect(14, 24, memoryWidgetW-14, 116), col)
+	drawCenteredFace(img, "RAM", memoryWidgetW/2, 24, color.RGBA{0x9a, 0x9a, 0x9a, 0xff}, basicfont.Face7x13)
+	drawScaledCenteredText(img, fmt.Sprintf("%d%%", percent), image.Rect(14, 30, memoryWidgetW-14, 120), col)
 	drawProgressBar(img, percent, col)
 	if busy {
-		drawCenteredFace(img, "restart", memoryWidgetW/2, memoryWidgetH-18, color.RGBA{0xe0, 0xa0, 0x20, 0xff}, basicfont.Face7x13)
+		drawCenteredFace(img, "RESTARTING", memoryWidgetW/2, memoryWidgetH-18, color.RGBA{0xe0, 0xa0, 0x20, 0xff}, basicfont.Face7x13)
+	} else if hasApps {
+		drawCenteredFace(img, "TAP TO RESTART", memoryWidgetW/2, memoryWidgetH-18, color.RGBA{0x90, 0x90, 0x90, 0xff}, basicfont.Face7x13)
 	} else {
 		drawCenteredFace(img, "MEMORY", memoryWidgetW/2, memoryWidgetH-18, color.RGBA{0x90, 0x90, 0x90, 0xff}, basicfont.Face7x13)
 	}
@@ -161,6 +165,21 @@ func memoryColor(percent int) color.RGBA {
 		return color.RGBA{0xe0, 0xa0, 0x20, 0xff}
 	default:
 		return color.RGBA{0x0e, 0xab, 0x2d, 0xff}
+	}
+}
+
+func drawMemoryGradient(img *image.RGBA) {
+	top := color.RGBA{0x08, 0x0b, 0x10, 0xff}
+	bottom := color.RGBA{0x12, 0x18, 0x21, 0xff}
+	for y := 0; y < memoryWidgetH; y++ {
+		ratio := float64(y) / float64(memoryWidgetH-1)
+		c := color.RGBA{
+			R: uint8(float64(top.R)*(1-ratio) + float64(bottom.R)*ratio),
+			G: uint8(float64(top.G)*(1-ratio) + float64(bottom.G)*ratio),
+			B: uint8(float64(top.B)*(1-ratio) + float64(bottom.B)*ratio),
+			A: 0xff,
+		}
+		draw.Draw(img, image.Rect(0, y, memoryWidgetW, y+1), &image.Uniform{c}, image.Point{}, draw.Src)
 	}
 }
 

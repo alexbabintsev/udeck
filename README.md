@@ -57,6 +57,7 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
 - Config hot reload while `run` is active
 - Runtime keepalive to keep the deck out of screensaver
 - Auto-recovery on common HID read/write/open failures
+- Lazy widget activation for the currently visible page
 - macOS power-event handling for sleep / wake / shutdown
 - Startup retry/backoff to survive transient HID access errors
 
@@ -200,6 +201,8 @@ Notes:
   PNG files.
 - Spotify widgets use one internal shared service inside the
   `ulanzi-deck` process; no separate `spotify-daemon` is required.
+- Spotify and other widget runtimes are activated lazily for the current
+  visible page instead of always running for every widget in the config.
 - Spotify artwork fetch still uses network access to resolve current
   cover art from Spotify track metadata.
 - The runtime periodically reapplies device state as a keepalive and

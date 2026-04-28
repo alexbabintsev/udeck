@@ -179,7 +179,11 @@ func cmdRun(args []string) error {
 	}
 	defer widgetMgr.Close()
 
-	if err := applyDeviceState(dev, cfg, widgetMgr.ResolveButtons(nav.currentButtons())); err != nil {
+	initialButtons, err := widgetMgr.ResolveButtons(nav.currentButtons())
+	if err != nil {
+		return fmt.Errorf("widgets: %w", err)
+	}
+	if err := applyDeviceState(dev, cfg, initialButtons); err != nil {
 		return err
 	}
 
@@ -265,7 +269,11 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "widget reload failed: %v\n", err)
 					} else {
-						if err := applyDeviceState(dev, nextCfg, nextWidgetMgr.ResolveButtons(nextNav.currentButtons())); err != nil {
+						initialButtons, err := nextWidgetMgr.ResolveButtons(nextNav.currentButtons())
+						if err != nil {
+							_ = nextWidgetMgr.Close()
+							fmt.Fprintf(os.Stderr, "widget resolve failed: %v\n", err)
+						} else if err := applyDeviceState(dev, nextCfg, initialButtons); err != nil {
 							_ = nextWidgetMgr.Close()
 							fmt.Fprintf(os.Stderr, "config apply failed: %v\n", err)
 						} else {
@@ -389,7 +397,11 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 func refreshCurrentPage(cfg *config.Config, dev *device.Device, nav *navigator, widgetMgr *widgets.Manager) error {
 	buttons := nav.currentButtons()
 	if widgetMgr != nil {
-		buttons = widgetMgr.ResolveButtons(buttons)
+		var err error
+		buttons, err = widgetMgr.ResolveButtons(buttons)
+		if err != nil {
+			return fmt.Errorf("resolve widgets: %w", err)
+		}
 	}
 	return applyDeviceState(dev, cfg, buttons)
 }
