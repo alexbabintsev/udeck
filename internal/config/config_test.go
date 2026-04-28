@@ -308,6 +308,45 @@ func TestValidateRejectsChainStepWithBothDelayAndAction(t *testing.T) {
 	}
 }
 
+func TestConfigUsesKeyActions(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At: [2]int{0, 0},
+				On: &Handlers{
+					Tap: &GestureBinding{
+						Toggle: []ToggleStep{
+							{Action: Action{Type: "shell", Cmd: "echo a"}},
+							{Action: Action{Type: "key", Key: "cmd t"}},
+						},
+					},
+				},
+			},
+			{
+				At: [2]int{1, 0},
+				Folder: &Folder{
+					Buttons: []Button{
+						{
+							At: [2]int{0, 0},
+							On: &Handlers{
+								Hold: &GestureBinding{
+									Chain: []ChainStep{
+										{DelayMS: 100},
+										{Action: &Action{Type: "http", URL: "http://example.test"}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	if !cfg.UsesKeyActions() {
+		t.Fatal("expected config to report key actions")
+	}
+}
+
 func TestValidateRejectsMultipleToggleGesturesOnOneButton(t *testing.T) {
 	cfg := &Config{
 		Buttons: []Button{

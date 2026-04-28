@@ -8,6 +8,17 @@ int ax_is_trusted() {
 	return AXIsProcessTrusted() ? 1 : 0;
 }
 
+void ax_prompt() {
+	const void *keys[] = { kAXTrustedCheckOptionPrompt };
+	const void *values[] = { kCFBooleanTrue };
+	CFDictionaryRef opts = CFDictionaryCreate(kCFAllocatorDefault, keys, values, 1,
+		&kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+	if (opts != NULL) {
+		AXIsProcessTrustedWithOptions(opts);
+		CFRelease(opts);
+	}
+}
+
 int send_shortcut(CGKeyCode *modifierCodes, CGEventFlags *modifierFlags, int modifierCount, CGKeyCode keyCode) {
 	CGEventSourceRef src = CGEventSourceCreate(kCGEventSourceStateCombinedSessionState);
 	if (src == NULL) {
@@ -84,6 +95,10 @@ var isAXTrusted = func() bool {
 	return C.ax_is_trusted() != 0
 }
 
+var promptAXAccess = func() {
+	C.ax_prompt()
+}
+
 var sendShortcutFunc = func(spec parsedShortcut) error {
 	var rc C.int
 	if len(spec.modifiers) == 0 {
@@ -111,6 +126,7 @@ var sendShortcutFunc = func(spec parsedShortcut) error {
 // sendKey parses "key" string like "cmd shift s" or "f5" and fires a macOS shortcut.
 func sendKey(key string) error {
 	if !isAXTrusted() {
+		promptAXAccess()
 		return fmt.Errorf("key actions require macOS Accessibility permission for the app running ulanzi-deck")
 	}
 
@@ -119,6 +135,15 @@ func sendKey(key string) error {
 		return err
 	}
 	return sendShortcutFunc(spec)
+}
+
+// RequestKeyPermissions asks macOS to show the Accessibility permission prompt
+// if key actions are configured but the process is not trusted yet.
+func RequestKeyPermissions() {
+	if isAXTrusted() {
+		return
+	}
+	promptAXAccess()
 }
 
 func parseShortcut(key string) (parsedShortcut, error) {

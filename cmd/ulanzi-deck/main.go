@@ -162,6 +162,9 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return err
 	}
+	if cfg.UsesKeyActions() {
+		actions.RequestKeyPermissions()
+	}
 	if err := preflight.StudioRunning(); err != nil {
 		return err
 	}

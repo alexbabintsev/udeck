@@ -328,6 +328,8 @@ Notes:
 - Key actions on macOS are sent as full modifier-down / key /
   modifier-up sequences rather than one flagged key event, which is more
   reliable for shortcuts like `cmd t` and `cmd shift 4`.
+- If the active config contains any `type: key` handlers, `run` now
+  proactively asks macOS for Accessibility access during startup.
 
 ## Troubleshooting
 
@@ -350,7 +352,9 @@ Notes:
   - Grant Accessibility permission to the app that launched
     `ulanzi-deck` in macOS System Settings. For example, if you run it
     from Terminal or iTerm, that terminal app must be allowed under
-    Privacy & Security → Accessibility.
+    Privacy & Security → Accessibility. The runtime now also triggers
+    the native macOS prompt automatically when key actions are
+    configured, but the user still needs to approve it.
 
 ## Roadmap
 

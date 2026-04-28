@@ -38,9 +38,13 @@ func TestParseShortcutRejectsMultipleKeys(t *testing.T) {
 
 func TestSendKeyRequiresAccessibility(t *testing.T) {
 	oldTrusted := isAXTrusted
+	oldPrompt := promptAXAccess
 	isAXTrusted = func() bool { return false }
+	prompted := false
+	promptAXAccess = func() { prompted = true }
 	t.Cleanup(func() {
 		isAXTrusted = oldTrusted
+		promptAXAccess = oldPrompt
 	})
 
 	err := sendKey("cmd t")
@@ -49,6 +53,9 @@ func TestSendKeyRequiresAccessibility(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "Accessibility") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if !prompted {
+		t.Fatal("expected accessibility prompt request")
 	}
 }
 
@@ -79,5 +86,28 @@ func TestSendKeyUsesParsedShortcut(t *testing.T) {
 	wantCodes := []int{modifierKeys["ctrl"].code, modifierKeys["alt"].code}
 	if !reflect.DeepEqual(gotCodes, wantCodes) {
 		t.Fatalf("unexpected modifiers: got %v want %v", gotCodes, wantCodes)
+	}
+}
+
+func TestRequestKeyPermissionsPromptsOnlyWhenNeeded(t *testing.T) {
+	oldTrusted := isAXTrusted
+	oldPrompt := promptAXAccess
+	promptCount := 0
+	promptAXAccess = func() { promptCount++ }
+	t.Cleanup(func() {
+		isAXTrusted = oldTrusted
+		promptAXAccess = oldPrompt
+	})
+
+	isAXTrusted = func() bool { return false }
+	RequestKeyPermissions()
+	if promptCount != 1 {
+		t.Fatalf("unexpected prompt count after untrusted request: got %d want 1", promptCount)
+	}
+
+	isAXTrusted = func() bool { return true }
+	RequestKeyPermissions()
+	if promptCount != 1 {
+		t.Fatalf("unexpected prompt count after trusted request: got %d want 1", promptCount)
 	}
 }

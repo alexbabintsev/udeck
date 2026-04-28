@@ -38,6 +38,8 @@ actual development milestones rather than formal releases.
   widgets, with `double_tap` and hold-time `hold` behavior.
 - macOS key actions now use a more reliable shortcut-posting path with
   explicit modifier down/up events and clearer Accessibility errors.
+- `run` now proactively requests macOS Accessibility permission during
+  startup when the active config contains key actions.
 
 ## v2 Workbench
 

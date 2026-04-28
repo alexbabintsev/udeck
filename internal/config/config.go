@@ -167,6 +167,12 @@ func (c *Config) IconPaths() []string {
 	return out
 }
 
+// UsesKeyActions reports whether any button in the config tree triggers a
+// `type: key` action, directly, through a toggle step, or through a chain.
+func (c *Config) UsesKeyActions() bool {
+	return buttonsUseKeyActions(c.Buttons)
+}
+
 // Load reads + parses a YAML config file. Returns a non-nil *Config and
 // any validation error.
 func Load(path string) (*Config, error) {
@@ -329,6 +335,49 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 		}
 	}
 	return nil
+}
+
+func buttonsUseKeyActions(buttons []Button) bool {
+	for i := range buttons {
+		btn := buttons[i]
+		if handlersUseKeyActions(btn.On) {
+			return true
+		}
+		if btn.Folder != nil && buttonsUseKeyActions(btn.Folder.Buttons) {
+			return true
+		}
+	}
+	return false
+}
+
+func handlersUseKeyActions(h *Handlers) bool {
+	if h == nil {
+		return false
+	}
+	return gestureUsesKeyAction(h.Tap) ||
+		gestureUsesKeyAction(h.DoubleTap) ||
+		gestureUsesKeyAction(h.Hold) ||
+		gestureUsesKeyAction(h.Repeat)
+}
+
+func gestureUsesKeyAction(g *GestureBinding) bool {
+	if g == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(g.Type), "key") {
+		return true
+	}
+	for i := range g.Toggle {
+		if strings.EqualFold(strings.TrimSpace(g.Toggle[i].Action.Type), "key") {
+			return true
+		}
+	}
+	for i := range g.Chain {
+		if g.Chain[i].Action != nil && strings.EqualFold(strings.TrimSpace(g.Chain[i].Action.Type), "key") {
+			return true
+		}
+	}
+	return false
 }
 
 func validateAction(a *Action, path string) error {
