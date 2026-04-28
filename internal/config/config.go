@@ -14,8 +14,14 @@ import (
 type Config struct {
 	Device    DeviceConfig    `yaml:"device"`
 	Widgets   WidgetSettings  `yaml:"widgets,omitempty"`
+	Pages     []Page          `yaml:"pages,omitempty"`
 	Buttons   []Button        `yaml:"buttons,omitempty"`
 	SmallView *SmallViewBlock `yaml:"smallview,omitempty"` // reserved for v3
+}
+
+type Page struct {
+	Name    string   `yaml:"name,omitempty"`
+	Buttons []Button `yaml:"buttons,omitempty"`
 }
 
 type WidgetSettings struct {
@@ -134,9 +140,9 @@ func (b Button) HIDIndex() int {
 	return b.At[1]*5 + b.At[0]
 }
 
-// Action is the handler fired when a button is pressed.
+// Action is the handler fired when a gesture resolves.
 type Action struct {
-	// Type is "shell", "key", or "http".
+	// Type is "shell", "key", "http", "page_next", or "page_prev".
 	Type string `yaml:"type"`
 
 	// Cmd is the shell command run for type=shell.
@@ -172,14 +178,14 @@ type SmallViewBlock struct {
 func (c *Config) IconPaths() []string {
 	var out []string
 	seen := map[string]struct{}{}
-	collectIconPaths(c.Buttons, seen, &out)
+	collectPageIconPaths(c.PagesOrDefault(), seen, &out)
 	return out
 }
 
 // UsesKeyActions reports whether any button in the config tree triggers a
 // `type: key` action, directly, through a toggle step, or through a chain.
 func (c *Config) UsesKeyActions() bool {
-	return buttonsUseKeyActions(c.Buttons)
+	return pagesUseKeyActions(c.PagesOrDefault())
 }
 
 // Load reads + parses a YAML config file. Returns a non-nil *Config and
@@ -193,9 +199,9 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
-	assignButtonIDs(c.Buttons, "buttons")
-	resolveButtonPaths(c.Buttons, filepath.Dir(path))
-	applyButtonDefaults(c.Buttons, c.Device.IconMargins)
+	assignPageButtonIDs(c.PagesOrDefault())
+	resolvePageButtonPaths(c.PagesOrDefault(), filepath.Dir(path))
+	applyPageButtonDefaults(c.PagesOrDefault(), c.Device.IconMargins)
 	if err := c.Validate(); err != nil {
 		return &c, err
 	}
@@ -203,6 +209,9 @@ func Load(path string) (*Config, error) {
 }
 
 func (c *Config) Validate() error {
+	if len(c.Pages) > 0 && len(c.Buttons) > 0 {
+		return fmt.Errorf("config cannot define both pages and buttons")
+	}
 	if c.Device.Brightness != nil {
 		b := *c.Device.Brightness
 		if b < 0 || b > 100 {
@@ -223,7 +232,21 @@ func (c *Config) Validate() error {
 	if err := validateInsets(c.Device.IconMargins, "device.icon_margins"); err != nil {
 		return err
 	}
-	return validateButtons(c.Buttons, "buttons", false)
+	pages := c.PagesOrDefault()
+	if len(pages) == 0 {
+		return fmt.Errorf("config must define at least one page")
+	}
+	return validatePages(pages)
+}
+
+func (c *Config) PagesOrDefault() []Page {
+	if len(c.Pages) > 0 {
+		return c.Pages
+	}
+	return []Page{{
+		Name:    "Main",
+		Buttons: c.Buttons,
+	}}
 }
 
 func validateHexColor(s string) error {
@@ -249,6 +272,18 @@ func validateInsets(in *Insets, path string) error {
 	}
 	if in.Top+in.Bottom >= 196 {
 		return fmt.Errorf("%s top+bottom must be less than 196", path)
+	}
+	return nil
+}
+
+func validatePages(pages []Page) error {
+	for i, page := range pages {
+		if len(page.Buttons) == 0 {
+			return fmt.Errorf("pages[%d].buttons is empty", i)
+		}
+		if err := validateButtons(page.Buttons, fmt.Sprintf("pages[%d].buttons", i), false); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -369,6 +404,15 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 	return nil
 }
 
+func pagesUseKeyActions(pages []Page) bool {
+	for i := range pages {
+		if buttonsUseKeyActions(pages[i].Buttons) {
+			return true
+		}
+	}
+	return false
+}
+
 func buttonsUseKeyActions(buttons []Button) bool {
 	for i := range buttons {
 		btn := buttons[i]
@@ -426,8 +470,9 @@ func validateAction(a *Action, path string) error {
 		if a.URL == "" {
 			return fmt.Errorf("%s.url is empty", path)
 		}
+	case "page_next", "page_prev":
 	default:
-		return fmt.Errorf("%s.type %q unknown (shell|key|http)", path, a.Type)
+		return fmt.Errorf("%s.type %q unknown (shell|key|http|page_next|page_prev)", path, a.Type)
 	}
 	return nil
 }
@@ -535,6 +580,12 @@ func validateProjectWidgetActionName(value string, path string) error {
 	}
 }
 
+func resolvePageButtonPaths(pages []Page, baseDir string) {
+	for i := range pages {
+		resolveButtonPaths(pages[i].Buttons, baseDir)
+	}
+}
+
 func resolveButtonPaths(buttons []Button, baseDir string) {
 	for i := range buttons {
 		if buttons[i].Icon != "" && !filepath.IsAbs(buttons[i].Icon) && !strings.HasPrefix(buttons[i].Icon, "~/") {
@@ -550,6 +601,12 @@ func resolveButtonPaths(buttons []Button, baseDir string) {
 		if buttons[i].Folder != nil {
 			resolveButtonPaths(buttons[i].Folder.Buttons, baseDir)
 		}
+	}
+}
+
+func applyPageButtonDefaults(pages []Page, iconMargins *Insets) {
+	for i := range pages {
+		applyButtonDefaults(pages[i].Buttons, iconMargins)
 	}
 }
 
@@ -572,12 +629,24 @@ func cloneInsets(in *Insets) *Insets {
 	return &cp
 }
 
+func assignPageButtonIDs(pages []Page) {
+	for i := range pages {
+		assignButtonIDs(pages[i].Buttons, fmt.Sprintf("pages[%d].buttons", i))
+	}
+}
+
 func assignButtonIDs(buttons []Button, path string) {
 	for i := range buttons {
 		buttons[i].RuntimeID = fmt.Sprintf("%s[%d]", path, i)
 		if buttons[i].Folder != nil {
 			assignButtonIDs(buttons[i].Folder.Buttons, buttons[i].RuntimeID+".folder.buttons")
 		}
+	}
+}
+
+func collectPageIconPaths(pages []Page, seen map[string]struct{}, out *[]string) {
+	for i := range pages {
+		collectIconPaths(pages[i].Buttons, seen, out)
 	}
 }
 

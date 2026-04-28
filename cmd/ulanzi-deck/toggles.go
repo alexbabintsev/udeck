@@ -26,7 +26,9 @@ func newToggleManager(cfg *config.Config) *toggleManager {
 		steps:   map[toggleKey][]config.ToggleStep{},
 		index:   map[toggleKey]int{},
 	}
-	m.collect(cfg.Buttons)
+	for _, page := range cfg.PagesOrDefault() {
+		m.collect(page.Buttons)
+	}
 	return m
 }
 

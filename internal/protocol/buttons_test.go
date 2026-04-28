@@ -76,9 +76,14 @@ func TestPageZIPBuildsWorkFolderFromExampleConfig(t *testing.T) {
 	}
 
 	var work *config.Folder
-	for _, btn := range cfg.Buttons {
-		if btn.Label == "Work" {
-			work = btn.Folder
+	for _, page := range cfg.PagesOrDefault() {
+		for _, btn := range page.Buttons {
+			if btn.Label == "Work" {
+				work = btn.Folder
+				break
+			}
+		}
+		if work != nil {
 			break
 		}
 	}

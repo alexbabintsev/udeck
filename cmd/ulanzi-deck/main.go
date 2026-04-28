@@ -174,7 +174,7 @@ func cmdRun(args []string) error {
 	}
 	defer dev.Close()
 
-	nav := newNavigator(cfg.Buttons)
+	nav := newNavigator(cfg.PagesOrDefault())
 	gestures := newGestureManager()
 	toggles := newToggleManager(cfg)
 	widgetMgr, err := widgets.NewManager(cfg)
@@ -268,7 +268,7 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "config reload failed: %v\n", err)
 				} else {
-					nextNav := newNavigator(nextCfg.Buttons)
+					nextNav := newNavigator(nextCfg.PagesOrDefault())
 					nextGestures := newGestureManager()
 					nextToggles := newToggleManager(nextCfg)
 					nextWidgetMgr, err := widgets.NewManager(nextCfg)
@@ -346,8 +346,17 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 					lastKeepalive = time.Now()
 					continue
 				}
-				if err := actions.RunBinding(binding); err != nil {
+				if changed, err := runBinding(binding, nav); err != nil {
 					fmt.Fprintf(os.Stderr, "action error: %v\n", err)
+				} else if changed {
+					if err := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); err != nil {
+						if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, fmt.Errorf("switch page: %w", err)); recovered {
+							lastKeepalive = time.Now()
+							continue
+						} else if recErr != nil {
+							return recErr
+						}
+					}
 				}
 				lastKeepalive = time.Now()
 			}
@@ -428,8 +437,17 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 			}
 		}
 		if binding != nil {
-			if err := actions.RunBinding(binding); err != nil {
+			if changed, err := runBinding(binding, nav); err != nil {
 				fmt.Fprintf(os.Stderr, "action error: %v\n", err)
+			} else if changed {
+				if err := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); err != nil {
+					if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, fmt.Errorf("switch page: %w", err)); recovered {
+						lastKeepalive = time.Now()
+						continue
+					} else if recErr != nil {
+						return recErr
+					}
+				}
 			}
 			lastKeepalive = time.Now()
 		}
@@ -488,6 +506,52 @@ func applyDeviceState(dev *device.Device, cfg *config.Config, buttons []config.B
 	return nil
 }
 
+func runBinding(binding *config.GestureBinding, nav *navigator) (bool, error) {
+	if binding == nil {
+		return false, nil
+	}
+	if action := binding.Action(); action != nil {
+		return runAction(action, nav)
+	}
+	pageChanged := false
+	for i := range binding.Chain {
+		step := binding.Chain[i]
+		if step.DelayMS > 0 {
+			time.Sleep(time.Duration(step.DelayMS) * time.Millisecond)
+			continue
+		}
+		if step.Action == nil {
+			continue
+		}
+		changed, err := runAction(step.Action, nav)
+		if err != nil {
+			return pageChanged, err
+		}
+		pageChanged = pageChanged || changed
+	}
+	return pageChanged, nil
+}
+
+func runAction(action *config.Action, nav *navigator) (bool, error) {
+	if action == nil {
+		return false, nil
+	}
+	switch action.Type {
+	case "page_next":
+		if nav == nil {
+			return false, nil
+		}
+		return nav.nextPage(), nil
+	case "page_prev":
+		if nav == nil {
+			return false, nil
+		}
+		return nav.prevPage(), nil
+	default:
+		return false, actions.Run(action)
+	}
+}
+
 func recoverDevice(cfg *config.Config, dev **device.Device, nav *navigator, toggles *toggleManager, widgetMgr *widgets.Manager, cause error) (bool, error) {
 	return recoverDeviceWithRetries(cfg, dev, nav, toggles, widgetMgr, cause, deviceRecoverRetries)
 }
@@ -536,12 +600,13 @@ func prepareDeviceForSleep(cfg *config.Config, dev *device.Device) {
 }
 
 type navigator struct {
-	root  []config.Button
+	pages []config.Page
+	page  int
 	stack []*config.Folder
 }
 
-func newNavigator(root []config.Button) *navigator {
-	return &navigator{root: root}
+func newNavigator(pages []config.Page) *navigator {
+	return &navigator{pages: append([]config.Page(nil), pages...)}
 }
 
 func (n *navigator) currentButtons() []config.Button {
@@ -578,9 +643,36 @@ func (n *navigator) handleEvent(index int, pressed bool) (pageChanged bool) {
 
 func (n *navigator) currentPageButtons() []config.Button {
 	if len(n.stack) == 0 {
-		return n.root
+		if len(n.pages) == 0 {
+			return nil
+		}
+		return n.pages[n.page].Buttons
 	}
 	return n.stack[len(n.stack)-1].Buttons
+}
+
+func (n *navigator) nextPage() bool {
+	if len(n.pages) < 2 {
+		return false
+	}
+	n.page++
+	if n.page >= len(n.pages) {
+		n.page = 0
+	}
+	n.stack = nil
+	return true
+}
+
+func (n *navigator) prevPage() bool {
+	if len(n.pages) < 2 {
+		return false
+	}
+	n.page--
+	if n.page < 0 {
+		n.page = len(n.pages) - 1
+	}
+	n.stack = nil
+	return true
 }
 
 func (n *navigator) findButton(index int) *config.Button {

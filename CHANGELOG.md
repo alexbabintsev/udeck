@@ -43,6 +43,8 @@ actual development milestones rather than formal releases.
 - Added global `device.icon_margins` and per-button `icon_margins` for
   static icons, so button artwork can avoid the D200 edge distortion
   zone.
+- Added top-level `pages` with looping `page_next` / `page_prev`
+  actions, and migrated the demo config to the new multi-page layout.
 
 ## v2 Workbench
 

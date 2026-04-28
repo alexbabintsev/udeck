@@ -36,10 +36,11 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
 
 - Direct HID control of the D200 without Ulanzi Studio
 - `info`, `dump-events`, `set-brightness`, and `run`
-- Upload and refresh a full `5x3` page layout
+- Upload and refresh multi-page `5x3` layouts
 - Global label style and brightness control
 - Local icon loading and resize to `196x196`
 - Nested button directories with automatic `Back`
+- Top-level pages with looping `page_next` / `page_prev`
 - Unified button handlers via `on:`
   - `tap`
   - `double_tap`
@@ -51,6 +52,8 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
   - `shell`
   - `key`
   - `http`
+  - `page_next`
+  - `page_prev`
 - Widgets:
   - `memory`
   - `spotify_play_pause`
@@ -103,6 +106,7 @@ possible from bad packets.
 See [examples/test-config.yaml](examples/test-config.yaml). It is the
 canonical demo profile and includes:
 
+- top-level pages with looped next/prev navigation
 - nested directories
 - standard shell / key / http actions
 - `memory` widget
@@ -130,53 +134,57 @@ Current config surface:
   - `editor`: app name passed to scripts as `PROJECT_EDITOR`
   - `editor_subdir`: optional subdirectory opened by the editor by
     default, for example `www`
-- `buttons[]`
-  - `at`: `[col, row]`, zero-based, `col=0..4`, `row=0..2`
-  - `label`: button text
-  - `icon`: local image path; `~/...` is expanded; images are resized to
-    `196x196` and encoded as JPEG before upload
-  - `icon_margins`: optional per-button override for static icon insets
-  - `folder.buttons`: nested page; runtime injects a `Back` button
-  - `widget`
-    - `type: memory`
-      - `apps`: optional app list restarted on press
-      - `poll_ms`: optional polling override
-    - `type: spotify_play_pause`
-    - `type: spotify_next`
-    - `type: spotify_artwork`
-    - `type: project`
-      - `project_dir`: project root; relative paths are resolved relative
-        to the config file
-      - `session`: optional tmux session override; defaults to the project
-        directory name
-      - `editor_subdir`: optional per-project override for the editor
-        target subdirectory
-      - `on`: optional gesture mapping for project widgets
-        - `tap`: `start | stop | focus`
-        - `double_tap`: `start | stop | focus`
-        - `hold`: `start | stop | focus`
-        - `repeat`: `start | stop | focus`
-      - `hold_ms`: optional stop threshold override
-      - `scripts.start`: optional override for the start script path
-      - `scripts.stop`: optional override for the stop script path
-      - `scripts.focus`: optional override for the focus script path
-  - `on`
-    - `tap`
-    - `double_tap`
-    - `hold`
-    - `repeat`
-    - each gesture accepts either:
-      - a direct action payload
-      - `toggle:` with 2+ steps
-      - `chain:` with ordered `action` / `delay_ms` steps
-    - optional timing overrides:
-      - `hold_ms`
-      - `double_tap_ms`
-      - `repeat_every_ms`
-  - each handler uses an action payload:
-    - `type: shell` with `cmd: "..."` to run a shell command
-    - `type: key` with `key: "cmd shift m"`-style shortcuts
-    - `type: http` with `url: "http://127.0.0.1:..."` to call a local or remote endpoint
+- `pages[]`
+  - `name`: optional human-readable page name
+  - `buttons[]`
+    - `at`: `[col, row]`, zero-based, `col=0..4`, `row=0..2`
+    - `label`: button text
+    - `icon`: local image path; `~/...` is expanded; images are resized to
+      `196x196` and encoded as JPEG before upload
+    - `icon_margins`: optional per-button override for static icon insets
+    - `folder.buttons`: nested page; runtime injects a `Back` button
+    - `widget`
+      - `type: memory`
+        - `apps`: optional app list restarted on press
+        - `poll_ms`: optional polling override
+      - `type: spotify_play_pause`
+      - `type: spotify_next`
+      - `type: spotify_artwork`
+      - `type: project`
+        - `project_dir`: project root; relative paths are resolved relative
+          to the config file
+        - `session`: optional tmux session override; defaults to the project
+          directory name
+        - `editor_subdir`: optional per-project override for the editor
+          target subdirectory
+        - `on`: optional gesture mapping for project widgets
+          - `tap`: `start | stop | focus`
+          - `double_tap`: `start | stop | focus`
+          - `hold`: `start | stop | focus`
+          - `repeat`: `start | stop | focus`
+        - `hold_ms`: optional stop threshold override
+        - `scripts.start`: optional override for the start script path
+        - `scripts.stop`: optional override for the stop script path
+        - `scripts.focus`: optional override for the focus script path
+    - `on`
+      - `tap`
+      - `double_tap`
+      - `hold`
+      - `repeat`
+      - each gesture accepts either:
+        - a direct action payload
+        - `toggle:` with 2+ steps
+        - `chain:` with ordered `action` / `delay_ms` steps
+      - optional timing overrides:
+        - `hold_ms`
+        - `double_tap_ms`
+        - `repeat_every_ms`
+    - each handler uses an action payload:
+      - `type: shell` with `cmd: "..."` to run a shell command
+      - `type: key` with `key: "cmd shift m"`-style shortcuts
+      - `type: http` with `url: "http://127.0.0.1:..."` to call a local or remote endpoint
+      - `type: page_next` to switch to the next top-level page
+      - `type: page_prev` to switch to the previous top-level page
 - `smallview`: accepted but currently reserved for future work
 
 Example:
@@ -203,82 +211,100 @@ widgets:
     editor: "PhpStorm"
     editor_subdir: "www"
 
-buttons:
-  - at: [0, 0]
-    label: "Folder"
-    icon: test-icons/apps-folder.png
-    icon_margins:
-      top: 12
-      right: 12
-      bottom: 12
-      left: 12
-    folder:
-      buttons:
-        - at: [0, 0]
-          label: "Terminal"
-          icon: test-icons/terminal.png
+pages:
+  - name: "Main"
+    buttons:
+      - at: [0, 0]
+        label: "Folder"
+        icon: test-icons/apps-folder.png
+        icon_margins:
+          top: 12
+          right: 12
+          bottom: 12
+          left: 12
+        folder:
+          buttons:
+            - at: [0, 0]
+              label: "Terminal"
+              icon: test-icons/terminal.png
+              on:
+                tap:
+                  type: shell
+                  cmd: "open -a Terminal"
+
+      - at: [1, 0]
+        label: "Next Page"
+        icon: test-icons/tab.png
+        on:
+          tap:
+            type: page_next
+
+      - at: [2, 0]
+        widget:
+          type: spotify_artwork
+
+      - at: [3, 0]
+        label: "Project"
+        icon: test-icons/work-folder.png
+        widget:
+          type: project
+          project_dir: project-demo
           on:
-            tap:
-              type: shell
-              cmd: "open -a Terminal"
+            tap: start
+            double_tap: focus
+            hold: stop
+          hold_ms: 800
 
-  - at: [2, 0]
-    widget:
-      type: spotify_artwork
+  - name: "Shortcuts"
+    buttons:
+      - at: [0, 0]
+        label: "Prev Page"
+        icon: test-icons/system-folder.png
+        on:
+          tap:
+            type: page_prev
 
-  - at: [3, 0]
-    label: "Project"
-    icon: test-icons/work-folder.png
-    widget:
-      type: project
-      project_dir: project-demo
-      on:
-        tap: start
-        double_tap: focus
-        hold: stop
-      hold_ms: 800
+      - at: [1, 0]
+        label: "Double"
+        icon: test-icons/tab.png
+        on:
+          tap:
+            type: key
+            key: "cmd t"
+          double_tap:
+            type: shell
+            cmd: "open README.md"
 
-  - at: [4, 1]
-    label: "Double"
-    icon: test-icons/tab.png
-    on:
-      tap:
-        type: key
-        key: "cmd t"
-      double_tap:
-        type: shell
-        cmd: "open README.md"
+      - at: [0, 1]
+        label: "Mode A"
+        icon: test-icons/apps-folder.png
+        on:
+          tap:
+            toggle:
+              - label: "Mode A"
+                icon: test-icons/apps-folder.png
+                action:
+                  type: shell
+                  cmd: "echo toggle-a"
+              - label: "Mode B"
+                icon: test-icons/media-folder.png
+                action:
+                  type: shell
+                  cmd: "echo toggle-b"
 
-  - at: [0, 2]
-    label: "Mode A"
-    icon: test-icons/apps-folder.png
-    on:
-      tap:
-        toggle:
-          - label: "Mode A"
-            icon: test-icons/apps-folder.png
-            action:
-              type: shell
-              cmd: "echo toggle-a"
-          - label: "Mode B"
-            icon: test-icons/media-folder.png
-            action:
-              type: shell
-              cmd: "echo toggle-b"
-
-  - at: [1, 2]
-    label: "Chain"
-    icon: test-icons/work-folder.png
-    on:
-      tap:
-        chain:
-          - action:
-              type: shell
-              cmd: "echo chain-a"
-          - delay_ms: 400
-          - action:
-              type: shell
-              cmd: "echo chain-b"
+      - at: [1, 1]
+        label: "Chain"
+        icon: test-icons/work-folder.png
+        on:
+          tap:
+            chain:
+              - action:
+                  type: shell
+                  cmd: "echo chain-a"
+              - delay_ms: 400
+              - action:
+                  type: shell
+                  cmd: "echo chain-b"
 ```
 
 Notes:
@@ -291,6 +317,8 @@ Notes:
   currently return an unsupported error.
 - `http` actions are useful for local automation bridges such as
   Hammerspoon.
+- `page_next` and `page_prev` loop across top-level pages and reset any
+  currently open nested `folder`.
 - `run` hot-reloads the YAML config automatically when the file changes.
 - `run` also watches configured static icon files and reloads the page
   when those assets change on disk.

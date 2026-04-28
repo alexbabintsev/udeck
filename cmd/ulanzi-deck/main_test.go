@@ -13,9 +13,11 @@ func TestNavigatorEnterFolderAndBack(t *testing.T) {
 		},
 	}
 
-	nav := newNavigator([]config.Button{
-		{At: [2]int{1, 0}, Label: "Folder", Folder: dir},
-	})
+	nav := newNavigator([]config.Page{{
+		Buttons: []config.Button{
+			{At: [2]int{1, 0}, Label: "Folder", Folder: dir},
+		},
+	}})
 
 	if changed := nav.handleEvent(actionIndex([2]int{1, 0}), true); !changed {
 		t.Fatalf("expected folder press to change page")
@@ -40,12 +42,94 @@ func TestNavigatorEnterFolderAndBack(t *testing.T) {
 }
 
 func TestNavigatorIgnoresUnknownIndex(t *testing.T) {
-	nav := newNavigator([]config.Button{
-		{At: [2]int{0, 0}, Label: "A"},
-	})
+	nav := newNavigator([]config.Page{{
+		Buttons: []config.Button{
+			{At: [2]int{0, 0}, Label: "A"},
+		},
+	}})
 
 	if changed := nav.handleEvent(99, true); changed {
 		t.Fatalf("expected unknown button to do nothing, got changed=%v", changed)
+	}
+}
+
+func TestNavigatorCyclesPagesAndClearsFolderStack(t *testing.T) {
+	nav := newNavigator([]config.Page{
+		{
+			Name: "One",
+			Buttons: []config.Button{
+				{At: [2]int{0, 0}, Label: "Folder", Folder: &config.Folder{
+					Buttons: []config.Button{{At: [2]int{0, 0}, Label: "Nested"}},
+				}},
+			},
+		},
+		{
+			Name: "Two",
+			Buttons: []config.Button{
+				{At: [2]int{1, 0}, Label: "B"},
+			},
+		},
+	})
+
+	if changed := nav.handleEvent(actionIndex([2]int{0, 0}), true); !changed {
+		t.Fatal("expected folder open to change page")
+	}
+	if len(nav.stack) != 1 {
+		t.Fatalf("expected folder stack, got %d", len(nav.stack))
+	}
+	if !nav.nextPage() {
+		t.Fatal("expected next page to change")
+	}
+	if len(nav.stack) != 0 {
+		t.Fatalf("expected next page to clear folder stack, got %d", len(nav.stack))
+	}
+	if got := nav.currentPageButtons()[0].Label; got != "B" {
+		t.Fatalf("expected second page, got %q", got)
+	}
+	if !nav.nextPage() {
+		t.Fatal("expected looping next page to change")
+	}
+	if got := nav.currentPageButtons()[0].Label; got != "Folder" {
+		t.Fatalf("expected wrap to first page, got %q", got)
+	}
+	if !nav.prevPage() {
+		t.Fatal("expected prev page to loop")
+	}
+	if got := nav.currentPageButtons()[0].Label; got != "B" {
+		t.Fatalf("expected prev to loop to last page, got %q", got)
+	}
+}
+
+func TestRunBindingHandlesPageActions(t *testing.T) {
+	nav := newNavigator([]config.Page{
+		{Name: "One", Buttons: []config.Button{{At: [2]int{0, 0}, Label: "A"}}},
+		{Name: "Two", Buttons: []config.Button{{At: [2]int{0, 0}, Label: "B"}}},
+	})
+
+	changed, err := runBinding(&config.GestureBinding{Type: "page_next"}, nav)
+	if err != nil {
+		t.Fatalf("run binding: %v", err)
+	}
+	if !changed {
+		t.Fatal("expected page change")
+	}
+	if got := nav.currentPageButtons()[0].Label; got != "B" {
+		t.Fatalf("expected second page, got %q", got)
+	}
+
+	changed, err = runBinding(&config.GestureBinding{
+		Chain: []config.ChainStep{
+			{Action: &config.Action{Type: "page_prev"}},
+		},
+	}, nav)
+	if err != nil {
+		t.Fatalf("run chain binding: %v", err)
+	}
+	if !changed {
+		t.Fatal("expected page change from chain")
+	}
+	if got := nav.currentPageButtons()[0].Label; got != "A" {
+		t.Fatalf("expected first page after prev, got %q", got)
 	}
 }
 

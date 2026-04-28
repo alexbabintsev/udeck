@@ -40,7 +40,9 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		settings: cfg.Widgets,
 		engine:   ig.New(),
 	}
-	m.collectDefs(cfg.Buttons)
+	for _, page := range cfg.PagesOrDefault() {
+		m.collectDefs(page.Buttons)
+	}
 	if pollMS, ok := m.spotifyPollMS(); ok {
 		service, err := newSpotifyService(pollMS)
 		if err != nil {

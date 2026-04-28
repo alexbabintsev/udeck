@@ -29,6 +29,7 @@ func TestValidateRejectsInvalidLabelColor(t *testing.T) {
 		Device: DeviceConfig{
 			LabelStyle: &LabelStyle{Color: "GGGGGG"},
 		},
+		Buttons: []Button{{At: [2]int{0, 0}, Label: "A"}},
 	}
 
 	err := cfg.Validate()
@@ -45,6 +46,7 @@ func TestValidateAcceptsHashPrefixedLabelColor(t *testing.T) {
 		Device: DeviceConfig{
 			LabelStyle: &LabelStyle{Color: "#A1B2C3"},
 		},
+		Buttons: []Button{{At: [2]int{0, 0}, Label: "A"}},
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -57,6 +59,7 @@ func TestValidateRejectsInvalidIconMargins(t *testing.T) {
 		Device: DeviceConfig{
 			IconMargins: &Insets{Left: 120, Right: 80},
 		},
+		Buttons: []Button{{At: [2]int{0, 0}, Label: "A"}},
 	}
 
 	err := cfg.Validate()
@@ -142,8 +145,36 @@ func TestLoadExampleTestConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected example test config to load, got %v", err)
 	}
-	if len(cfg.Buttons) == 0 {
+	if len(cfg.PagesOrDefault()) == 0 || len(cfg.PagesOrDefault()[0].Buttons) == 0 {
 		t.Fatal("expected example test config to contain buttons")
+	}
+}
+
+func TestValidateRejectsMixingPagesAndButtons(t *testing.T) {
+	cfg := &Config{
+		Pages:   []Page{{Buttons: []Button{{At: [2]int{0, 0}, Label: "A"}}}},
+		Buttons: []Button{{At: [2]int{1, 0}, Label: "B"}},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if !strings.Contains(err.Error(), "both pages and buttons") {
+		t.Fatalf("expected pages/buttons conflict, got %v", err)
+	}
+}
+
+func TestValidateAcceptsPages(t *testing.T) {
+	cfg := &Config{
+		Pages: []Page{
+			{Buttons: []Button{{At: [2]int{0, 0}, Label: "One"}}},
+			{Buttons: []Button{{At: [2]int{1, 0}, Label: "Two"}}},
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected pages config to validate, got %v", err)
 	}
 }
 
@@ -402,6 +433,24 @@ func TestConfigUsesKeyActions(t *testing.T) {
 	}
 	if !cfg.UsesKeyActions() {
 		t.Fatal("expected config to report key actions")
+	}
+}
+
+func TestValidateAcceptsPageNavigationActions(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At: [2]int{0, 0},
+				On: &Handlers{
+					Tap:       &GestureBinding{Type: "page_next"},
+					DoubleTap: &GestureBinding{Type: "page_prev"},
+				},
+			},
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected page navigation actions to validate, got %v", err)
 	}
 }
 
