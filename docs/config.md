@@ -27,9 +27,10 @@ Important rules:
 - `pages` is the preferred modern format.
 - `buttons` is a shorthand for a single implicit page named `Main`.
 - Every page must contain at least one button.
-- Button coordinates are always on a `5x3` grid:
+- Button coordinates use the D200 physical layout:
   - columns: `0..4`
   - rows: `0..2`
+  - slot `4_2` does not exist because `3_2` is double-wide
 
 ## Minimal Example
 
@@ -96,7 +97,7 @@ Global inset for static icons.
   - `bottom`
   - `left`
 - Each value must be a non-negative integer.
-- `left + right` must be `< 196`
+- `left + right` must fit within the target slot width
 - `top + bottom` must be `< 196`
 
 Use this when the D200 distorts pixels near the physical screen edges.
@@ -263,6 +264,7 @@ Required.
 - Valid range:
   - `col = 0..4`
   - `row = 0..2`
+  - slot `4_2` is invalid because `3_2` is double-wide
 
 Example:
 
@@ -286,7 +288,8 @@ Rules:
 
 - Relative paths are resolved relative to the config file.
 - `~/...` is expanded.
-- Static icons are resized to `196x196` and encoded as JPEG for device upload.
+- Static icons are resized to the target slot size and encoded as JPEG for device upload.
+- Most slots are `196x196`; slot `3_2` is `458x196`.
 
 Example:
 
@@ -299,6 +302,7 @@ icon: test-icons/terminal.png
 Optional per-button override for static icon margins.
 
 Same format and constraints as `device.icon_margins`.
+For the wide `3_2` slot, `left + right` is validated against `458`.
 
 Example:
 
@@ -445,6 +449,10 @@ Notes:
 - On macOS, key actions require Accessibility permission.
 - `run` prompts for that permission automatically when the active config
   contains `key` actions.
+- For Hammerspoon hotkeys specifically, synthetic key events may reach
+  the foreground app without triggering `hs.hotkey`. Prefer the
+  Hammerspoon IPC CLI pattern shown below instead of binding deck
+  buttons to `type: key`.
 
 ### `type: http`
 
@@ -453,13 +461,39 @@ Calls a local or remote HTTP endpoint.
 ```yaml
 tap:
   type: http
-  url: "http://127.0.0.1:27655/action/rotateDisplay"
+  url: "http://127.0.0.1:8080/action/ping"
 ```
 
 Required fields:
 
 - `type`
 - `url`
+
+Notes:
+
+- `http` is still useful for local or remote automation bridges.
+- For Hammerspoon on macOS, `type: shell` with the bundled `hs` CLI is
+  usually more reliable than keeping a custom `hs.httpserver` running.
+
+### Hammerspoon via `hs.ipc`
+
+Recommended pattern for Hammerspoon integration on macOS:
+
+```yaml
+tap:
+  type: shell
+  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.windowLeftHalf()"'
+```
+
+Expected Hammerspoon setup:
+
+- `require("hs.ipc")` in `init.lua`
+- a global table such as `ULANZI_ACTIONS = { ... }`
+
+This avoids two common problems:
+
+- synthetic `type: key` shortcuts that do not trigger `hs.hotkey`
+- long-lived `hs.httpserver` instances that can hang until config reload
 
 ### `type: page_next`
 
@@ -814,16 +848,28 @@ The loader validates:
       key: "cmd r"
 ```
 
-### HTTP Bridge Button
+### HTTP Endpoint Button
 
 ```yaml
 - at: [2, 0]
-  label: "Sleep"
+  label: "Webhook"
   icon: test-icons/lock.png
   on:
     tap:
       type: http
-      url: "http://127.0.0.1:27655/action/systemSleep"
+      url: "http://127.0.0.1:8080/action/ping"
+```
+
+### Hammerspoon Button
+
+```yaml
+- at: [2, 0]
+  label: "Left"
+  icon: test-icons/find.png
+  on:
+    tap:
+      type: shell
+      cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.windowLeftHalf()"'
 ```
 
 ### Next / Previous Page

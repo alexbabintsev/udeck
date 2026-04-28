@@ -18,7 +18,7 @@ type Event struct {
 
 	// Button events
 	State   uint8
-	Index   uint8 // 0..13 (13 = round/clock button)
+	Index   uint8 // 0..13; index 13 is the wide [3,2] button
 	Pressed bool
 
 	// DeviceInfo events

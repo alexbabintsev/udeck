@@ -20,7 +20,7 @@ func SetBrightnessPacket(level int) ([PacketSize]byte, error) {
 	return EncodePacket(CmdSetBrightness, payload), nil
 }
 
-// EmptyPageZIP builds a minimal ZIP with 15 empty button slots.
+// EmptyPageZIP builds a minimal ZIP with all physical button slots.
 // Switches the device out of firmware UI mode so IN_BUTTON frames flow.
 func EmptyPageZIP() ([]byte, error) {
 	return PageZIP(nil)

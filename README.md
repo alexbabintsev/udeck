@@ -36,9 +36,9 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
 
 - Direct HID control of the D200 without Ulanzi Studio
 - `info`, `dump-events`, `set-brightness`, and `run`
-- Upload and refresh multi-page `5x3` layouts
+- Upload and refresh multi-page D200 layouts, including the double-wide `3_2` slot
 - Global label style and brightness control
-- Local icon loading and resize to `196x196`
+- Local icon loading and resize to the physical slot size (`196x196`, except `3_2` = `458x196`)
 - Nested button directories with automatic `Back`
 - Top-level pages with looping `page_next` / `page_prev`
 - Unified button handlers via `on:`
@@ -141,10 +141,10 @@ Current config surface:
 - `pages[]`
   - `name`: optional human-readable page name
   - `buttons[]`
-    - `at`: `[col, row]`, zero-based, `col=0..4`, `row=0..2`
+    - `at`: `[col, row]`, zero-based, `col=0..4`, `row=0..2`, except `4_2` does not exist because `3_2` is double-wide
     - `label`: button text
     - `icon`: local image path; `~/...` is expanded; images are resized to
-      `196x196` and encoded as JPEG before upload
+      the target slot size and encoded as JPEG before upload
     - `icon_margins`: optional per-button override for static icon insets
     - `folder.buttons`: nested page; runtime injects a `Back` button
     - `widget`
@@ -326,6 +326,10 @@ Notes:
 - `run` hot-reloads the YAML config automatically when the file changes.
 - `run` also watches configured static icon files and reloads the page
   when those assets change on disk.
+- For Hammerspoon on macOS, prefer `type: shell` with the bundled
+  `hs` CLI and `ULANZI_ACTIONS.*()` over `type: key` hotkeys or a custom
+  HTTP bridge. This avoids flaky synthetic shortcuts and long-lived
+  `hs.httpserver` state.
 - Gesture semantics:
   - `tap` fires on release
   - `double_tap` fires on the second tap
@@ -388,6 +392,8 @@ Notes:
   reliable for shortcuts like `cmd t` and `cmd shift 4`.
 - If the active config contains any `type: key` handlers, `run` now
   proactively asks macOS for Accessibility access during startup.
+- Hammerspoon integrations work best through `require("hs.ipc")` plus
+  shell actions that invoke `/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs`.
 - Static button icons support global and per-button margins, which lets
   you keep important pixels away from the D200's edge distortion zone.
 

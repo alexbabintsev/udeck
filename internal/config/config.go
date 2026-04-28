@@ -60,7 +60,8 @@ type LabelStyle struct {
 
 // Button describes one key slot on the deck.
 type Button struct {
-	// At is [col, row], zero-indexed. col ∈ [0,4], row ∈ [0,2].
+	// At is [col, row], zero-indexed. Valid slots are all [0..4,0..2]
+	// except [4,2], because [3,2] is the device's double-wide button.
 	At          [2]int    `yaml:"at"`
 	Label       string    `yaml:"label,omitempty"`
 	Icon        string    `yaml:"icon,omitempty"` // path, ~ expanded
@@ -137,7 +138,13 @@ type GestureBinding struct {
 
 // HIDIndex converts [col, row] to the flat button index the device uses.
 func (b Button) HIDIndex() int {
-	return b.At[1]*5 + b.At[0]
+	if b.At[1] < 2 {
+		return b.At[1]*5 + b.At[0]
+	}
+	if b.At == [2]int{3, 2} {
+		return 13
+	}
+	return 10 + b.At[0]
 }
 
 // Action is the handler fired when a gesture resolves.
@@ -261,17 +268,21 @@ func validateHexColor(s string) error {
 }
 
 func validateInsets(in *Insets, path string) error {
+	return validateInsetsForSize(in, path, 196, 196)
+}
+
+func validateInsetsForSize(in *Insets, path string, width, height int) error {
 	if in == nil {
 		return nil
 	}
 	if in.Top < 0 || in.Right < 0 || in.Bottom < 0 || in.Left < 0 {
 		return fmt.Errorf("%s cannot contain negative values", path)
 	}
-	if in.Left+in.Right >= 196 {
-		return fmt.Errorf("%s left+right must be less than 196", path)
+	if in.Left+in.Right >= width {
+		return fmt.Errorf("%s left+right must be less than %d", path, width)
 	}
-	if in.Top+in.Bottom >= 196 {
-		return fmt.Errorf("%s top+bottom must be less than 196", path)
+	if in.Top+in.Bottom >= height {
+		return fmt.Errorf("%s top+bottom must be less than %d", path, height)
 	}
 	return nil
 }
@@ -291,7 +302,7 @@ func validatePages(pages []Page) error {
 func validateButtons(buttons []Button, path string, reserveBack bool) error {
 	seen := make(map[[2]int]int, len(buttons))
 	for i, btn := range buttons {
-		if btn.At[0] < 0 || btn.At[0] > 4 || btn.At[1] < 0 || btn.At[1] > 2 {
+		if !validButtonSlot(btn.At) {
 			return fmt.Errorf("%s[%d].at out of range: %v", path, i, btn.At)
 		}
 		if reserveBack && btn.At == [2]int{3, 2} {
@@ -301,7 +312,8 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 			return fmt.Errorf("%s[%d].at duplicates %s[%d].at: %v", path, i, path, prev, btn.At)
 		}
 		seen[btn.At] = i
-		if err := validateInsets(btn.IconMargins, fmt.Sprintf("%s[%d].icon_margins", path, i)); err != nil {
+		width, height := buttonDimensions(btn.At)
+		if err := validateInsetsForSize(btn.IconMargins, fmt.Sprintf("%s[%d].icon_margins", path, i), width, height); err != nil {
 			return err
 		}
 		modeCount := 0
@@ -402,6 +414,20 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 		}
 	}
 	return nil
+}
+
+func buttonDimensions(at [2]int) (width, height int) {
+	if at == [2]int{3, 2} {
+		return 458, 196
+	}
+	return 196, 196
+}
+
+func validButtonSlot(at [2]int) bool {
+	if at[0] < 0 || at[0] > 4 || at[1] < 0 || at[1] > 2 {
+		return false
+	}
+	return at != [2]int{4, 2}
 }
 
 func pagesUseKeyActions(pages []Page) bool {

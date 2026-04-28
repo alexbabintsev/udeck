@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"image"
 	"image/color"
+	"image/jpeg"
 	"image/png"
 	"io"
 	"os"
@@ -96,7 +97,63 @@ func TestPageZIPBuildsWorkFolderFromExampleConfig(t *testing.T) {
 	}
 }
 
+func TestPageZIPUsesWideButtonIconDimensions(t *testing.T) {
+	dir := t.TempDir()
+	iconPath := filepath.Join(dir, "wide.png")
+	writeTestPNG(t, iconPath, color.RGBA{0x00, 0x80, 0xff, 0xff})
+
+	zipData, err := PageZIP([]config.Button{
+		{At: [2]int{3, 2}, Label: "Wide", Icon: iconPath, IconMargins: &config.Insets{Left: 20, Right: 30, Top: 10, Bottom: 15}},
+	})
+	if err != nil {
+		t.Fatalf("page zip: %v", err)
+	}
+
+	iconName := manifestIconPath(t, zipData, "3_2")
+	jpegData := zipEntryBytes(t, zipData, iconName)
+	img, err := jpeg.Decode(bytes.NewReader(jpegData))
+	if err != nil {
+		t.Fatalf("decode wide button jpeg: %v", err)
+	}
+
+	if got := img.Bounds().Dx(); got != 458 {
+		t.Fatalf("expected wide button width 458, got %d", got)
+	}
+	if got := img.Bounds().Dy(); got != 196 {
+		t.Fatalf("expected wide button height 196, got %d", got)
+	}
+
+	leftGap := color.RGBAModel.Convert(img.At(40, 98)).(color.RGBA)
+	if leftGap.R > 20 || leftGap.G > 20 || leftGap.B > 20 {
+		t.Fatalf("expected wide button letterbox gap, got %#v", leftGap)
+	}
+}
+
+func TestPageZIPOmitsNonexistentBottomRightSlot(t *testing.T) {
+	zipData, err := PageZIP(nil)
+	if err != nil {
+		t.Fatalf("page zip: %v", err)
+	}
+
+	manifest := manifestData(t, zipData)
+	if _, ok := manifest["4_2"]; ok {
+		t.Fatal("expected manifest to omit nonexistent slot 4_2")
+	}
+	if _, ok := manifest["3_2"]; !ok {
+		t.Fatal("expected manifest to include wide slot 3_2")
+	}
+}
+
 func manifestIconPath(t *testing.T, zipData []byte, key string) string {
+	t.Helper()
+	return manifestData(t, zipData)[key].ViewParam[0].Icon
+}
+
+func manifestData(t *testing.T, zipData []byte) map[string]struct {
+	ViewParam []struct {
+		Icon string `json:"Icon,omitempty"`
+	} `json:"ViewParam"`
+} {
 	t.Helper()
 
 	zr, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
@@ -132,7 +189,35 @@ func manifestIconPath(t *testing.T, zipData []byte, key string) string {
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
 		t.Fatalf("unmarshal manifest: %v", err)
 	}
-	return manifest[key].ViewParam[0].Icon
+	return manifest
+}
+
+func zipEntryBytes(t *testing.T, zipData []byte, name string) []byte {
+	t.Helper()
+
+	zr, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+
+	for _, f := range zr.File {
+		if f.Name != name {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("open %s: %v", name, err)
+		}
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		return data
+	}
+
+	t.Fatalf("zip entry %q not found", name)
+	return nil
 }
 
 func writeTestPNG(t *testing.T, path string, c color.Color) {

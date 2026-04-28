@@ -19,6 +19,16 @@ void ax_prompt() {
 	}
 }
 
+static CGEventRef create_modifier_event(CGEventSourceRef src, CGKeyCode keyCode, CGEventFlags flags, bool keyDown) {
+	CGEventRef ev = CGEventCreateKeyboardEvent(src, keyCode, keyDown);
+	if (ev == NULL) {
+		return NULL;
+	}
+	CGEventSetType(ev, kCGEventFlagsChanged);
+	CGEventSetFlags(ev, flags);
+	return ev;
+}
+
 int send_shortcut(CGKeyCode *modifierCodes, CGEventFlags *modifierFlags, int modifierCount, CGKeyCode keyCode) {
 	CGEventSourceRef src = CGEventSourceCreate(kCGEventSourceStateCombinedSessionState);
 	if (src == NULL) {
@@ -30,13 +40,12 @@ int send_shortcut(CGKeyCode *modifierCodes, CGEventFlags *modifierFlags, int mod
 	CGEventFlags activeFlags = 0;
 	for (int i = 0; i < modifierCount; i++) {
 		activeFlags |= modifierFlags[i];
-		CGEventRef down = CGEventCreateKeyboardEvent(src, modifierCodes[i], true);
+		CGEventRef down = create_modifier_event(src, modifierCodes[i], activeFlags, true);
 		if (down == NULL) {
 			CFRelease(src);
 			return 2;
 		}
-		CGEventSetFlags(down, activeFlags);
-		CGEventPost(kCGAnnotatedSessionEventTap, down);
+		CGEventPost(kCGHIDEventTap, down);
 		CFRelease(down);
 	}
 
@@ -46,7 +55,7 @@ int send_shortcut(CGKeyCode *modifierCodes, CGEventFlags *modifierFlags, int mod
 		return 3;
 	}
 	CGEventSetFlags(keyDown, activeFlags);
-	CGEventPost(kCGAnnotatedSessionEventTap, keyDown);
+	CGEventPost(kCGHIDEventTap, keyDown);
 	CFRelease(keyDown);
 
 	CGEventRef keyUp = CGEventCreateKeyboardEvent(src, keyCode, false);
@@ -55,19 +64,18 @@ int send_shortcut(CGKeyCode *modifierCodes, CGEventFlags *modifierFlags, int mod
 		return 4;
 	}
 	CGEventSetFlags(keyUp, activeFlags);
-	CGEventPost(kCGAnnotatedSessionEventTap, keyUp);
+	CGEventPost(kCGHIDEventTap, keyUp);
 	CFRelease(keyUp);
 
 	for (int i = modifierCount - 1; i >= 0; i--) {
-		CGEventRef up = CGEventCreateKeyboardEvent(src, modifierCodes[i], false);
+		activeFlags &= ~modifierFlags[i];
+		CGEventRef up = create_modifier_event(src, modifierCodes[i], activeFlags, false);
 		if (up == NULL) {
 			CFRelease(src);
 			return 5;
 		}
-		CGEventSetFlags(up, activeFlags);
-		CGEventPost(kCGAnnotatedSessionEventTap, up);
+		CGEventPost(kCGHIDEventTap, up);
 		CFRelease(up);
-		activeFlags &= ~modifierFlags[i];
 	}
 
 	CFRelease(src);

@@ -1,10 +1,10 @@
 device:
   brightness: 65
   icon_margins:
-    top: 8
-    right: 8
-    bottom: 8
-    left: 8
+    top: 30
+    right: 30
+    bottom: 30
+    left: 25
   label_style:
     align: top
     color: "#F6F6F6"
@@ -15,7 +15,7 @@ device:
 
 widgets:
   project:
-    terminal: "iTerm"
+    terminal: "Ghostty"
     editor: "PhpStorm"
     editor_subdir: "www"
 
@@ -181,48 +181,48 @@ pages:
               icon: test-icons/apps-folder.png
               on:
                 tap:
-                  type: http
-                  url: "http://127.0.0.1:27655/action/moveToNextScreen"
+                  type: shell
+                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.moveToNextScreen()"'
 
             - at: [1, 0]
               label: "Rotate"
               icon: test-icons/system-folder.png
               on:
                 tap:
-                  type: http
-                  url: "http://127.0.0.1:27655/action/rotateDisplay"
+                  type: shell
+                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.rotateDisplay()"'
 
             - at: [2, 0]
               label: "Left"
               icon: test-icons/find.png
               on:
                 tap:
-                  type: http
-                  url: "http://127.0.0.1:27655/action/windowLeftHalf"
+                  type: shell
+                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.windowLeftHalf()"'
 
             - at: [0, 1]
               label: "Right"
               icon: test-icons/tab.png
               on:
                 tap:
-                  type: http
-                  url: "http://127.0.0.1:27655/action/windowRightHalf"
+                  type: shell
+                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.windowRightHalf()"'
 
             - at: [1, 1]
               label: "Max"
               icon: test-icons/reload.png
               on:
                 tap:
-                  type: http
-                  url: "http://127.0.0.1:27655/action/windowMaximize"
+                  type: shell
+                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.windowMaximize()"'
 
             - at: [2, 1]
               label: "Sleep"
               icon: test-icons/lock.png
               on:
                 tap:
-                  type: http
-                  url: "http://127.0.0.1:27655/action/systemSleep"
+                  type: shell
+                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.systemSleep()"'
 
       - at: [0, 1]
         label: "Gestures"
@@ -359,14 +359,6 @@ pages:
             key: "cmd shift m"
 
       - at: [3, 2]
-        label: "Lock"
-        icon: test-icons/lock.png
-        on:
-          tap:
-            type: key
-            key: "ctrl cmd q"
-
-      - at: [4, 2]
         label: "Projects"
         icon: test-icons/work-folder.png
         folder:
@@ -504,14 +496,6 @@ pages:
             key: "cmd shift m"
 
       - at: [3, 2]
-        label: "Lock"
-        icon: test-icons/lock.png
-        on:
-          tap:
-            type: key
-            key: "ctrl cmd q"
-
-      - at: [4, 2]
         label: "Page 1"
         icon: test-icons/system-folder.png
         on:

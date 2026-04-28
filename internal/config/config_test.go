@@ -71,6 +71,45 @@ func TestValidateRejectsInvalidIconMargins(t *testing.T) {
 	}
 }
 
+func TestValidateAcceptsWideButtonIconMargins(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At:          [2]int{3, 2},
+				Label:       "Wide",
+				IconMargins: &Insets{Left: 200, Right: 200, Top: 20, Bottom: 20},
+			},
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected wide button margins to validate, got %v", err)
+	}
+}
+
+func TestValidateRejectsMissingBottomRightSlot(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{At: [2]int{4, 2}, Label: "Ghost"},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected invalid slot validation error")
+	}
+	if !strings.Contains(err.Error(), "out of range") {
+		t.Fatalf("expected out of range error, got %v", err)
+	}
+}
+
+func TestButtonHIDIndexUsesWideBottomButton(t *testing.T) {
+	btn := Button{At: [2]int{3, 2}}
+	if got := btn.HIDIndex(); got != 13 {
+		t.Fatalf("expected HID index 13 for [3,2], got %d", got)
+	}
+}
+
 func TestValidateRejectsButtonWithActionAndFolder(t *testing.T) {
 	cfg := &Config{
 		Buttons: []Button{
