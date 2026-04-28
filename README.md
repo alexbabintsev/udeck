@@ -103,8 +103,12 @@ possible from bad packets.
 
 ## Config
 
-See [examples/test-config.yaml](examples/test-config.yaml). It is the
-canonical demo profile and includes:
+Use these two files together:
+
+- [docs/config.md](/Volumes/Black/Projects/ulanzi-deck-go/docs/config.md:1) for the full config reference
+- [examples/test-config.yaml](/Volumes/Black/Projects/ulanzi-deck-go/examples/test-config.yaml:1) for the canonical demo profile
+
+The demo config includes:
 
 - top-level pages with looped next/prev navigation
 - nested directories

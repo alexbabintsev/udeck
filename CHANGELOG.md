@@ -51,6 +51,10 @@ actual development milestones rather than formal releases.
   zone.
 - Added top-level `pages` with looping `page_next` / `page_prev`
   actions, and migrated the demo config to the new multi-page layout.
+- Added a dedicated config reference in
+  [docs/config.md](/Volumes/Black/Projects/ulanzi-deck-go/docs/config.md:1)
+  with field-by-field schema documentation, allowed values, and
+  examples.
 
 ## v2 Workbench
 
