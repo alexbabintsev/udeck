@@ -114,7 +114,7 @@ func cmdDumpEvents() error {
 	defer stop()
 
 	fmt.Println("listening for events. Ctrl-C to exit.")
-	return readLoop(ctx, "", nil, dev, nil, nil, nil)
+	return readLoop(ctx, "", nil, dev, nil, nil, nil, nil)
 }
 
 func cmdSetBrightness(args []string) error {
@@ -173,13 +173,15 @@ func cmdRun(args []string) error {
 
 	nav := newNavigator(cfg.Buttons)
 	gestures := newGestureManager()
+	toggles := newToggleManager(cfg)
 	widgetMgr, err := widgets.NewManager(cfg)
 	if err != nil {
 		return fmt.Errorf("widgets: %w", err)
 	}
 	defer widgetMgr.Close()
 
-	initialButtons, err := widgetMgr.ResolveButtons(nav.currentButtons())
+	initialButtons := toggles.ResolveButtons(nav.currentButtons())
+	initialButtons, err = widgetMgr.ResolveButtons(initialButtons)
 	if err != nil {
 		return fmt.Errorf("widgets: %w", err)
 	}
@@ -195,7 +197,7 @@ func cmdRun(args []string) error {
 	defer stop()
 
 	fmt.Println("running. Ctrl-C to exit.")
-	return readLoop(ctx, *cfgPath, cfg, dev, nav, gestures, widgetMgr)
+	return readLoop(ctx, *cfgPath, cfg, dev, nav, gestures, toggles, widgetMgr)
 }
 
 // initDevice uploads a page ZIP to switch the D200 into host mode.
@@ -211,7 +213,7 @@ func initDevice(dev *device.Device, buttons []config.Button) error {
 	return nil
 }
 
-func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *device.Device, nav *navigator, gestures *gestureManager, widgetMgr *widgets.Manager) error {
+func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *device.Device, nav *navigator, gestures *gestureManager, toggles *toggleManager, widgetMgr *widgets.Manager) error {
 	lastKeepalive := time.Now()
 	sleeping := false
 	var reloader *configReloader
@@ -238,7 +240,7 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 					case powerEventWake:
 						fmt.Fprintln(os.Stderr, "system wake detected; restoring device")
 						sleeping = false
-						if recovered, recErr := recoverDeviceWithRetries(cfg, &dev, nav, widgetMgr, errors.New("wake restore"), wakeRecoverRetries); recovered {
+						if recovered, recErr := recoverDeviceWithRetries(cfg, &dev, nav, toggles, widgetMgr, errors.New("wake restore"), wakeRecoverRetries); recovered {
 							lastKeepalive = time.Now()
 						} else if recErr != nil {
 							fmt.Fprintf(os.Stderr, "wake recovery failed: %v\n", recErr)
@@ -265,11 +267,13 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 				} else {
 					nextNav := newNavigator(nextCfg.Buttons)
 					nextGestures := newGestureManager()
+					nextToggles := newToggleManager(nextCfg)
 					nextWidgetMgr, err := widgets.NewManager(nextCfg)
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "widget reload failed: %v\n", err)
 					} else {
-						initialButtons, err := nextWidgetMgr.ResolveButtons(nextNav.currentButtons())
+						initialButtons := nextToggles.ResolveButtons(nextNav.currentButtons())
+						initialButtons, err := nextWidgetMgr.ResolveButtons(initialButtons)
 						if err != nil {
 							_ = nextWidgetMgr.Close()
 							fmt.Fprintf(os.Stderr, "widget resolve failed: %v\n", err)
@@ -283,6 +287,7 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 							cfg = nextCfg
 							nav = nextNav
 							gestures = nextGestures
+							toggles = nextToggles
 							widgetMgr = nextWidgetMgr
 							reloader.UpdatePaths(cfgPath, nextCfg.IconPaths())
 							lastKeepalive = time.Now()
@@ -294,8 +299,8 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 			}
 		}
 		if nav != nil && time.Since(lastKeepalive) >= deviceKeepaliveInterval {
-			if err := refreshCurrentPage(cfg, dev, nav, widgetMgr); err != nil {
-				if recovered, recErr := recoverDevice(cfg, &dev, nav, widgetMgr, err); recovered {
+			if err := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); err != nil {
+				if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, err); recovered {
 					lastKeepalive = time.Now()
 					continue
 				} else if recErr != nil {
@@ -308,8 +313,8 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 			select {
 			case id := <-widgetMgr.Updates():
 				if nav != nil && buttonVisible(nav.currentButtons(), id) {
-					if err := refreshCurrentPage(cfg, dev, nav, widgetMgr); err != nil {
-						if recovered, recErr := recoverDevice(cfg, &dev, nav, widgetMgr, fmt.Errorf("update widgets: %w", err)); recovered {
+					if err := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); err != nil {
+						if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, fmt.Errorf("update widgets: %w", err)); recovered {
 							lastKeepalive = time.Now()
 							continue
 						} else if recErr != nil {
@@ -322,7 +327,22 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 			}
 		}
 		if gestures != nil && nav != nil {
-			if action := gestures.Tick(nav.currentButtons(), time.Now()); action != nil {
+			if evt := gestures.Tick(nav.currentButtons(), time.Now()); evt != nil {
+				action, changed := resolveActionEvent(evt, toggles)
+				if changed {
+					if err := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); err != nil {
+						if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, fmt.Errorf("update toggle page: %w", err)); recovered {
+							lastKeepalive = time.Now()
+							continue
+						} else if recErr != nil {
+							return recErr
+						}
+					}
+				}
+				if action == nil {
+					lastKeepalive = time.Now()
+					continue
+				}
 				if err := actions.Run(action); err != nil {
 					fmt.Fprintf(os.Stderr, "action error: %v\n", err)
 				}
@@ -336,7 +356,7 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 		}
 		raw, err := dev.ReadPacket(100 * time.Millisecond)
 		if err != nil {
-			if recovered, recErr := recoverDevice(cfg, &dev, nav, widgetMgr, err); recovered {
+			if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, err); recovered {
 				lastKeepalive = time.Now()
 				continue
 			} else if recErr != nil {
@@ -365,8 +385,8 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 			if gestures != nil {
 				gestures.Reset()
 			}
-			if err := refreshCurrentPage(cfg, dev, nav, widgetMgr); err != nil {
-				if recovered, recErr := recoverDevice(cfg, &dev, nav, widgetMgr, fmt.Errorf("update page: %w", err)); recovered {
+			if err := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); err != nil {
+				if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, fmt.Errorf("update page: %w", err)); recovered {
 					lastKeepalive = time.Now()
 					continue
 				} else if recErr != nil {
@@ -378,7 +398,21 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 		}
 		var action *config.Action
 		if btn != nil && btn.On != nil && gestures != nil {
-			if action = gestures.HandleEvent(btn, ev.Pressed, time.Now()); action == nil {
+			if evt := gestures.HandleEvent(btn, ev.Pressed, time.Now()); evt != nil {
+				var changed bool
+				action, changed = resolveActionEvent(evt, toggles)
+				if changed {
+					if err := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); err != nil {
+						if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, fmt.Errorf("update toggle page: %w", err)); recovered {
+							lastKeepalive = time.Now()
+							continue
+						} else if recErr != nil {
+							return recErr
+						}
+					}
+				}
+			}
+			if action == nil {
 				continue
 			}
 		}
@@ -399,8 +433,11 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 	}
 }
 
-func refreshCurrentPage(cfg *config.Config, dev *device.Device, nav *navigator, widgetMgr *widgets.Manager) error {
+func refreshCurrentPage(cfg *config.Config, dev *device.Device, nav *navigator, toggles *toggleManager, widgetMgr *widgets.Manager) error {
 	buttons := nav.currentButtons()
+	if toggles != nil {
+		buttons = toggles.ResolveButtons(buttons)
+	}
 	if widgetMgr != nil {
 		var err error
 		buttons, err = widgetMgr.ResolveButtons(buttons)
@@ -409,6 +446,18 @@ func refreshCurrentPage(cfg *config.Config, dev *device.Device, nav *navigator, 
 		}
 	}
 	return applyDeviceState(dev, cfg, buttons)
+}
+
+func resolveActionEvent(evt *gestureEvent, toggles *toggleManager) (*config.Action, bool) {
+	if evt == nil || evt.Button == nil || evt.Button.On == nil {
+		return nil, false
+	}
+	if toggles != nil {
+		if action, changed := toggles.Handle(evt.ButtonID, evt.Kind); action != nil || changed {
+			return action, changed
+		}
+	}
+	return actionForKind(evt.Button.On, evt.Kind), false
 }
 
 func applyDeviceState(dev *device.Device, cfg *config.Config, buttons []config.Button) error {
@@ -436,11 +485,11 @@ func applyDeviceState(dev *device.Device, cfg *config.Config, buttons []config.B
 	return nil
 }
 
-func recoverDevice(cfg *config.Config, dev **device.Device, nav *navigator, widgetMgr *widgets.Manager, cause error) (bool, error) {
-	return recoverDeviceWithRetries(cfg, dev, nav, widgetMgr, cause, deviceRecoverRetries)
+func recoverDevice(cfg *config.Config, dev **device.Device, nav *navigator, toggles *toggleManager, widgetMgr *widgets.Manager, cause error) (bool, error) {
+	return recoverDeviceWithRetries(cfg, dev, nav, toggles, widgetMgr, cause, deviceRecoverRetries)
 }
 
-func recoverDeviceWithRetries(cfg *config.Config, dev **device.Device, nav *navigator, widgetMgr *widgets.Manager, cause error, retries int) (bool, error) {
+func recoverDeviceWithRetries(cfg *config.Config, dev **device.Device, nav *navigator, toggles *toggleManager, widgetMgr *widgets.Manager, cause error, retries int) (bool, error) {
 	if nav == nil {
 		return false, cause
 	}
@@ -457,7 +506,7 @@ func recoverDeviceWithRetries(cfg *config.Config, dev **device.Device, nav *navi
 			continue
 		}
 		*dev = reopened
-		if err := refreshCurrentPage(cfg, reopened, nav, widgetMgr); err != nil {
+		if err := refreshCurrentPage(cfg, reopened, nav, toggles, widgetMgr); err != nil {
 			lastErr = err
 			reopened.Detach()
 			time.Sleep(500 * time.Millisecond)
@@ -485,7 +534,7 @@ func prepareDeviceForSleep(cfg *config.Config, dev *device.Device) {
 
 type navigator struct {
 	root  []config.Button
-	stack []*config.Directory
+	stack []*config.Folder
 }
 
 func newNavigator(root []config.Button) *navigator {
@@ -505,18 +554,18 @@ func (n *navigator) handleEvent(index int, pressed bool) (pageChanged bool) {
 		if btn.HIDIndex() != index {
 			continue
 		}
-		if len(n.stack) > 0 && btn.At == backButton.At && btn.Label == backButton.Label && btn.Directory == nil && btn.On == nil {
+		if len(n.stack) > 0 && btn.At == backButton.At && btn.Label == backButton.Label && btn.Folder == nil && btn.On == nil {
 			if !pressed {
 				return false
 			}
 			n.stack = n.stack[:len(n.stack)-1]
 			return true
 		}
-		if btn.Directory != nil {
+		if btn.Folder != nil {
 			if !pressed {
 				return false
 			}
-			n.stack = append(n.stack, btn.Directory)
+			n.stack = append(n.stack, btn.Folder)
 			return true
 		}
 		return false

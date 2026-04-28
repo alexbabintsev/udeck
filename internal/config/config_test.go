@@ -56,7 +56,7 @@ func TestValidateRejectsButtonWithActionAndFolder(t *testing.T) {
 		Buttons: []Button{
 			{
 				At:     [2]int{0, 0},
-				On:     &Handlers{Tap: &Action{Type: "shell", Cmd: "echo hi"}},
+				On:     &Handlers{Tap: &GestureBinding{Type: "shell", Cmd: "echo hi"}},
 				Folder: &Folder{Buttons: []Button{{At: [2]int{1, 0}, Label: "Nested"}}},
 			},
 		},
@@ -106,7 +106,7 @@ func TestValidateAcceptsNestedFolder(t *testing.T) {
 						{
 							At:    [2]int{0, 0},
 							Label: "Nested",
-							On:    &Handlers{Tap: &Action{Type: "key", Key: "space"}},
+							On:    &Handlers{Tap: &GestureBinding{Type: "key", Key: "space"}},
 						},
 					},
 				},
@@ -135,7 +135,7 @@ func TestValidateRejectsHTTPActionWithoutURL(t *testing.T) {
 		Buttons: []Button{
 			{
 				At: [2]int{0, 0},
-				On: &Handlers{Tap: &Action{Type: "http"}},
+				On: &Handlers{Tap: &GestureBinding{Type: "http"}},
 			},
 		},
 	}
@@ -173,7 +173,7 @@ func TestValidateRejectsCombiningWidgetAndAction(t *testing.T) {
 		Buttons: []Button{
 			{
 				At:     [2]int{0, 0},
-				On:     &Handlers{Tap: &Action{Type: "shell", Cmd: "echo hi"}},
+				On:     &Handlers{Tap: &GestureBinding{Type: "shell", Cmd: "echo hi"}},
 				Widget: &Widget{Type: "memory"},
 			},
 		},
@@ -194,10 +194,10 @@ func TestValidateAcceptsOnHandlers(t *testing.T) {
 			{
 				At: [2]int{0, 0},
 				On: &Handlers{
-					Tap:           &Action{Type: "shell", Cmd: "echo tap"},
-					DoubleTap:     &Action{Type: "key", Key: "cmd t"},
-					Hold:          &Action{Type: "http", URL: "http://127.0.0.1/test"},
-					Repeat:        &Action{Type: "key", Key: "space"},
+					Tap:           &GestureBinding{Type: "shell", Cmd: "echo tap"},
+					DoubleTap:     &GestureBinding{Type: "key", Key: "cmd t"},
+					Hold:          &GestureBinding{Type: "http", URL: "http://127.0.0.1/test"},
+					Repeat:        &GestureBinding{Type: "key", Key: "space"},
 					HoldMS:        500,
 					DoubleTapMS:   300,
 					RepeatEveryMS: 120,
@@ -208,6 +208,60 @@ func TestValidateAcceptsOnHandlers(t *testing.T) {
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected on handlers to validate, got %v", err)
+	}
+}
+
+func TestValidateAcceptsToggleBinding(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At: [2]int{0, 0},
+				On: &Handlers{
+					Tap: &GestureBinding{
+						Toggle: []ToggleStep{
+							{Label: "One", Icon: "/tmp/one.png", Action: Action{Type: "shell", Cmd: "echo 1"}},
+							{Label: "Two", Icon: "/tmp/two.png", Action: Action{Type: "shell", Cmd: "echo 2"}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected toggle binding to validate, got %v", err)
+	}
+}
+
+func TestValidateRejectsMultipleToggleGesturesOnOneButton(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At: [2]int{0, 0},
+				On: &Handlers{
+					Tap: &GestureBinding{
+						Toggle: []ToggleStep{
+							{Action: Action{Type: "shell", Cmd: "echo 1"}},
+							{Action: Action{Type: "shell", Cmd: "echo 2"}},
+						},
+					},
+					DoubleTap: &GestureBinding{
+						Toggle: []ToggleStep{
+							{Action: Action{Type: "shell", Cmd: "echo 3"}},
+							{Action: Action{Type: "shell", Cmd: "echo 4"}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected multiple toggle gesture validation error")
+	}
+	if !strings.Contains(err.Error(), "can define toggle for only one gesture") {
+		t.Fatalf("expected multiple toggle gesture error, got %v", err)
 	}
 }
 
@@ -313,6 +367,17 @@ func TestIconPathsCollectsNestedUniqueIcons(t *testing.T) {
 		Buttons: []Button{
 			{At: [2]int{0, 0}, Icon: "/tmp/root.png"},
 			{
+				At: [2]int{2, 0},
+				On: &Handlers{
+					Tap: &GestureBinding{
+						Toggle: []ToggleStep{
+							{Icon: "/tmp/toggle-a.png", Action: Action{Type: "shell", Cmd: "echo 1"}},
+							{Icon: "/tmp/toggle-b.png", Action: Action{Type: "shell", Cmd: "echo 2"}},
+						},
+					},
+				},
+			},
+			{
 				At: [2]int{1, 0},
 				Folder: &Folder{
 					Buttons: []Button{
@@ -325,10 +390,10 @@ func TestIconPathsCollectsNestedUniqueIcons(t *testing.T) {
 	}
 
 	got := cfg.IconPaths()
-	if len(got) != 2 {
-		t.Fatalf("expected 2 unique icon paths, got %d: %v", len(got), got)
+	if len(got) != 4 {
+		t.Fatalf("expected 4 unique icon paths, got %d: %v", len(got), got)
 	}
-	if got[0] != "/tmp/root.png" || got[1] != "/tmp/nested.png" {
+	if got[0] != "/tmp/root.png" || got[1] != "/tmp/toggle-a.png" || got[2] != "/tmp/toggle-b.png" || got[3] != "/tmp/nested.png" {
 		t.Fatalf("unexpected icon paths order/content: %v", got)
 	}
 }

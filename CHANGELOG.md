@@ -13,6 +13,8 @@ actual development milestones rather than formal releases.
   config file.
 - `run` now defaults to `examples/test-config.yaml` when `--config` is
   omitted.
+- Added toggle sequences for action buttons, with per-step
+  `label` / `icon` / `action` and looping state on a single gesture.
 - Added `project` widget support with tmux-backed status and
   `start/stop/focus` shell scripts.
 - Project widgets can now remap gestures explicitly, for example

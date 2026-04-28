@@ -45,6 +45,7 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
   - `double_tap`
   - `hold`
   - `repeat`
+- Toggle sequences for action buttons, including per-step label/icon/action
 - Action types:
   - `shell`
   - `key`
@@ -159,6 +160,9 @@ Current config surface:
     - `double_tap`
     - `hold`
     - `repeat`
+    - each gesture accepts either:
+      - a direct action payload
+      - or `toggle:` with 2+ steps
     - optional timing overrides:
       - `hold_ms`
       - `double_tap_ms`
@@ -228,6 +232,23 @@ buttons:
       double_tap:
         type: shell
         cmd: "open README.md"
+
+  - at: [0, 2]
+    label: "Mode A"
+    icon: test-icons/apps-folder.png
+    on:
+      tap:
+        toggle:
+          - label: "Mode A"
+            icon: test-icons/apps-folder.png
+            action:
+              type: shell
+              cmd: "echo toggle-a"
+          - label: "Mode B"
+            icon: test-icons/media-folder.png
+            action:
+              type: shell
+              cmd: "echo toggle-b"
 ```
 
 Notes:
@@ -245,6 +266,11 @@ Notes:
   - `double_tap` fires on the second tap
   - `hold` fires as soon as the hold threshold is reached
   - `repeat` starts after the hold threshold when both are set
+- Toggle semantics:
+  - toggle steps run in a loop on the gesture that owns them
+  - the current step controls the button's visible `label` / `icon`
+  - after the step runs, the button advances to the next step
+  - only one gesture per button can define a toggle sequence
 - Widgets write icons atomically so page refreshes do not race on partial
   PNG files.
 - Project widgets detect status from a tmux session and run

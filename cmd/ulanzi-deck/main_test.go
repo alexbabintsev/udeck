@@ -6,19 +6,19 @@ import (
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 )
 
-func TestNavigatorEnterDirectoryAndBack(t *testing.T) {
-	dir := &config.Directory{
+func TestNavigatorEnterFolderAndBack(t *testing.T) {
+	dir := &config.Folder{
 		Buttons: []config.Button{
-			{At: [2]int{0, 0}, Label: "Nested", On: &config.Handlers{Tap: &config.Action{Type: "shell", Cmd: "echo hi"}}},
+			{At: [2]int{0, 0}, Label: "Nested", On: &config.Handlers{Tap: &config.GestureBinding{Type: "shell", Cmd: "echo hi"}}},
 		},
 	}
 
 	nav := newNavigator([]config.Button{
-		{At: [2]int{1, 0}, Label: "Folder", Directory: dir},
+		{At: [2]int{1, 0}, Label: "Folder", Folder: dir},
 	})
 
 	if changed := nav.handleEvent(actionIndex([2]int{1, 0}), true); !changed {
-		t.Fatalf("expected directory press to change page")
+		t.Fatalf("expected folder press to change page")
 	}
 
 	buttons := nav.currentButtons()

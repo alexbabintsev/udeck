@@ -56,6 +56,12 @@ type Button struct {
 	RuntimeID string    `yaml:"-"`
 }
 
+type ToggleStep struct {
+	Label  string `yaml:"label,omitempty"`
+	Icon   string `yaml:"icon,omitempty"`
+	Action Action `yaml:"action"`
+}
+
 // Folder defines a nested page of buttons. When opened at runtime, a
 // synthetic "Back" button is injected automatically.
 type Folder struct {
@@ -91,13 +97,21 @@ type WidgetOn struct {
 // Handlers defines interaction handlers for a button. This is only valid
 // for action buttons and is mutually exclusive with Folder/Widget.
 type Handlers struct {
-	Tap           *Action `yaml:"tap,omitempty"`
-	DoubleTap     *Action `yaml:"double_tap,omitempty"`
-	Hold          *Action `yaml:"hold,omitempty"`
-	Repeat        *Action `yaml:"repeat,omitempty"`
-	HoldMS        int     `yaml:"hold_ms,omitempty"`
-	DoubleTapMS   int     `yaml:"double_tap_ms,omitempty"`
-	RepeatEveryMS int     `yaml:"repeat_every_ms,omitempty"`
+	Tap           *GestureBinding `yaml:"tap,omitempty"`
+	DoubleTap     *GestureBinding `yaml:"double_tap,omitempty"`
+	Hold          *GestureBinding `yaml:"hold,omitempty"`
+	Repeat        *GestureBinding `yaml:"repeat,omitempty"`
+	HoldMS        int             `yaml:"hold_ms,omitempty"`
+	DoubleTapMS   int             `yaml:"double_tap_ms,omitempty"`
+	RepeatEveryMS int             `yaml:"repeat_every_ms,omitempty"`
+}
+
+type GestureBinding struct {
+	Type   string       `yaml:"type,omitempty"`
+	Cmd    string       `yaml:"cmd,omitempty"`
+	Key    string       `yaml:"key,omitempty"`
+	URL    string       `yaml:"url,omitempty"`
+	Toggle []ToggleStep `yaml:"toggle,omitempty"`
 }
 
 // HIDIndex converts [col, row] to the flat button index the device uses.
@@ -119,6 +133,18 @@ type Action struct {
 
 	// URL is the endpoint called for type=http.
 	URL string `yaml:"url,omitempty"`
+}
+
+func (g *GestureBinding) Action() *Action {
+	if g == nil || len(g.Toggle) > 0 || strings.TrimSpace(g.Type) == "" {
+		return nil
+	}
+	return &Action{
+		Type: g.Type,
+		Cmd:  g.Cmd,
+		Key:  g.Key,
+		URL:  g.URL,
+	}
 }
 
 type SmallViewBlock struct {
@@ -214,32 +240,44 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 		}
 		if tr := btn.On; tr != nil {
 			actionCount := 0
+			toggleCount := 0
 			if tr.Tap != nil {
 				actionCount++
-				if err := validateAction(tr.Tap, fmt.Sprintf("%s[%d].on.tap", path, i)); err != nil {
+				if tg, err := validateGestureBinding(tr.Tap, fmt.Sprintf("%s[%d].on.tap", path, i)); err != nil {
 					return err
+				} else if tg {
+					toggleCount++
 				}
 			}
 			if tr.DoubleTap != nil {
 				actionCount++
-				if err := validateAction(tr.DoubleTap, fmt.Sprintf("%s[%d].on.double_tap", path, i)); err != nil {
+				if tg, err := validateGestureBinding(tr.DoubleTap, fmt.Sprintf("%s[%d].on.double_tap", path, i)); err != nil {
 					return err
+				} else if tg {
+					toggleCount++
 				}
 			}
 			if tr.Hold != nil {
 				actionCount++
-				if err := validateAction(tr.Hold, fmt.Sprintf("%s[%d].on.hold", path, i)); err != nil {
+				if tg, err := validateGestureBinding(tr.Hold, fmt.Sprintf("%s[%d].on.hold", path, i)); err != nil {
 					return err
+				} else if tg {
+					toggleCount++
 				}
 			}
 			if tr.Repeat != nil {
 				actionCount++
-				if err := validateAction(tr.Repeat, fmt.Sprintf("%s[%d].on.repeat", path, i)); err != nil {
+				if tg, err := validateGestureBinding(tr.Repeat, fmt.Sprintf("%s[%d].on.repeat", path, i)); err != nil {
 					return err
+				} else if tg {
+					toggleCount++
 				}
 			}
 			if actionCount == 0 {
 				return fmt.Errorf("%s[%d].on has no actions", path, i)
+			}
+			if toggleCount > 1 {
+				return fmt.Errorf("%s[%d].on can define toggle for only one gesture", path, i)
 			}
 			if tr.HoldMS != 0 && tr.HoldMS < 100 {
 				return fmt.Errorf("%s[%d].on.hold_ms too small: %d", path, i, tr.HoldMS)
@@ -307,6 +345,35 @@ func validateAction(a *Action, path string) error {
 	return nil
 }
 
+func validateGestureBinding(g *GestureBinding, path string) (bool, error) {
+	if g == nil {
+		return false, nil
+	}
+	if len(g.Toggle) > 0 {
+		if strings.TrimSpace(g.Type) != "" || strings.TrimSpace(g.Cmd) != "" || strings.TrimSpace(g.Key) != "" || strings.TrimSpace(g.URL) != "" {
+			return false, fmt.Errorf("%s cannot combine direct action fields with toggle", path)
+		}
+		if len(g.Toggle) < 2 {
+			return false, fmt.Errorf("%s.toggle must contain at least 2 steps", path)
+		}
+		for i := range g.Toggle {
+			stepPath := fmt.Sprintf("%s.toggle[%d]", path, i)
+			if err := validateAction(&g.Toggle[i].Action, stepPath+".action"); err != nil {
+				return false, err
+			}
+		}
+		return true, nil
+	}
+	action := g.Action()
+	if action == nil {
+		return false, fmt.Errorf("%s has no action", path)
+	}
+	if err := validateAction(action, path); err != nil {
+		return false, err
+	}
+	return false, nil
+}
+
 func validateProjectWidgetOn(on *WidgetOn, path string) error {
 	if on == nil {
 		return nil
@@ -358,6 +425,7 @@ func resolveButtonPaths(buttons []Button, baseDir string) {
 				buttons[i].Icon = filepath.Join(baseDir, buttons[i].Icon)
 			}
 		}
+		resolveTogglePaths(buttons[i].On, baseDir)
 		if buttons[i].Widget != nil && buttons[i].Widget.ProjectDir != "" &&
 			!filepath.IsAbs(buttons[i].Widget.ProjectDir) && !strings.HasPrefix(buttons[i].Widget.ProjectDir, "~/") {
 			buttons[i].Widget.ProjectDir = filepath.Join(baseDir, buttons[i].Widget.ProjectDir)
@@ -385,8 +453,60 @@ func collectIconPaths(buttons []Button, seen map[string]struct{}, out *[]string)
 				*out = append(*out, btn.Icon)
 			}
 		}
+		collectToggleIconPaths(btn.On, seen, out)
 		if btn.Folder != nil {
 			collectIconPaths(btn.Folder.Buttons, seen, out)
 		}
+	}
+}
+
+func resolveTogglePaths(on *Handlers, baseDir string) {
+	if on == nil {
+		return
+	}
+	resolveGestureBindingPaths(on.Tap, baseDir)
+	resolveGestureBindingPaths(on.DoubleTap, baseDir)
+	resolveGestureBindingPaths(on.Hold, baseDir)
+	resolveGestureBindingPaths(on.Repeat, baseDir)
+}
+
+func resolveGestureBindingPaths(g *GestureBinding, baseDir string) {
+	if g == nil {
+		return
+	}
+	for i := range g.Toggle {
+		icon := g.Toggle[i].Icon
+		if icon == "" || filepath.IsAbs(icon) || strings.HasPrefix(icon, "~/") {
+			continue
+		}
+		if _, err := os.Stat(icon); err != nil {
+			g.Toggle[i].Icon = filepath.Join(baseDir, icon)
+		}
+	}
+}
+
+func collectToggleIconPaths(on *Handlers, seen map[string]struct{}, out *[]string) {
+	if on == nil {
+		return
+	}
+	collectGestureBindingIconPaths(on.Tap, seen, out)
+	collectGestureBindingIconPaths(on.DoubleTap, seen, out)
+	collectGestureBindingIconPaths(on.Hold, seen, out)
+	collectGestureBindingIconPaths(on.Repeat, seen, out)
+}
+
+func collectGestureBindingIconPaths(g *GestureBinding, seen map[string]struct{}, out *[]string) {
+	if g == nil {
+		return
+	}
+	for _, step := range g.Toggle {
+		if step.Icon == "" {
+			continue
+		}
+		if _, ok := seen[step.Icon]; ok {
+			continue
+		}
+		seen[step.Icon] = struct{}{}
+		*out = append(*out, step.Icon)
 	}
 }

@@ -17,6 +17,12 @@ type gestureManager struct {
 	engine *ig.Engine
 }
 
+type gestureEvent struct {
+	ButtonID string
+	Kind     ig.Kind
+	Button   *config.Button
+}
+
 func newGestureManager() *gestureManager {
 	return &gestureManager{engine: ig.New()}
 }
@@ -25,15 +31,18 @@ func (m *gestureManager) Reset() {
 	m.engine.Reset()
 }
 
-func (m *gestureManager) HandleEvent(btn *config.Button, pressed bool, now time.Time) *config.Action {
+func (m *gestureManager) HandleEvent(btn *config.Button, pressed bool, now time.Time) *gestureEvent {
 	if btn == nil || btn.On == nil {
 		return nil
 	}
 	kind := m.engine.HandleEvent(btn.RuntimeID, handlerOptions(btn.On), pressed, now)
-	return actionForKind(btn.On, kind)
+	if kind == ig.None {
+		return nil
+	}
+	return &gestureEvent{ButtonID: btn.RuntimeID, Kind: kind, Button: btn}
 }
 
-func (m *gestureManager) Tick(buttons []config.Button, now time.Time) *config.Action {
+func (m *gestureManager) Tick(buttons []config.Button, now time.Time) *gestureEvent {
 	var bindings []ig.Binding
 	for i := range buttons {
 		btn := &buttons[i]
@@ -52,7 +61,7 @@ func (m *gestureManager) Tick(buttons []config.Button, now time.Time) *config.Ac
 	for i := range buttons {
 		btn := &buttons[i]
 		if btn.RuntimeID == id && btn.On != nil {
-			return actionForKind(btn.On, kind)
+			return &gestureEvent{ButtonID: id, Kind: kind, Button: btn}
 		}
 	}
 	return nil
@@ -73,16 +82,23 @@ func handlerOptions(tr *config.Handlers) ig.Options {
 func actionForKind(tr *config.Handlers, kind ig.Kind) *config.Action {
 	switch kind {
 	case ig.Tap:
-		return tr.Tap
+		return actionForBinding(tr.Tap)
 	case ig.DoubleTap:
-		return tr.DoubleTap
+		return actionForBinding(tr.DoubleTap)
 	case ig.Hold:
-		return tr.Hold
+		return actionForBinding(tr.Hold)
 	case ig.Repeat:
-		return tr.Repeat
+		return actionForBinding(tr.Repeat)
 	default:
 		return nil
 	}
+}
+
+func actionForBinding(binding *config.GestureBinding) *config.Action {
+	if binding == nil {
+		return nil
+	}
+	return binding.Action()
 }
 
 func holdDuration(tr *config.Handlers) time.Duration {

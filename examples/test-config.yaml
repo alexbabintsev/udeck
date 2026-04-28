@@ -254,6 +254,28 @@ buttons:
               key: "space"
             repeat_every_ms: 180
 
+        - at: [1, 1]
+          label: "Mode A"
+          icon: test-icons/apps-folder.png
+          on:
+            tap:
+              toggle:
+                - label: "Mode A"
+                  icon: test-icons/apps-folder.png
+                  action:
+                    type: shell
+                    cmd: "echo toggle-a >> /tmp/ulanzi-deck-test.log"
+                - label: "Mode B"
+                  icon: test-icons/media-folder.png
+                  action:
+                    type: shell
+                    cmd: "echo toggle-b >> /tmp/ulanzi-deck-test.log"
+                - label: "Mode C"
+                  icon: test-icons/system-folder.png
+                  action:
+                    type: shell
+                    cmd: "echo toggle-c >> /tmp/ulanzi-deck-test.log"
+
   - at: [1, 1]
     label: "Memory"
     widget:
