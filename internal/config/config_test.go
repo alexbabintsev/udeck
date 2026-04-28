@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -48,6 +49,22 @@ func TestValidateAcceptsHashPrefixedLabelColor(t *testing.T) {
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected valid color, got %v", err)
+	}
+}
+
+func TestValidateRejectsInvalidIconMargins(t *testing.T) {
+	cfg := &Config{
+		Device: DeviceConfig{
+			IconMargins: &Insets{Left: 120, Right: 80},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected icon margins validation error")
+	}
+	if !strings.Contains(err.Error(), "device.icon_margins") {
+		t.Fatalf("expected device icon margins error, got %v", err)
 	}
 }
 
@@ -127,6 +144,47 @@ func TestLoadExampleTestConfig(t *testing.T) {
 	}
 	if len(cfg.Buttons) == 0 {
 		t.Fatal("expected example test config to contain buttons")
+	}
+}
+
+func TestLoadAppliesGlobalIconMarginsToButtons(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	data := []byte(`
+device:
+  icon_margins:
+    top: 10
+    right: 11
+    bottom: 12
+    left: 13
+buttons:
+  - at: [0, 0]
+    label: "One"
+    icon: "one.png"
+  - at: [1, 0]
+    label: "Two"
+    icon: "two.png"
+    icon_margins:
+      top: 1
+      right: 2
+      bottom: 3
+      left: 4
+`)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("expected config to load, got %v", err)
+	}
+	got := cfg.Buttons[0].IconMargins
+	if got == nil || got.Top != 10 || got.Right != 11 || got.Bottom != 12 || got.Left != 13 {
+		t.Fatalf("unexpected inherited icon margins: %#v", got)
+	}
+	got = cfg.Buttons[1].IconMargins
+	if got == nil || got.Top != 1 || got.Right != 2 || got.Bottom != 3 || got.Left != 4 {
+		t.Fatalf("unexpected overridden icon margins: %#v", got)
 	}
 }
 

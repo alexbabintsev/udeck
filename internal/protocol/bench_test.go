@@ -12,7 +12,7 @@ func BenchmarkIconLoad(b *testing.B) {
 	path := filepath.Join("..", "..", "examples", "test-icons", "notes.png")
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		data, err := icons.Load(path)
+		data, err := icons.Load(path, icons.Insets{})
 		if err != nil {
 			b.Fatal(err)
 		}

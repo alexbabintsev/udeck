@@ -43,6 +43,32 @@ func TestPageZIPUsesDifferentIconNamesForDifferentPages(t *testing.T) {
 	}
 }
 
+func TestPageZIPUsesDifferentIconNamesForDifferentMargins(t *testing.T) {
+	dir := t.TempDir()
+	iconPath := filepath.Join(dir, "a.png")
+	writeTestPNG(t, iconPath, color.RGBA{0xff, 0x00, 0x00, 0xff})
+
+	zipA, err := PageZIP([]config.Button{
+		{At: [2]int{0, 0}, Label: "Apps", Icon: iconPath, IconMargins: &config.Insets{Top: 4, Right: 4, Bottom: 4, Left: 4}},
+	})
+	if err != nil {
+		t.Fatalf("page zip A: %v", err)
+	}
+
+	zipB, err := PageZIP([]config.Button{
+		{At: [2]int{0, 0}, Label: "Apps", Icon: iconPath, IconMargins: &config.Insets{Top: 12, Right: 12, Bottom: 12, Left: 12}},
+	})
+	if err != nil {
+		t.Fatalf("page zip B: %v", err)
+	}
+
+	iconPathA := manifestIconPath(t, zipA, "0_0")
+	iconPathB := manifestIconPath(t, zipB, "0_0")
+	if iconPathA == iconPathB {
+		t.Fatalf("expected different icon filenames across margin changes, got %q", iconPathA)
+	}
+}
+
 func TestPageZIPBuildsWorkFolderFromExampleConfig(t *testing.T) {
 	cfg, err := config.Load(filepath.Join("..", "..", "examples", "test-config.yaml"))
 	if err != nil {

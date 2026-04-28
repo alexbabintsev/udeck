@@ -29,8 +29,16 @@ type ProjectWidgetSettings struct {
 }
 
 type DeviceConfig struct {
-	Brightness *int        `yaml:"brightness,omitempty"`
-	LabelStyle *LabelStyle `yaml:"label_style,omitempty"`
+	Brightness  *int        `yaml:"brightness,omitempty"`
+	LabelStyle  *LabelStyle `yaml:"label_style,omitempty"`
+	IconMargins *Insets     `yaml:"icon_margins,omitempty"`
+}
+
+type Insets struct {
+	Top    int `yaml:"top,omitempty"`
+	Right  int `yaml:"right,omitempty"`
+	Bottom int `yaml:"bottom,omitempty"`
+	Left   int `yaml:"left,omitempty"`
 }
 
 // LabelStyle controls button label rendering. All fields optional;
@@ -47,13 +55,14 @@ type LabelStyle struct {
 // Button describes one key slot on the deck.
 type Button struct {
 	// At is [col, row], zero-indexed. col ∈ [0,4], row ∈ [0,2].
-	At        [2]int    `yaml:"at"`
-	Label     string    `yaml:"label,omitempty"`
-	Icon      string    `yaml:"icon,omitempty"` // path, ~ expanded
-	On        *Handlers `yaml:"on,omitempty"`
-	Folder    *Folder   `yaml:"folder,omitempty"`
-	Widget    *Widget   `yaml:"widget,omitempty"`
-	RuntimeID string    `yaml:"-"`
+	At          [2]int    `yaml:"at"`
+	Label       string    `yaml:"label,omitempty"`
+	Icon        string    `yaml:"icon,omitempty"` // path, ~ expanded
+	IconMargins *Insets   `yaml:"icon_margins,omitempty"`
+	On          *Handlers `yaml:"on,omitempty"`
+	Folder      *Folder   `yaml:"folder,omitempty"`
+	Widget      *Widget   `yaml:"widget,omitempty"`
+	RuntimeID   string    `yaml:"-"`
 }
 
 type ToggleStep struct {
@@ -186,6 +195,7 @@ func Load(path string) (*Config, error) {
 	}
 	assignButtonIDs(c.Buttons, "buttons")
 	resolveButtonPaths(c.Buttons, filepath.Dir(path))
+	applyButtonDefaults(c.Buttons, c.Device.IconMargins)
 	if err := c.Validate(); err != nil {
 		return &c, err
 	}
@@ -210,6 +220,9 @@ func (c *Config) Validate() error {
 			}
 		}
 	}
+	if err := validateInsets(c.Device.IconMargins, "device.icon_margins"); err != nil {
+		return err
+	}
 	return validateButtons(c.Buttons, "buttons", false)
 }
 
@@ -220,6 +233,22 @@ func validateHexColor(s string) error {
 	}
 	if _, err := hex.DecodeString(s); err != nil {
 		return fmt.Errorf("must be valid hex RRGGBB")
+	}
+	return nil
+}
+
+func validateInsets(in *Insets, path string) error {
+	if in == nil {
+		return nil
+	}
+	if in.Top < 0 || in.Right < 0 || in.Bottom < 0 || in.Left < 0 {
+		return fmt.Errorf("%s cannot contain negative values", path)
+	}
+	if in.Left+in.Right >= 196 {
+		return fmt.Errorf("%s left+right must be less than 196", path)
+	}
+	if in.Top+in.Bottom >= 196 {
+		return fmt.Errorf("%s top+bottom must be less than 196", path)
 	}
 	return nil
 }
@@ -237,6 +266,9 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 			return fmt.Errorf("%s[%d].at duplicates %s[%d].at: %v", path, i, path, prev, btn.At)
 		}
 		seen[btn.At] = i
+		if err := validateInsets(btn.IconMargins, fmt.Sprintf("%s[%d].icon_margins", path, i)); err != nil {
+			return err
+		}
 		modeCount := 0
 		if btn.On != nil {
 			modeCount++
@@ -519,6 +551,25 @@ func resolveButtonPaths(buttons []Button, baseDir string) {
 			resolveButtonPaths(buttons[i].Folder.Buttons, baseDir)
 		}
 	}
+}
+
+func applyButtonDefaults(buttons []Button, iconMargins *Insets) {
+	for i := range buttons {
+		if buttons[i].IconMargins == nil && iconMargins != nil {
+			buttons[i].IconMargins = cloneInsets(iconMargins)
+		}
+		if buttons[i].Folder != nil {
+			applyButtonDefaults(buttons[i].Folder.Buttons, iconMargins)
+		}
+	}
+}
+
+func cloneInsets(in *Insets) *Insets {
+	if in == nil {
+		return nil
+	}
+	cp := *in
+	return &cp
 }
 
 func assignButtonIDs(buttons []Button, path string) {

@@ -121,6 +121,9 @@ Current config surface:
   - `show_title`: boolean
   - `size`: integer font size
   - `weight`: integer font weight
+- `device.icon_margins`: optional global static-icon insets
+  - `top`, `right`, `bottom`, `left`: non-negative integers
+  - useful when the D200 distorts pixels near the physical screen edges
 - `widgets.project`: optional global defaults for project widgets
   - `terminal`: app name used by default `focus` behavior and passed to
     scripts as `PROJECT_TERMINAL`
@@ -132,6 +135,7 @@ Current config surface:
   - `label`: button text
   - `icon`: local image path; `~/...` is expanded; images are resized to
     `196x196` and encoded as JPEG before upload
+  - `icon_margins`: optional per-button override for static icon insets
   - `folder.buttons`: nested page; runtime injects a `Back` button
   - `widget`
     - `type: memory`
@@ -180,6 +184,11 @@ Example:
 ```yaml
 device:
   brightness: 70
+  icon_margins:
+    top: 8
+    right: 8
+    bottom: 8
+    left: 8
   label_style:
     align: bottom
     color: "FFFFFF"
@@ -198,6 +207,11 @@ buttons:
   - at: [0, 0]
     label: "Folder"
     icon: test-icons/apps-folder.png
+    icon_margins:
+      top: 12
+      right: 12
+      bottom: 12
+      left: 12
     folder:
       buttons:
         - at: [0, 0]
@@ -330,6 +344,8 @@ Notes:
   reliable for shortcuts like `cmd t` and `cmd shift 4`.
 - If the active config contains any `type: key` handlers, `run` now
   proactively asks macOS for Accessibility access during startup.
+- Static button icons support global and per-button margins, which lets
+  you keep important pixels away from the D200's edge distortion zone.
 
 ## Troubleshooting
 

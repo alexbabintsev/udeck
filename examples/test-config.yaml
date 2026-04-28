@@ -1,5 +1,10 @@
 device:
   brightness: 65
+  icon_margins:
+    top: 8
+    right: 8
+    bottom: 8
+    left: 8
   label_style:
     align: top
     color: "#F6F6F6"
@@ -162,6 +167,11 @@ buttons:
   - at: [4, 0]
     label: "Hammers"
     icon: test-icons/browser.png
+    icon_margins:
+      top: 12
+      right: 12
+      bottom: 12
+      left: 12
     folder:
       buttons:
         - at: [0, 0]
@@ -252,7 +262,7 @@ buttons:
             repeat:
               type: key
               key: "space"
-            repeat_every_ms: 180
+            repeat_every_ms: 50
 
         - at: [1, 1]
           label: "Mode A"

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	stddraw "image/draw"
 	"image/jpeg"
 	_ "image/png"
 	"os"
@@ -18,9 +19,16 @@ const (
 	IconHeight = 196
 )
 
+type Insets struct {
+	Top    int
+	Right  int
+	Bottom int
+	Left   int
+}
+
 // Load reads an image file from path (~ expanded), resizes it to 196×196
 // using bilinear interpolation, and returns JPEG-encoded bytes.
-func Load(path string) ([]byte, error) {
+func Load(path string, margins Insets) ([]byte, error) {
 	path = expandTilde(path)
 	f, err := os.Open(path)
 	if err != nil {
@@ -34,7 +42,14 @@ func Load(path string) ([]byte, error) {
 	}
 
 	dst := image.NewRGBA(image.Rect(0, 0, IconWidth, IconHeight))
-	draw.BiLinear.Scale(dst, dst.Bounds(), src, src.Bounds(), draw.Over, nil)
+	stddraw.Draw(dst, dst.Bounds(), image.Black, image.Point{}, stddraw.Src)
+	target := image.Rect(
+		margins.Left,
+		margins.Top,
+		IconWidth-margins.Right,
+		IconHeight-margins.Bottom,
+	)
+	draw.BiLinear.Scale(dst, target, src, src.Bounds(), draw.Over, nil)
 
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 90}); err != nil {

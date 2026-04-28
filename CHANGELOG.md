@@ -40,6 +40,9 @@ actual development milestones rather than formal releases.
   explicit modifier down/up events and clearer Accessibility errors.
 - `run` now proactively requests macOS Accessibility permission during
   startup when the active config contains key actions.
+- Added global `device.icon_margins` and per-button `icon_margins` for
+  static icons, so button artwork can avoid the D200 edge distortion
+  zone.
 
 ## v2 Workbench
 

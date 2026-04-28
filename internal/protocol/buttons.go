@@ -51,7 +51,7 @@ func PageZIP(buttons []config.Button) ([]byte, error) {
 			vp.Text = btn.Label
 		}
 		if btn.Icon != "" {
-			jpeg, err := icons.Load(btn.Icon)
+			jpeg, err := icons.Load(btn.Icon, iconInsets(btn.IconMargins))
 			if err != nil {
 				return nil, fmt.Errorf("button [%d,%d] icon: %w", col, row, err)
 			}
@@ -157,6 +157,27 @@ func buttonIconID(btn config.Button, jpeg []byte) uint32 {
 	_, _ = h.Write([]byte{0})
 	_, _ = h.Write([]byte(btn.Label))
 	_, _ = h.Write([]byte{0})
+	if btn.IconMargins != nil {
+		_, _ = h.Write([]byte{
+			byte(btn.IconMargins.Top),
+			byte(btn.IconMargins.Right),
+			byte(btn.IconMargins.Bottom),
+			byte(btn.IconMargins.Left),
+		})
+		_, _ = h.Write([]byte{0})
+	}
 	_, _ = h.Write(jpeg)
 	return h.Sum32()
+}
+
+func iconInsets(in *config.Insets) icons.Insets {
+	if in == nil {
+		return icons.Insets{}
+	}
+	return icons.Insets{
+		Top:    in.Top,
+		Right:  in.Right,
+		Bottom: in.Bottom,
+		Left:   in.Left,
+	}
 }
