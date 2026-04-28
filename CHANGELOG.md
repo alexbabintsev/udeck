@@ -36,6 +36,8 @@ actual development milestones rather than formal releases.
 - Polished widget rendering for Spotify and Memory states.
 - Gesture handling now uses a shared engine for action buttons and
   widgets, with `double_tap` and hold-time `hold` behavior.
+- macOS key actions now use a more reliable shortcut-posting path with
+  explicit modifier down/up events and clearer Accessibility errors.
 
 ## v2 Workbench
 

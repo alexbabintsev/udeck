@@ -325,6 +325,9 @@ Notes:
 - Device open uses retry/backoff, so transient startup failures such as
   `privilege violation` often recover automatically without needing to
   restart the program manually.
+- Key actions on macOS are sent as full modifier-down / key /
+  modifier-up sequences rather than one flagged key event, which is more
+  reliable for shortcuts like `cmd t` and `cmd shift 4`.
 
 ## Troubleshooting
 
@@ -343,6 +346,11 @@ Notes:
   - Artwork icons are written atomically now; if updates still fail,
     check Spotify itself is running and that network access is available
     for cover-art lookup.
+- Key actions do nothing
+  - Grant Accessibility permission to the app that launched
+    `ulanzi-deck` in macOS System Settings. For example, if you run it
+    from Terminal or iTerm, that terminal app must be allowed under
+    Privacy & Security → Accessibility.
 
 ## Roadmap
 
