@@ -7,7 +7,8 @@ automation.
 
 > Status: **v2 workbench**. Direct HID control works, nested directories
 > work, widgets work, config hot reload works, and the runtime keeps the
-> device awake / recovers from common HID interruptions. SmallView and
+> device awake / recovers from common HID interruptions. The runtime
+> also handles macOS sleep, wake, and shutdown events. SmallView and
 > richer profile management are still pending.
 
 ## Why
@@ -56,6 +57,8 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
 - Config hot reload while `run` is active
 - Runtime keepalive to keep the deck out of screensaver
 - Auto-recovery on common HID read/write/open failures
+- macOS power-event handling for sleep / wake / shutdown
+- Startup retry/backoff to survive transient HID access errors
 
 ## Usage
 
@@ -78,7 +81,9 @@ Then:
 host-controlled mode, applies label style / brightness, starts listening
 for button events, hot-reloads the config when the YAML changes, and
 periodically refreshes device state to avoid falling back into the
-firmware screensaver.
+firmware screensaver. On macOS it also listens for system sleep, wake,
+and shutdown notifications so it can dim/close the device cleanly before
+sleep and restore the current page after wake.
 
 If something goes wrong on the device (frozen display, garbled output),
 **unplug the USB cable** to power-cycle. No persistent damage is
@@ -187,12 +192,35 @@ Notes:
 - `run` hot-reloads the YAML config automatically when the file changes.
 - Widgets write icons atomically so page refreshes do not race on partial
   PNG files.
-- Spotify widgets use an internal shared service; no separate
-  `spotify-daemon` is required.
+- Spotify widgets use one internal shared service inside the
+  `ulanzi-deck` process; no separate `spotify-daemon` is required.
 - Spotify artwork fetch still uses network access to resolve current
   cover art from Spotify track metadata.
 - The runtime periodically reapplies device state as a keepalive and
   attempts to reopen the device automatically after common HID failures.
+- On macOS, system sleep and shutdown dim the deck and close the HID
+  session cleanly; wake triggers a reopen-and-restore flow.
+- Device open uses retry/backoff, so transient startup failures such as
+  `privilege violation` often recover automatically without needing to
+  restart the program manually.
+
+## Troubleshooting
+
+- `hid_open_path ... exclusive access`
+  - Quit `Ulanzi Studio` and any other process that may still own the
+    device.
+- `hid_open_path ... privilege violation`
+  - Keep the process running for a moment before retrying manually; the
+    runtime now retries with backoff during startup, and this error is
+    often transient on macOS.
+- The deck falls into screensaver or stops responding
+  - The runtime already sends periodic keepalive refreshes. If the
+    screen is still frozen, unplugging and reconnecting USB remains the
+    safest hard reset.
+- Spotify artwork updates but then breaks
+  - Artwork icons are written atomically now; if updates still fail,
+    check Spotify itself is running and that network access is available
+    for cover-art lookup.
 
 ## Roadmap
 
