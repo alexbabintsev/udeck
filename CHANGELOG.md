@@ -55,6 +55,17 @@ actual development milestones rather than formal releases.
   [docs/config.md](/Volumes/Black/Projects/ulanzi-deck-go/docs/config.md:1)
   with field-by-field schema documentation, allowed values, and
   examples.
+- Added support for the physical double-wide `3_2` button slot, including
+  correct icon sizing, icon-margin validation, and rejection of the
+  nonexistent `4_2` slot.
+- Added `close_all_projects` action to run the `stop` lifecycle for all
+  configured `project` widgets.
+- Hammerspoon integrations now prefer `hs.ipc` shell actions over
+  synthetic hotkeys or a long-lived local HTTP bridge.
+- Added combined `freqtrade` widget support with direct polling of one or
+  more freqtrade REST APIs, no separate daemon required.
+- Freqtrade widget rendering now uses `PragmataPro` when available to
+  match the original plugin style.
 
 ## v2 Workbench
 

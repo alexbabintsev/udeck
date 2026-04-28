@@ -94,6 +94,8 @@ type Widget struct {
 	Type         string        `yaml:"type"`
 	Apps         []string      `yaml:"apps,omitempty"`
 	PollMS       int           `yaml:"poll_ms,omitempty"`
+	Title        string        `yaml:"title,omitempty"`
+	DSNs         string        `yaml:"dsns,omitempty"`
 	ProjectDir   string        `yaml:"project_dir,omitempty"`
 	Session      string        `yaml:"session,omitempty"`
 	EditorSubdir string        `yaml:"editor_subdir,omitempty"`
@@ -149,7 +151,8 @@ func (b Button) HIDIndex() int {
 
 // Action is the handler fired when a gesture resolves.
 type Action struct {
-	// Type is "shell", "key", "http", "page_next", or "page_prev".
+	// Type is "shell", "key", "http", "page_next", "page_prev", or
+	// "close_all_projects".
 	Type string `yaml:"type"`
 
 	// Cmd is the shell command run for type=shell.
@@ -386,6 +389,13 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 				if w.PollMS != 0 && w.PollMS < 1000 {
 					return fmt.Errorf("%s[%d].widget.poll_ms too small: %d", path, i, w.PollMS)
 				}
+			case "freqtrade":
+				if strings.TrimSpace(w.DSNs) == "" {
+					return fmt.Errorf("%s[%d].widget.dsns is empty", path, i)
+				}
+				if w.PollMS != 0 && w.PollMS < 3000 {
+					return fmt.Errorf("%s[%d].widget.poll_ms too small: %d", path, i, w.PollMS)
+				}
 			case "project":
 				if strings.TrimSpace(w.ProjectDir) == "" {
 					return fmt.Errorf("%s[%d].widget.project_dir is empty", path, i)
@@ -400,7 +410,7 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 					return err
 				}
 			default:
-				return fmt.Errorf("%s[%d].widget.type %q unknown (memory|spotify_play_pause|spotify_next|spotify_artwork|project)", path, i, w.Type)
+				return fmt.Errorf("%s[%d].widget.type %q unknown (memory|spotify_play_pause|spotify_next|spotify_artwork|freqtrade|project)", path, i, w.Type)
 			}
 		}
 		if d := btn.Folder; d != nil {
@@ -496,9 +506,9 @@ func validateAction(a *Action, path string) error {
 		if a.URL == "" {
 			return fmt.Errorf("%s.url is empty", path)
 		}
-	case "page_next", "page_prev":
+	case "page_next", "page_prev", "close_all_projects":
 	default:
-		return fmt.Errorf("%s.type %q unknown (shell|key|http|page_next|page_prev)", path, a.Type)
+		return fmt.Errorf("%s.type %q unknown (shell|key|http|page_next|page_prev|close_all_projects)", path, a.Type)
 	}
 	return nil
 }

@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -134,6 +135,40 @@ func (m *Manager) HandleEvent(id string, pressed bool, now time.Time) bool {
 	return true
 }
 
+func (m *Manager) CloseAllProjects() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var errs []error
+	for id, def := range m.defs {
+		if def.kind != "project" {
+			continue
+		}
+
+		item, ok := m.items[id]
+		if !ok {
+			var err error
+			item, err = m.newWidgetLocked(id)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", id, err))
+				continue
+			}
+			m.items[id] = item
+		}
+
+		project, ok := item.(*ProjectWidget)
+		if !ok {
+			errs = append(errs, fmt.Errorf("%s: project widget type assertion failed", id))
+			continue
+		}
+		if err := project.stopNow(); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", id, err))
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
 func (m *Manager) Tick(buttons []config.Button, now time.Time) bool {
 	var bindings []ig.Binding
 	for _, btn := range buttons {
@@ -183,6 +218,8 @@ func (m *Manager) newWidgetLocked(id string) (Widget, error) {
 	switch def.kind {
 	case "memory":
 		return NewMemoryWidget(id, def.btn.Widget, m.notify)
+	case "freqtrade":
+		return NewFreqtradeWidget(id, def.btn.Widget, m.notify)
 	case "spotify_play_pause", "spotify_next", "spotify_artwork":
 		if m.spotify == nil {
 			service, err := newSpotifyService(def.btn.Widget.PollMS)
@@ -262,7 +299,7 @@ func (m *Manager) gestureOptions(id string) (ig.Options, bool) {
 			DoubleTapDelay: 300 * time.Millisecond,
 			RepeatEvery:    opts.RepeatEvery,
 		}, true
-	case "memory", "spotify_play_pause", "spotify_next", "spotify_artwork":
+	case "memory", "freqtrade", "spotify_play_pause", "spotify_next", "spotify_artwork":
 		return ig.Options{HasTap: true}, true
 	default:
 		return ig.Options{}, false

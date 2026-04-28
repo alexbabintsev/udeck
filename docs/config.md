@@ -523,6 +523,22 @@ Behavior:
 - loops at the beginning
 - clears currently open nested `folder`
 
+### `type: close_all_projects`
+
+Runs the `stop` lifecycle for every configured `widget.type: project`.
+
+```yaml
+tap:
+  type: close_all_projects
+```
+
+Behavior:
+
+- visits all configured project widgets, even if their folder has not
+  been opened yet in the current run
+- uses each project's explicit `scripts.stop` when present
+- otherwise falls back to the built-in tmux session shutdown logic
+
 ## Toggle Actions
 
 A gesture can own a `toggle` instead of a direct action.
@@ -627,6 +643,7 @@ their own state.
 Supported widget types:
 
 - `memory`
+- `freqtrade`
 - `spotify_play_pause`
 - `spotify_next`
 - `spotify_artwork`
@@ -689,6 +706,48 @@ Optional:
 
 - `poll_ms`
   - minimum `1000`
+
+### `widget.type: freqtrade`
+
+Combined freqtrade widget with two modes:
+
+- `summary`
+  - closed P&L on top
+  - open P&L on bottom
+- `log`
+  - last 3 closed trades by `profit_abs`
+
+Tap the widget to cycle `summary -> log -> summary`.
+
+```yaml
+widget:
+  type: freqtrade
+  title: "BTC"
+  dsns: |
+    trader:secret@http://10.8.0.1:9910
+    trader:secret@http://10.8.0.2:9910
+  poll_ms: 10000
+```
+
+Fields:
+
+- `type`
+- `dsns`
+  - required
+  - newline-separated list of `user:password@http://host:port`
+  - empty lines and lines starting with `#` are ignored
+- `title`
+  - optional short title shown at the top of the widget
+- `poll_ms`
+  - optional
+  - minimum `3000`
+
+Behavior:
+
+- polls freqtrade REST APIs directly from `ulanzi-deck`
+- no separate daemon or localhost bridge is needed
+- aggregates all configured bots into one combined view
+- ignores failed bots and keeps rendering data from the remaining ones
 
 ### `widget.type: project`
 

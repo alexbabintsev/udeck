@@ -346,7 +346,7 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 					lastKeepalive = time.Now()
 					continue
 				}
-				if changed, err := runBinding(binding, nav); err != nil {
+				if changed, err := runBinding(binding, nav, widgetMgr); err != nil {
 					fmt.Fprintf(os.Stderr, "action error: %v\n", err)
 				} else if changed {
 					if err := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); err != nil {
@@ -437,7 +437,7 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 			}
 		}
 		if binding != nil {
-			if changed, err := runBinding(binding, nav); err != nil {
+			if changed, err := runBinding(binding, nav, widgetMgr); err != nil {
 				fmt.Fprintf(os.Stderr, "action error: %v\n", err)
 			} else if changed {
 				if err := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); err != nil {
@@ -506,12 +506,12 @@ func applyDeviceState(dev *device.Device, cfg *config.Config, buttons []config.B
 	return nil
 }
 
-func runBinding(binding *config.GestureBinding, nav *navigator) (bool, error) {
+func runBinding(binding *config.GestureBinding, nav *navigator, widgetMgr *widgets.Manager) (bool, error) {
 	if binding == nil {
 		return false, nil
 	}
 	if action := binding.Action(); action != nil {
-		return runAction(action, nav)
+		return runAction(action, nav, widgetMgr)
 	}
 	pageChanged := false
 	for i := range binding.Chain {
@@ -523,7 +523,7 @@ func runBinding(binding *config.GestureBinding, nav *navigator) (bool, error) {
 		if step.Action == nil {
 			continue
 		}
-		changed, err := runAction(step.Action, nav)
+		changed, err := runAction(step.Action, nav, widgetMgr)
 		if err != nil {
 			return pageChanged, err
 		}
@@ -532,7 +532,7 @@ func runBinding(binding *config.GestureBinding, nav *navigator) (bool, error) {
 	return pageChanged, nil
 }
 
-func runAction(action *config.Action, nav *navigator) (bool, error) {
+func runAction(action *config.Action, nav *navigator, widgetMgr *widgets.Manager) (bool, error) {
 	if action == nil {
 		return false, nil
 	}
@@ -547,6 +547,11 @@ func runAction(action *config.Action, nav *navigator) (bool, error) {
 			return false, nil
 		}
 		return nav.prevPage(), nil
+	case "close_all_projects":
+		if widgetMgr == nil {
+			return false, nil
+		}
+		return false, widgetMgr.CloseAllProjects()
 	default:
 		return false, actions.Run(action)
 	}

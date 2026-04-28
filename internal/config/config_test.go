@@ -475,7 +475,7 @@ func TestConfigUsesKeyActions(t *testing.T) {
 	}
 }
 
-func TestValidateAcceptsPageNavigationActions(t *testing.T) {
+func TestValidateAcceptsRuntimeActions(t *testing.T) {
 	cfg := &Config{
 		Buttons: []Button{
 			{
@@ -483,13 +483,14 @@ func TestValidateAcceptsPageNavigationActions(t *testing.T) {
 				On: &Handlers{
 					Tap:       &GestureBinding{Type: "page_next"},
 					DoubleTap: &GestureBinding{Type: "page_prev"},
+					Hold:      &GestureBinding{Type: "close_all_projects"},
 				},
 			},
 		},
 	}
 
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("expected page navigation actions to validate, got %v", err)
+		t.Fatalf("expected runtime actions to validate, got %v", err)
 	}
 }
 
@@ -552,6 +553,45 @@ func TestValidateAcceptsSpotifyWidgets(t *testing.T) {
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected spotify widgets to validate, got %v", err)
+	}
+}
+
+func TestValidateAcceptsFreqtradeWidget(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At: [2]int{0, 0},
+				Widget: &Widget{
+					Type:   "freqtrade",
+					DSNs:   "trader:secret@http://127.0.0.1:9910",
+					Title:  "BTC",
+					PollMS: 5000,
+				},
+			},
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected freqtrade widget to validate, got %v", err)
+	}
+}
+
+func TestValidateRejectsFreqtradeWidgetWithoutDSNs(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At:     [2]int{0, 0},
+				Widget: &Widget{Type: "freqtrade", PollMS: 5000},
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected missing dsns validation error")
+	}
+	if !strings.Contains(err.Error(), "widget.dsns is empty") {
+		t.Fatalf("expected missing dsns error, got %v", err)
 	}
 }
 

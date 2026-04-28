@@ -1,6 +1,8 @@
 package widgets
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
@@ -88,5 +90,56 @@ func TestManagerPrewarmsSpotifyAndKeepsItCached(t *testing.T) {
 	}
 	if m.spotify == nil {
 		t.Fatal("expected spotify runtime to remain cached after leaving page")
+	}
+}
+
+func TestManagerResolveButtonsInjectsFreqtradeWidgetIcon(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/trades":
+			if r.URL.Query().Get("limit") == "1" {
+				_, _ = w.Write([]byte(`{"total_trades":1}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"trades":[{"is_open":false,"profit_abs":1.25,"pair":"BTC/USDT","close_timestamp":100}]}`))
+		case "/api/v1/status":
+			_, _ = w.Write([]byte(`[{"profit_abs":0.75}]`))
+		case "/api/v1/profit":
+			_, _ = w.Write([]byte(`{"closed_trade_count":1,"profit_closed_coin":2.5}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	buttons := []config.Button{
+		{
+			At:        [2]int{0, 0},
+			Label:     "Freqtrade",
+			RuntimeID: "buttons[0]",
+			Widget: &config.Widget{
+				Type:   "freqtrade",
+				DSNs:   "user:pass@" + srv.URL,
+				Title:  "BTC",
+				PollMS: 3000,
+			},
+		},
+	}
+
+	m, err := NewManager(&config.Config{Buttons: buttons})
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer m.Close()
+
+	got, err := m.ResolveButtons(buttons)
+	if err != nil {
+		t.Fatalf("resolve buttons: %v", err)
+	}
+	if got[0].Icon == "" {
+		t.Fatal("expected resolved widget icon path")
+	}
+	if got[0].Label != "" {
+		t.Fatalf("expected widget label to be suppressed, got %q", got[0].Label)
 	}
 }

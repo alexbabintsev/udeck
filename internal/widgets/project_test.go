@@ -118,6 +118,74 @@ func TestTerminalAttachInvocationSupportsITermAndTerminal(t *testing.T) {
 	}
 }
 
+func TestManagerCloseAllProjectsRunsStopForConfiguredWidgets(t *testing.T) {
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+
+	writeTestScript(t, filepath.Join(dirA, "start"), "touch \"$PROJECT_DIR/.running\"\n")
+	writeTestScript(t, filepath.Join(dirA, "stop"), "rm -f \"$PROJECT_DIR/.running\"\ntouch \"$PROJECT_DIR/.stopped\"\n")
+	writeTestScript(t, filepath.Join(dirB, "start"), "touch \"$PROJECT_DIR/.running\"\n")
+	writeTestScript(t, filepath.Join(dirB, "stop"), "rm -f \"$PROJECT_DIR/.running\"\ntouch \"$PROJECT_DIR/.stopped\"\n")
+
+	oldHasSession := projectHasSession
+	defer func() { projectHasSession = oldHasSession }()
+	projectHasSession = func(session string) (bool, error) {
+		switch session {
+		case projectSessionName(dirA, ""):
+			_, err := os.Stat(filepath.Join(dirA, ".running"))
+			return err == nil, nil
+		case projectSessionName(dirB, ""):
+			_, err := os.Stat(filepath.Join(dirB, ".running"))
+			return err == nil, nil
+		default:
+			return false, nil
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(dirA, ".running"), []byte("on"), 0o644); err != nil {
+		t.Fatalf("seed project A running file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dirB, ".running"), []byte("on"), 0o644); err != nil {
+		t.Fatalf("seed project B running file: %v", err)
+	}
+
+	cfg := &config.Config{
+		Pages: []config.Page{{
+			Buttons: []config.Button{
+				{
+					RuntimeID: "buttons[0]",
+					Widget: &config.Widget{
+						Type:       "project",
+						ProjectDir: dirA,
+					},
+				},
+				{
+					RuntimeID: "buttons[1]",
+					Widget: &config.Widget{
+						Type:       "project",
+						ProjectDir: dirB,
+					},
+				},
+			},
+		}},
+	}
+
+	mgr, err := NewManager(cfg)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer mgr.Close()
+
+	if err := mgr.CloseAllProjects(); err != nil {
+		t.Fatalf("close all projects: %v", err)
+	}
+
+	waitForFile(t, filepath.Join(dirA, ".stopped"))
+	waitForFile(t, filepath.Join(dirB, ".stopped"))
+	waitForMissingFile(t, filepath.Join(dirA, ".running"))
+	waitForMissingFile(t, filepath.Join(dirB, ".running"))
+}
+
 func writeTestScript(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte("#!/bin/sh\nset -eu\n"+body), 0o644); err != nil {

@@ -106,7 +106,7 @@ func TestRunBindingHandlesPageActions(t *testing.T) {
 		{Name: "Two", Buttons: []config.Button{{At: [2]int{0, 0}, Label: "B"}}},
 	})
 
-	changed, err := runBinding(&config.GestureBinding{Type: "page_next"}, nav)
+	changed, err := runBinding(&config.GestureBinding{Type: "page_next"}, nav, nil)
 	if err != nil {
 		t.Fatalf("run binding: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestRunBindingHandlesPageActions(t *testing.T) {
 		Chain: []config.ChainStep{
 			{Action: &config.Action{Type: "page_prev"}},
 		},
-	}, nav)
+	}, nav, nil)
 	if err != nil {
 		t.Fatalf("run chain binding: %v", err)
 	}
@@ -130,6 +130,16 @@ func TestRunBindingHandlesPageActions(t *testing.T) {
 	}
 	if got := nav.currentPageButtons()[0].Label; got != "A" {
 		t.Fatalf("expected first page after prev, got %q", got)
+	}
+}
+
+func TestRunBindingCloseAllProjectsWithoutWidgetManager(t *testing.T) {
+	changed, err := runBinding(&config.GestureBinding{Type: "close_all_projects"}, nil, nil)
+	if err != nil {
+		t.Fatalf("run binding: %v", err)
+	}
+	if changed {
+		t.Fatal("expected no page change")
 	}
 }
 

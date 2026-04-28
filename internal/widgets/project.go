@@ -210,6 +210,34 @@ func (w *ProjectWidget) runAction(action projectAction) error {
 	}
 }
 
+func (w *ProjectWidget) stopNow() error {
+	w.mu.Lock()
+	if w.closed {
+		w.mu.Unlock()
+		return nil
+	}
+	w.busy = true
+	w.lastAction = projectActionStop
+	w.lastError = ""
+	w.mu.Unlock()
+	_ = w.render()
+	w.notify(w.id)
+
+	err := w.runAction(projectActionStop)
+
+	w.mu.Lock()
+	w.busy = false
+	if err != nil {
+		w.lastError = err.Error()
+	} else {
+		w.lastError = ""
+	}
+	w.mu.Unlock()
+	_ = w.refreshRunning()
+	w.notify(w.id)
+	return err
+}
+
 func (w *ProjectWidget) runScript(scriptPath string) error {
 	if scriptPath == "" {
 		return nil

@@ -54,8 +54,10 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
   - `http`
   - `page_next`
   - `page_prev`
+  - `close_all_projects`
 - Widgets:
   - `memory`
+  - `freqtrade`
   - `spotify_play_pause`
   - `spotify_next`
   - `spotify_artwork`
@@ -151,6 +153,10 @@ Current config surface:
       - `type: memory`
         - `apps`: optional app list restarted on press
         - `poll_ms`: optional polling override
+      - `type: freqtrade`
+        - `dsns`: newline-separated `user:password@http://host:port`
+        - `title`: optional short title shown at the top
+        - `poll_ms`: optional polling override, minimum `3000`
       - `type: spotify_play_pause`
       - `type: spotify_next`
       - `type: spotify_artwork`
@@ -189,6 +195,8 @@ Current config surface:
       - `type: http` with `url: "http://127.0.0.1:..."` to call a local or remote endpoint
       - `type: page_next` to switch to the next top-level page
       - `type: page_prev` to switch to the previous top-level page
+      - `type: close_all_projects` to run `stop` for every configured
+        `widget.type: project`
 - `smallview`: accepted but currently reserved for future work
 
 Example:
@@ -373,6 +381,10 @@ Notes:
   executable bit as long as the script contents are valid shell.
 - Spotify widgets use one internal shared service inside the
   `ulanzi-deck` process; no separate `spotify-daemon` is required.
+- Freqtrade widget polls configured REST APIs directly; no separate
+  freqtrade daemon or local bridge is required.
+- Freqtrade widget text uses `PragmataPro` when that font is available
+  locally, with a fallback renderer otherwise.
 - Widget instances are created when you first open the page that uses
   them and then stay cached until config reload or shutdown.
 - Spotify uses one shared runtime that is prewarmed when the config
