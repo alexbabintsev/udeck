@@ -46,6 +46,7 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
   - `hold`
   - `repeat`
 - Toggle sequences for action buttons, including per-step label/icon/action
+- Chains for action buttons, including `delay_ms` steps between actions
 - Action types:
   - `shell`
   - `key`
@@ -162,7 +163,8 @@ Current config surface:
     - `repeat`
     - each gesture accepts either:
       - a direct action payload
-      - or `toggle:` with 2+ steps
+      - `toggle:` with 2+ steps
+      - `chain:` with ordered `action` / `delay_ms` steps
     - optional timing overrides:
       - `hold_ms`
       - `double_tap_ms`
@@ -249,11 +251,28 @@ buttons:
             action:
               type: shell
               cmd: "echo toggle-b"
+
+  - at: [1, 2]
+    label: "Chain"
+    icon: test-icons/work-folder.png
+    on:
+      tap:
+        chain:
+          - action:
+              type: shell
+              cmd: "echo chain-a"
+          - delay_ms: 400
+          - action:
+              type: shell
+              cmd: "echo chain-b"
 ```
 
 Notes:
 
 - `shell` actions are launched asynchronously.
+- `chain` steps run strictly in order. `delay_ms` pauses before the next
+  step. Since `shell` actions are asynchronous, a delay spaces out
+  launches but does not wait for the shell command to finish.
 - `key` actions are implemented on macOS; on other platforms they
   currently return an unsupported error.
 - `http` actions are useful for local automation bridges such as

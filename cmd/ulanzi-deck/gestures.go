@@ -79,26 +79,19 @@ func handlerOptions(tr *config.Handlers) ig.Options {
 	}
 }
 
-func actionForKind(tr *config.Handlers, kind ig.Kind) *config.Action {
+func bindingForKind(tr *config.Handlers, kind ig.Kind) *config.GestureBinding {
 	switch kind {
 	case ig.Tap:
-		return actionForBinding(tr.Tap)
+		return tr.Tap
 	case ig.DoubleTap:
-		return actionForBinding(tr.DoubleTap)
+		return tr.DoubleTap
 	case ig.Hold:
-		return actionForBinding(tr.Hold)
+		return tr.Hold
 	case ig.Repeat:
-		return actionForBinding(tr.Repeat)
+		return tr.Repeat
 	default:
 		return nil
 	}
-}
-
-func actionForBinding(binding *config.GestureBinding) *config.Action {
-	if binding == nil {
-		return nil
-	}
-	return binding.Action()
 }
 
 func holdDuration(tr *config.Handlers) time.Duration {

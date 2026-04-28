@@ -80,7 +80,7 @@ func (m *toggleManager) ResolveButtons(buttons []config.Button) []config.Button 
 	return out
 }
 
-func (m *toggleManager) Handle(buttonID string, kind ig.Kind) (*config.Action, bool) {
+func (m *toggleManager) Handle(buttonID string, kind ig.Kind) (*config.GestureBinding, bool) {
 	if m == nil {
 		return nil, false
 	}
@@ -95,7 +95,12 @@ func (m *toggleManager) Handle(buttonID string, kind ig.Kind) (*config.Action, b
 	}
 	m.index[key] = next
 	visual, changesVisual := m.visuals[buttonID]
-	return &step.Action, changesVisual && visual.gesture == kind
+	return &config.GestureBinding{
+		Type: step.Action.Type,
+		Cmd:  step.Action.Cmd,
+		Key:  step.Action.Key,
+		URL:  step.Action.URL,
+	}, changesVisual && visual.gesture == kind
 }
 
 func (m *toggleManager) currentStep(buttonID string, kind ig.Kind) (config.ToggleStep, bool) {

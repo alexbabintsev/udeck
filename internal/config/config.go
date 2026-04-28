@@ -62,6 +62,11 @@ type ToggleStep struct {
 	Action Action `yaml:"action"`
 }
 
+type ChainStep struct {
+	DelayMS int     `yaml:"delay_ms,omitempty"`
+	Action  *Action `yaml:"action,omitempty"`
+}
+
 // Folder defines a nested page of buttons. When opened at runtime, a
 // synthetic "Back" button is injected automatically.
 type Folder struct {
@@ -112,6 +117,7 @@ type GestureBinding struct {
 	Key    string       `yaml:"key,omitempty"`
 	URL    string       `yaml:"url,omitempty"`
 	Toggle []ToggleStep `yaml:"toggle,omitempty"`
+	Chain  []ChainStep  `yaml:"chain,omitempty"`
 }
 
 // HIDIndex converts [col, row] to the flat button index the device uses.
@@ -136,7 +142,7 @@ type Action struct {
 }
 
 func (g *GestureBinding) Action() *Action {
-	if g == nil || len(g.Toggle) > 0 || strings.TrimSpace(g.Type) == "" {
+	if g == nil || len(g.Toggle) > 0 || len(g.Chain) > 0 || strings.TrimSpace(g.Type) == "" {
 		return nil
 	}
 	return &Action{
@@ -349,9 +355,10 @@ func validateGestureBinding(g *GestureBinding, path string) (bool, error) {
 	if g == nil {
 		return false, nil
 	}
+	hasDirect := strings.TrimSpace(g.Type) != "" || strings.TrimSpace(g.Cmd) != "" || strings.TrimSpace(g.Key) != "" || strings.TrimSpace(g.URL) != ""
 	if len(g.Toggle) > 0 {
-		if strings.TrimSpace(g.Type) != "" || strings.TrimSpace(g.Cmd) != "" || strings.TrimSpace(g.Key) != "" || strings.TrimSpace(g.URL) != "" {
-			return false, fmt.Errorf("%s cannot combine direct action fields with toggle", path)
+		if hasDirect || len(g.Chain) > 0 {
+			return false, fmt.Errorf("%s cannot combine direct action fields, toggle, and chain", path)
 		}
 		if len(g.Toggle) < 2 {
 			return false, fmt.Errorf("%s.toggle must contain at least 2 steps", path)
@@ -363,6 +370,35 @@ func validateGestureBinding(g *GestureBinding, path string) (bool, error) {
 			}
 		}
 		return true, nil
+	}
+	if len(g.Chain) > 0 {
+		if hasDirect {
+			return false, fmt.Errorf("%s cannot combine direct action fields, toggle, and chain", path)
+		}
+		for i := range g.Chain {
+			step := g.Chain[i]
+			stepPath := fmt.Sprintf("%s.chain[%d]", path, i)
+			hasDelay := step.DelayMS > 0
+			hasAction := step.Action != nil
+			if !hasDelay && !hasAction {
+				return false, fmt.Errorf("%s must define either delay_ms or action", stepPath)
+			}
+			if hasDelay && hasAction {
+				return false, fmt.Errorf("%s cannot define both delay_ms and action", stepPath)
+			}
+			if step.DelayMS < 0 {
+				return false, fmt.Errorf("%s.delay_ms cannot be negative", stepPath)
+			}
+			if hasDelay && step.DelayMS < 10 {
+				return false, fmt.Errorf("%s.delay_ms too small: %d", stepPath, step.DelayMS)
+			}
+			if hasAction {
+				if err := validateAction(step.Action, stepPath+".action"); err != nil {
+					return false, err
+				}
+			}
+		}
+		return false, nil
 	}
 	action := g.Action()
 	if action == nil {

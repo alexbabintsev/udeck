@@ -43,25 +43,25 @@ func TestPageZIPUsesDifferentIconNamesForDifferentPages(t *testing.T) {
 	}
 }
 
-func TestPageZIPBuildsWorkDirectoryFromExampleConfig(t *testing.T) {
+func TestPageZIPBuildsWorkFolderFromExampleConfig(t *testing.T) {
 	cfg, err := config.Load(filepath.Join("..", "..", "examples", "test-config.yaml"))
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
 
-	var work *config.Directory
+	var work *config.Folder
 	for _, btn := range cfg.Buttons {
 		if btn.Label == "Work" {
-			work = btn.Directory
+			work = btn.Folder
 			break
 		}
 	}
 	if work == nil {
-		t.Fatal("work directory not found in example config")
+		t.Fatal("work folder not found in example config")
 	}
 
 	if _, err := PageZIP(append([]config.Button(nil), work.Buttons...)); err != nil {
-		t.Fatalf("expected Work directory ZIP to build, got %v", err)
+		t.Fatalf("expected Work folder ZIP to build, got %v", err)
 	}
 }
 

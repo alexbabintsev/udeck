@@ -15,6 +15,8 @@ actual development milestones rather than formal releases.
   omitted.
 - Added toggle sequences for action buttons, with per-step
   `label` / `icon` / `action` and looping state on a single gesture.
+- Added chained button actions with ordered `action` / `delay_ms`
+  steps on a single gesture.
 - Added `project` widget support with tmux-backed status and
   `start/stop/focus` shell scripts.
 - Project widgets can now remap gestures explicitly, for example

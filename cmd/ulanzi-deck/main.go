@@ -328,7 +328,7 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 		}
 		if gestures != nil && nav != nil {
 			if evt := gestures.Tick(nav.currentButtons(), time.Now()); evt != nil {
-				action, changed := resolveActionEvent(evt, toggles)
+				binding, changed := resolveBindingEvent(evt, toggles)
 				if changed {
 					if err := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); err != nil {
 						if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, fmt.Errorf("update toggle page: %w", err)); recovered {
@@ -339,11 +339,11 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 						}
 					}
 				}
-				if action == nil {
+				if binding == nil {
 					lastKeepalive = time.Now()
 					continue
 				}
-				if err := actions.Run(action); err != nil {
+				if err := actions.RunBinding(binding); err != nil {
 					fmt.Fprintf(os.Stderr, "action error: %v\n", err)
 				}
 				lastKeepalive = time.Now()
@@ -396,11 +396,11 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 			lastKeepalive = time.Now()
 			continue
 		}
-		var action *config.Action
+		var binding *config.GestureBinding
 		if btn != nil && btn.On != nil && gestures != nil {
 			if evt := gestures.HandleEvent(btn, ev.Pressed, time.Now()); evt != nil {
 				var changed bool
-				action, changed = resolveActionEvent(evt, toggles)
+				binding, changed = resolveBindingEvent(evt, toggles)
 				if changed {
 					if err := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); err != nil {
 						if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, fmt.Errorf("update toggle page: %w", err)); recovered {
@@ -412,7 +412,7 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 					}
 				}
 			}
-			if action == nil {
+			if binding == nil {
 				continue
 			}
 		}
@@ -424,8 +424,8 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 				}
 			}
 		}
-		if action != nil {
-			if err := actions.Run(action); err != nil {
+		if binding != nil {
+			if err := actions.RunBinding(binding); err != nil {
 				fmt.Fprintf(os.Stderr, "action error: %v\n", err)
 			}
 			lastKeepalive = time.Now()
@@ -448,16 +448,16 @@ func refreshCurrentPage(cfg *config.Config, dev *device.Device, nav *navigator, 
 	return applyDeviceState(dev, cfg, buttons)
 }
 
-func resolveActionEvent(evt *gestureEvent, toggles *toggleManager) (*config.Action, bool) {
+func resolveBindingEvent(evt *gestureEvent, toggles *toggleManager) (*config.GestureBinding, bool) {
 	if evt == nil || evt.Button == nil || evt.Button.On == nil {
 		return nil, false
 	}
 	if toggles != nil {
-		if action, changed := toggles.Handle(evt.ButtonID, evt.Kind); action != nil || changed {
-			return action, changed
+		if binding, changed := toggles.Handle(evt.ButtonID, evt.Kind); binding != nil || changed {
+			return binding, changed
 		}
 	}
-	return actionForKind(evt.Button.On, evt.Kind), false
+	return bindingForKind(evt.Button.On, evt.Kind), false
 }
 
 func applyDeviceState(dev *device.Device, cfg *config.Config, buttons []config.Button) error {

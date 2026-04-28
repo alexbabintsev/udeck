@@ -233,6 +233,81 @@ func TestValidateAcceptsToggleBinding(t *testing.T) {
 	}
 }
 
+func TestValidateAcceptsChainBinding(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At: [2]int{0, 0},
+				On: &Handlers{
+					Tap: &GestureBinding{
+						Chain: []ChainStep{
+							{Action: &Action{Type: "shell", Cmd: "echo 1"}},
+							{DelayMS: 250},
+							{Action: &Action{Type: "http", URL: "http://127.0.0.1/test"}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected chain binding to validate, got %v", err)
+	}
+}
+
+func TestValidateRejectsGestureBindingCombiningChainAndDirectAction(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At: [2]int{0, 0},
+				On: &Handlers{
+					Tap: &GestureBinding{
+						Type: "shell",
+						Cmd:  "echo direct",
+						Chain: []ChainStep{
+							{Action: &Action{Type: "shell", Cmd: "echo chain"}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected invalid mixed chain/direct binding")
+	}
+	if !strings.Contains(err.Error(), "cannot combine direct action fields, toggle, and chain") {
+		t.Fatalf("expected mixed chain/direct binding error, got %v", err)
+	}
+}
+
+func TestValidateRejectsChainStepWithBothDelayAndAction(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At: [2]int{0, 0},
+				On: &Handlers{
+					Tap: &GestureBinding{
+						Chain: []ChainStep{
+							{DelayMS: 250, Action: &Action{Type: "shell", Cmd: "echo bad"}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected invalid chain step error")
+	}
+	if !strings.Contains(err.Error(), "cannot define both delay_ms and action") {
+		t.Fatalf("expected invalid chain step error, got %v", err)
+	}
+}
+
 func TestValidateRejectsMultipleToggleGesturesOnOneButton(t *testing.T) {
 	cfg := &Config{
 		Buttons: []Button{

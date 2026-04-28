@@ -276,6 +276,20 @@ buttons:
                     type: shell
                     cmd: "echo toggle-c >> /tmp/ulanzi-deck-test.log"
 
+        - at: [2, 1]
+          label: "Chain"
+          icon: test-icons/work-folder.png
+          on:
+            tap:
+              chain:
+                - action:
+                    type: shell
+                    cmd: "echo chain-a >> /tmp/ulanzi-deck-test.log"
+                - delay_ms: 400
+                - action:
+                    type: shell
+                    cmd: "echo chain-b >> /tmp/ulanzi-deck-test.log"
+
   - at: [1, 1]
     label: "Memory"
     widget:
