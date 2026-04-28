@@ -3,38 +3,44 @@ package widgets
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
+	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
 )
 
 type Widget interface {
 	IconPath() string
-	Press()
+	HandleGesture(kind ig.Kind)
 	Close() error
 }
 
 type widgetDef struct {
 	kind string
-	cfg  config.Widget
+	btn  config.Button
 }
 
 var newSpotifyService = NewSpotifyService
 
 type Manager struct {
-	mu      sync.RWMutex
-	defs    map[string]widgetDef
-	items   map[string]Widget
-	updates chan string
-	spotify *SpotifyService
+	mu       sync.RWMutex
+	defs     map[string]widgetDef
+	items    map[string]Widget
+	updates  chan string
+	spotify  *SpotifyService
+	settings config.WidgetSettings
+	engine   *ig.Engine
 }
 
-func NewManager(buttons []config.Button) (*Manager, error) {
+func NewManager(cfg *config.Config) (*Manager, error) {
 	m := &Manager{
-		defs:    map[string]widgetDef{},
-		items:   map[string]Widget{},
-		updates: make(chan string, 32),
+		defs:     map[string]widgetDef{},
+		items:    map[string]Widget{},
+		updates:  make(chan string, 32),
+		settings: cfg.Widgets,
+		engine:   ig.New(),
 	}
-	m.collectDefs(buttons)
+	m.collectDefs(cfg.Buttons)
 	if pollMS, ok := m.spotifyPollMS(); ok {
 		service, err := newSpotifyService(pollMS)
 		if err != nil {
@@ -107,14 +113,48 @@ func (m *Manager) SyncVisible(buttons []config.Button) error {
 	return nil
 }
 
-func (m *Manager) Press(id string) bool {
+func (m *Manager) HandleEvent(id string, pressed bool, now time.Time) bool {
+	opts, ok := m.gestureOptions(id)
+	if !ok {
+		return false
+	}
+	kind := m.engine.HandleEvent(id, opts, pressed, now)
+	if kind == ig.None {
+		return true
+	}
 	m.mu.RLock()
 	item, ok := m.items[id]
 	m.mu.RUnlock()
 	if !ok {
+		return true
+	}
+	item.HandleGesture(kind)
+	return true
+}
+
+func (m *Manager) Tick(buttons []config.Button, now time.Time) bool {
+	var bindings []ig.Binding
+	for _, btn := range buttons {
+		if btn.Widget == nil {
+			continue
+		}
+		opts, ok := m.gestureOptions(btn.RuntimeID)
+		if !ok {
+			continue
+		}
+		bindings = append(bindings, ig.Binding{ID: btn.RuntimeID, Options: opts})
+	}
+	id, kind := m.engine.Tick(bindings, now)
+	if kind == ig.None {
 		return false
 	}
-	item.Press()
+	m.mu.RLock()
+	item := m.items[id]
+	m.mu.RUnlock()
+	if item == nil {
+		return false
+	}
+	item.HandleGesture(kind)
 	return true
 }
 
@@ -123,7 +163,7 @@ func (m *Manager) collectDefs(buttons []config.Button) {
 		if btn.Widget != nil {
 			m.defs[btn.RuntimeID] = widgetDef{
 				kind: btn.Widget.Type,
-				cfg:  *btn.Widget,
+				btn:  btn,
 			}
 		}
 		if btn.Directory != nil {
@@ -140,10 +180,10 @@ func (m *Manager) newWidgetLocked(id string) (Widget, error) {
 
 	switch def.kind {
 	case "memory":
-		return NewMemoryWidget(id, &def.cfg, m.notify)
+		return NewMemoryWidget(id, def.btn.Widget, m.notify)
 	case "spotify_play_pause", "spotify_next", "spotify_artwork":
 		if m.spotify == nil {
-			service, err := newSpotifyService(def.cfg.PollMS)
+			service, err := newSpotifyService(def.btn.Widget.PollMS)
 			if err != nil {
 				return nil, err
 			}
@@ -157,6 +197,8 @@ func (m *Manager) newWidgetLocked(id string) (Widget, error) {
 		case "spotify_artwork":
 			return NewSpotifyArtworkWidget(id, m.spotify, m.notify)
 		}
+	case "project":
+		return NewProjectWidget(id, def.btn, m.settings.Project, m.notify)
 	}
 
 	return nil, fmt.Errorf("widget %q type %q unsupported", id, def.kind)
@@ -174,7 +216,7 @@ func isSpotifyWidgetType(kind string) bool {
 func (m *Manager) spotifyPollMS() (int, bool) {
 	for _, def := range m.defs {
 		if isSpotifyWidgetType(def.kind) {
-			return def.cfg.PollMS, true
+			return def.btn.Widget.PollMS, true
 		}
 	}
 	return 0, false
@@ -184,5 +226,24 @@ func (m *Manager) notify(id string) {
 	select {
 	case m.updates <- id:
 	default:
+	}
+}
+
+func (m *Manager) gestureOptions(id string) (ig.Options, bool) {
+	def, ok := m.defs[id]
+	if !ok || def.btn.Widget == nil {
+		return ig.Options{}, false
+	}
+	switch def.kind {
+	case "project":
+		return ig.Options{
+			HasTap:         true,
+			HasLongPress:   true,
+			LongPressDelay: projectLongPressDuration(def.btn.Widget.LongPressMS),
+		}, true
+	case "memory", "spotify_play_pause", "spotify_next", "spotify_artwork":
+		return ig.Options{HasTap: true}, true
+	default:
+		return ig.Options{}, false
 	}
 }

@@ -8,6 +8,12 @@ device:
     size: 11
     weight: 90
 
+widgets:
+  project:
+    terminal: "Ghostty"
+    editor: "PhpStorm"
+    editor_subdir: "www"
+
 buttons:
   - at: [0, 0]
     label: "Apps"
@@ -226,7 +232,7 @@ buttons:
             tap:
               type: key
               key: "cmd t"
-            double_press:
+            double_tap:
               type: shell
               cmd: "open README.md"
 
@@ -304,3 +310,16 @@ buttons:
       tap:
         type: key
         key: "ctrl cmd q"
+
+  - at: [3, 2]
+    label: "Projects"
+    icon: test-icons/work-folder.png
+    directory:
+      buttons:
+        - at: [0, 0]
+          label: "Demo"
+          icon: test-icons/work-folder.png
+          widget:
+            type: project
+            project_dir: /Users/alexbabintsev/Projects/babintsev
+            long_press_ms: 800

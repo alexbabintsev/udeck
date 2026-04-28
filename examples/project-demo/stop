@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+PROJECT_DIR="${PROJECT_DIR:-$(CDPATH= cd -- "$(dirname "$0")" && pwd)}"
+PROJECT_SESSION="${PROJECT_SESSION:-$(basename "$PROJECT_DIR" | tr '.: ' '___')}"
+PROJECT_CHROME_PROJECT="${PROJECT_CHROME_PROJECT:-$(basename "$PROJECT_DIR")}"
+SLATE_CLI_PATH="${SLATE_CLI_PATH:-/Volumes/Black/Projects/chrome-projects/cli/slate}"
+SLATE_EXT_ID="${SLATE_EXT_ID:-jdkjlgbfdjgleildnodgnknmakniinjm}"
+
+tmux kill-session -t "$PROJECT_SESSION" 2>/dev/null || true
+
+if [ -x "$SLATE_CLI_PATH" ]; then
+  SLATE_EXT_ID="$SLATE_EXT_ID" /usr/bin/env bash "$SLATE_CLI_PATH" close "$PROJECT_CHROME_PROJECT" >/dev/null 2>&1 || true
+fi

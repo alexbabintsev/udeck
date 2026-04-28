@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
 	xdraw "golang.org/x/image/draw"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
@@ -66,7 +67,10 @@ func (w *MemoryWidget) IconPath() string {
 	return w.iconPath
 }
 
-func (w *MemoryWidget) Press() {
+func (w *MemoryWidget) HandleGesture(kind ig.Kind) {
+	if kind != ig.Tap {
+		return
+	}
 	w.mu.Lock()
 	if w.busy || w.closed {
 		w.mu.Unlock()

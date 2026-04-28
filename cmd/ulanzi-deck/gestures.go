@@ -4,120 +4,85 @@ import (
 	"time"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
+	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
 )
 
 const (
 	defaultLongPressMS   = 500
-	defaultDoublePressMS = 300
+	defaultDoubleTapMS   = 300
 	defaultRepeatEveryMS = 200
 )
 
 type gestureManager struct {
-	states map[string]*gestureState
-}
-
-type gestureState struct {
-	pressed     bool
-	pressAt     time.Time
-	longFired   bool
-	nextRepeat  time.Time
-	tapPending  bool
-	tapDeadline time.Time
+	engine *ig.Engine
 }
 
 func newGestureManager() *gestureManager {
-	return &gestureManager{states: map[string]*gestureState{}}
+	return &gestureManager{engine: ig.New()}
 }
 
 func (m *gestureManager) Reset() {
-	m.states = map[string]*gestureState{}
+	m.engine.Reset()
 }
 
 func (m *gestureManager) HandleEvent(btn *config.Button, pressed bool, now time.Time) *config.Action {
 	if btn == nil || btn.On == nil {
 		return nil
 	}
-	st := m.state(btn.RuntimeID)
-	tr := btn.On
-
-	if pressed {
-		if tr.DoublePress != nil && st.tapPending && now.Before(st.tapDeadline) {
-			st.tapPending = false
-			st.pressed = true
-			st.pressAt = now
-			st.longFired = false
-			return tr.DoublePress
-		}
-		st.pressed = true
-		st.pressAt = now
-		st.longFired = false
-		if tr.Repeat != nil {
-			st.nextRepeat = now.Add(initialRepeatDelay(tr))
-		}
-		return nil
-	}
-
-	if !st.pressed {
-		return nil
-	}
-	st.pressed = false
-	held := now.Sub(st.pressAt)
-	if tr.LongPress != nil && !st.longFired && held >= longPressDuration(tr) {
-		st.longFired = true
-		return tr.LongPress
-	}
-	if st.longFired {
-		st.tapPending = false
-		return nil
-	}
-	if tr.DoublePress != nil {
-		st.tapPending = true
-		st.tapDeadline = now.Add(doublePressDuration(tr))
-		return nil
-	}
-	return tr.Tap
+	kind := m.engine.HandleEvent(btn.RuntimeID, handlerOptions(btn.On), pressed, now)
+	return actionForKind(btn.On, kind)
 }
 
 func (m *gestureManager) Tick(buttons []config.Button, now time.Time) *config.Action {
+	var bindings []ig.Binding
 	for i := range buttons {
 		btn := &buttons[i]
 		if btn.On == nil {
 			continue
 		}
-		st := m.states[btn.RuntimeID]
-		if st == nil {
-			continue
-		}
-		tr := btn.On
-		if st.pressed {
-			if tr.LongPress != nil && !st.longFired && now.Sub(st.pressAt) >= longPressDuration(tr) {
-				st.longFired = true
-				st.tapPending = false
-				if tr.Repeat != nil {
-					st.nextRepeat = now.Add(repeatEveryDuration(tr))
-				}
-				return tr.LongPress
-			}
-			if tr.Repeat != nil && !st.nextRepeat.IsZero() && !now.Before(st.nextRepeat) {
-				st.nextRepeat = now.Add(repeatEveryDuration(tr))
-				return tr.Repeat
-			}
-		}
-		if st.tapPending && !now.Before(st.tapDeadline) {
-			st.tapPending = false
-			return tr.Tap
+		bindings = append(bindings, ig.Binding{
+			ID:      btn.RuntimeID,
+			Options: handlerOptions(btn.On),
+		})
+	}
+	id, kind := m.engine.Tick(bindings, now)
+	if kind == ig.None {
+		return nil
+	}
+	for i := range buttons {
+		btn := &buttons[i]
+		if btn.RuntimeID == id && btn.On != nil {
+			return actionForKind(btn.On, kind)
 		}
 	}
 	return nil
 }
 
-func (m *gestureManager) state(id string) *gestureState {
-	if st, ok := m.states[id]; ok {
-		return st
+func handlerOptions(tr *config.Handlers) ig.Options {
+	return ig.Options{
+		HasTap:         tr.Tap != nil,
+		HasDoubleTap:   tr.DoubleTap != nil,
+		HasLongPress:   tr.LongPress != nil,
+		HasRepeat:      tr.Repeat != nil,
+		LongPressDelay: longPressDuration(tr),
+		DoubleTapDelay: doubleTapDuration(tr),
+		RepeatEvery:    repeatEveryDuration(tr),
 	}
-	st := &gestureState{}
-	m.states[id] = st
-	return st
+}
+
+func actionForKind(tr *config.Handlers, kind ig.Kind) *config.Action {
+	switch kind {
+	case ig.Tap:
+		return tr.Tap
+	case ig.DoubleTap:
+		return tr.DoubleTap
+	case ig.LongPress:
+		return tr.LongPress
+	case ig.Repeat:
+		return tr.Repeat
+	default:
+		return nil
+	}
 }
 
 func longPressDuration(tr *config.Handlers) time.Duration {
@@ -128,10 +93,10 @@ func longPressDuration(tr *config.Handlers) time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
-func doublePressDuration(tr *config.Handlers) time.Duration {
-	ms := tr.DoublePressMS
+func doubleTapDuration(tr *config.Handlers) time.Duration {
+	ms := tr.DoubleTapMS
 	if ms <= 0 {
-		ms = defaultDoublePressMS
+		ms = defaultDoubleTapMS
 	}
 	return time.Duration(ms) * time.Millisecond
 }
@@ -142,11 +107,4 @@ func repeatEveryDuration(tr *config.Handlers) time.Duration {
 		ms = defaultRepeatEveryMS
 	}
 	return time.Duration(ms) * time.Millisecond
-}
-
-func initialRepeatDelay(tr *config.Handlers) time.Duration {
-	if tr.LongPress != nil {
-		return longPressDuration(tr)
-	}
-	return repeatEveryDuration(tr)
 }

@@ -195,11 +195,11 @@ func TestValidateAcceptsOnHandlers(t *testing.T) {
 				At: [2]int{0, 0},
 				On: &Handlers{
 					Tap:           &Action{Type: "shell", Cmd: "echo tap"},
-					DoublePress:   &Action{Type: "key", Key: "cmd t"},
+					DoubleTap:     &Action{Type: "key", Key: "cmd t"},
 					LongPress:     &Action{Type: "http", URL: "http://127.0.0.1/test"},
 					Repeat:        &Action{Type: "key", Key: "space"},
 					LongPressMS:   500,
-					DoublePressMS: 300,
+					DoubleTapMS:   300,
 					RepeatEveryMS: 120,
 				},
 			},
@@ -238,6 +238,43 @@ func TestValidateAcceptsSpotifyWidgets(t *testing.T) {
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected spotify widgets to validate, got %v", err)
+	}
+}
+
+func TestValidateAcceptsProjectWidget(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At: [2]int{0, 0},
+				Widget: &Widget{
+					Type:       "project",
+					ProjectDir: "/tmp/demo-project",
+				},
+			},
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected project widget to validate, got %v", err)
+	}
+}
+
+func TestValidateRejectsProjectWidgetWithoutDir(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At:     [2]int{0, 0},
+				Widget: &Widget{Type: "project"},
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected missing project_dir validation error")
+	}
+	if !strings.Contains(err.Error(), "widget.project_dir is empty") {
+		t.Fatalf("expected missing project_dir error, got %v", err)
 	}
 }
 

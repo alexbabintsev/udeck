@@ -25,21 +25,22 @@ func TestGestureManagerTap(t *testing.T) {
 	}
 }
 
-func TestGestureManagerDoublePress(t *testing.T) {
+func TestGestureManagerDoubleTap(t *testing.T) {
 	gm := newGestureManager()
 	btn := config.Button{
 		RuntimeID: "buttons[0]",
 		On: &config.Handlers{
-			Tap:         &config.Action{Type: "shell", Cmd: "echo tap"},
-			DoublePress: &config.Action{Type: "shell", Cmd: "echo double"},
+			Tap:       &config.Action{Type: "shell", Cmd: "echo tap"},
+			DoubleTap: &config.Action{Type: "shell", Cmd: "echo double"},
 		},
 	}
 	now := time.Unix(100, 0)
 	_ = gm.HandleEvent(&btn, true, now)
 	_ = gm.HandleEvent(&btn, false, now.Add(30*time.Millisecond))
-	got := gm.HandleEvent(&btn, true, now.Add(120*time.Millisecond))
-	if got != btn.On.DoublePress {
-		t.Fatalf("expected double press action, got %#v", got)
+	_ = gm.HandleEvent(&btn, true, now.Add(120*time.Millisecond))
+	got := gm.HandleEvent(&btn, false, now.Add(150*time.Millisecond))
+	if got != btn.On.DoubleTap {
+		t.Fatalf("expected double tap action, got %#v", got)
 	}
 }
 
@@ -71,9 +72,9 @@ func TestGestureManagerDelayedTapAfterDoubleWindow(t *testing.T) {
 	btn := config.Button{
 		RuntimeID: "buttons[0]",
 		On: &config.Handlers{
-			Tap:           &config.Action{Type: "shell", Cmd: "echo tap"},
-			DoublePress:   &config.Action{Type: "shell", Cmd: "echo double"},
-			DoublePressMS: 200,
+			Tap:         &config.Action{Type: "shell", Cmd: "echo tap"},
+			DoubleTap:   &config.Action{Type: "shell", Cmd: "echo double"},
+			DoubleTapMS: 200,
 		},
 	}
 	now := time.Unix(100, 0)

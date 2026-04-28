@@ -13,9 +13,23 @@ actual development milestones rather than formal releases.
   config file.
 - `run` now defaults to `examples/test-config.yaml` when `--config` is
   omitted.
-- Widget runtimes now activate lazily for the currently visible page
-  instead of all widget definitions in the config tree.
+- Added `project` widget support with tmux-backed status and
+  `start/stop/focus` shell scripts.
+- Added global `widgets.project` defaults for terminal/editor selection,
+  passed into project scripts and used by fallback focus behavior.
+- Added `editor_subdir` support for project widgets and the derived
+  `PROJECT_EDITOR_TARGET` script environment variable.
+- Added demo project scripts in
+  [examples/project-demo](/Volumes/Black/Projects/ulanzi-deck-go/examples/project-demo:1).
+- Demo project `start` / `stop` scripts now also open/close a Chrome
+  project through Slate when available.
+- Widget instances are created on first page visit and then cached for
+  the lifetime of the active config.
+- Spotify shared runtime is now prewarmed when Spotify widgets exist in
+  the config, avoiding cold-start lag when entering Spotify pages.
 - Polished widget rendering for Spotify and Memory states.
+- Gesture handling now uses a shared engine for action buttons and
+  widgets, with `double_tap` and hold-time `long_press` behavior.
 
 ## v2 Workbench
 
@@ -34,7 +48,7 @@ actual development milestones rather than formal releases.
   - `spotify_artwork`
 - Unified `on:` button handler model with:
   - `tap`
-  - `double_press`
+  - `double_tap`
   - `long_press`
   - `repeat`
 - Config hot reload during `run`.

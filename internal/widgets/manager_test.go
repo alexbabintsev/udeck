@@ -16,7 +16,7 @@ func TestManagerResolveButtonsInjectsWidgetIcon(t *testing.T) {
 		},
 	}
 
-	m, err := NewManager(buttons)
+	m, err := NewManager(&config.Config{Buttons: buttons})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestManagerPrewarmsSpotifyAndKeepsItCached(t *testing.T) {
 		},
 	}
 
-	m, err := NewManager(buttons)
+	m, err := NewManager(&config.Config{Buttons: buttons})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}

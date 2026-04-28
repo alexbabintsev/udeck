@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+PROJECT_DIR="${PROJECT_DIR:-$(CDPATH= cd -- "$(dirname "$0")" && pwd)}"
+PROJECT_TERMINAL="${PROJECT_TERMINAL:-Terminal}"
+
+/usr/bin/open -a "$PROJECT_TERMINAL" "$PROJECT_DIR" >/dev/null 2>&1 || true

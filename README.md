@@ -42,7 +42,7 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
 - Nested button directories with automatic `Back`
 - Unified button handlers via `on:`
   - `tap`
-  - `double_press`
+  - `double_tap`
   - `long_press`
   - `repeat`
 - Action types:
@@ -54,10 +54,12 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
   - `spotify_play_pause`
   - `spotify_next`
   - `spotify_artwork`
+  - `project`
 - Config hot reload while `run` is active
 - Runtime keepalive to keep the deck out of screensaver
 - Auto-recovery on common HID read/write/open failures
-- Lazy widget activation for the currently visible page
+- Widget instances are created on first page visit and then cached
+- Spotify shared runtime is prewarmed when the config contains Spotify widgets
 - macOS power-event handling for sleep / wake / shutdown
 - Startup retry/backoff to survive transient HID access errors
 
@@ -103,6 +105,7 @@ canonical demo profile and includes:
 - standard shell / key / http actions
 - `memory` widget
 - `spotify_*` widgets
+- `project` widget with demo `start/stop/focus` scripts
 - gesture test buttons
 - Hammerspoon integration examples
 
@@ -116,6 +119,12 @@ Current config surface:
   - `show_title`: boolean
   - `size`: integer font size
   - `weight`: integer font weight
+- `widgets.project`: optional global defaults for project widgets
+  - `terminal`: app name used by default `focus` behavior and passed to
+    scripts as `PROJECT_TERMINAL`
+  - `editor`: app name passed to scripts as `PROJECT_EDITOR`
+  - `editor_subdir`: optional subdirectory opened by the editor by
+    default, for example `www`
 - `buttons[]`
   - `at`: `[col, row]`, zero-based, `col=0..4`, `row=0..2`
   - `label`: button text
@@ -129,14 +138,25 @@ Current config surface:
     - `type: spotify_play_pause`
     - `type: spotify_next`
     - `type: spotify_artwork`
+    - `type: project`
+      - `project_dir`: project root; relative paths are resolved relative
+        to the config file
+      - `session`: optional tmux session override; defaults to the project
+        directory name
+      - `editor_subdir`: optional per-project override for the editor
+        target subdirectory
+      - `long_press_ms`: optional stop threshold override
+      - `scripts.start`: optional override for the start script path
+      - `scripts.stop`: optional override for the stop script path
+      - `scripts.focus`: optional override for the focus script path
   - `on`
     - `tap`
-    - `double_press`
+    - `double_tap`
     - `long_press`
     - `repeat`
     - optional timing overrides:
       - `long_press_ms`
-      - `double_press_ms`
+      - `double_tap_ms`
       - `repeat_every_ms`
   - each handler uses an action payload:
     - `type: shell` with `cmd: "..."` to run a shell command
@@ -157,6 +177,12 @@ device:
     size: 10
     weight: 80
 
+widgets:
+  project:
+    terminal: "Ghostty"
+    editor: "PhpStorm"
+    editor_subdir: "www"
+
 buttons:
   - at: [0, 0]
     label: "Folder"
@@ -175,6 +201,14 @@ buttons:
     widget:
       type: spotify_artwork
 
+  - at: [3, 0]
+    label: "Project"
+    icon: test-icons/work-folder.png
+    widget:
+      type: project
+      project_dir: project-demo
+      long_press_ms: 800
+
   - at: [4, 1]
     label: "Double"
     icon: test-icons/tab.png
@@ -182,7 +216,7 @@ buttons:
       tap:
         type: key
         key: "cmd t"
-      double_press:
+      double_tap:
         type: shell
         cmd: "open README.md"
 ```
@@ -197,12 +231,35 @@ Notes:
 - `run` hot-reloads the YAML config automatically when the file changes.
 - `run` also watches configured static icon files and reloads the page
   when those assets change on disk.
+- Gesture semantics:
+  - `tap` fires on release
+  - `double_tap` fires on the second tap
+  - `long_press` fires as soon as the hold threshold is reached
+  - `repeat` starts after the long-press threshold when both are set
 - Widgets write icons atomically so page refreshes do not race on partial
   PNG files.
+- Project widgets detect status from a tmux session and run
+  `start` / `stop` / `focus` scripts from the configured project
+  directory. By default those paths are `<project_dir>/start`,
+  `<project_dir>/stop`, and `<project_dir>/focus`.
+- Project widgets inherit optional global defaults from `widgets.project`
+  and pass them into scripts as `PROJECT_TERMINAL` and
+  `PROJECT_EDITOR`.
+- Project widgets also compute `PROJECT_EDITOR_TARGET`, which resolves to
+  either `<project_dir>` or `<project_dir>/<editor_subdir>` depending on
+  global and per-widget config.
+- The demo project scripts also honor `PROJECT_CHROME_PROJECT`,
+  `SLATE_CLI_PATH`, and `SLATE_EXT_ID` so they can open/close a Chrome
+  project through Slate when that tooling is available.
+- Project scripts are invoked through `/bin/sh`, so they do not need the
+  executable bit as long as the script contents are valid shell.
 - Spotify widgets use one internal shared service inside the
   `ulanzi-deck` process; no separate `spotify-daemon` is required.
-- Spotify and other widget runtimes are activated lazily for the current
-  visible page instead of always running for every widget in the config.
+- Widget instances are created when you first open the page that uses
+  them and then stay cached until config reload or shutdown.
+- Spotify uses one shared runtime that is prewarmed when the config
+  contains Spotify widgets, so entering a Spotify directory does not
+  incur a cold-start delay.
 - Spotify artwork fetch still uses network access to resolve current
   cover art from Spotify track metadata.
 - The runtime periodically reapplies device state as a keepalive and

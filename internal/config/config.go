@@ -13,8 +13,19 @@ import (
 // Config is the top-level schema.
 type Config struct {
 	Device    DeviceConfig    `yaml:"device"`
+	Widgets   WidgetSettings  `yaml:"widgets,omitempty"`
 	Buttons   []Button        `yaml:"buttons,omitempty"`
 	SmallView *SmallViewBlock `yaml:"smallview,omitempty"` // reserved for v3
+}
+
+type WidgetSettings struct {
+	Project ProjectWidgetSettings `yaml:"project,omitempty"`
+}
+
+type ProjectWidgetSettings struct {
+	Terminal     string `yaml:"terminal,omitempty"`
+	Editor       string `yaml:"editor,omitempty"`
+	EditorSubdir string `yaml:"editor_subdir,omitempty"`
 }
 
 type DeviceConfig struct {
@@ -53,20 +64,31 @@ type Directory struct {
 
 // Widget defines a dynamic button that manages its own icon and press logic.
 type Widget struct {
-	Type   string   `yaml:"type"`
-	Apps   []string `yaml:"apps,omitempty"`
-	PollMS int      `yaml:"poll_ms,omitempty"`
+	Type         string        `yaml:"type"`
+	Apps         []string      `yaml:"apps,omitempty"`
+	PollMS       int           `yaml:"poll_ms,omitempty"`
+	ProjectDir   string        `yaml:"project_dir,omitempty"`
+	Session      string        `yaml:"session,omitempty"`
+	EditorSubdir string        `yaml:"editor_subdir,omitempty"`
+	Scripts      WidgetScripts `yaml:"scripts,omitempty"`
+	LongPressMS  int           `yaml:"long_press_ms,omitempty"`
+}
+
+type WidgetScripts struct {
+	Start string `yaml:"start,omitempty"`
+	Stop  string `yaml:"stop,omitempty"`
+	Focus string `yaml:"focus,omitempty"`
 }
 
 // Handlers defines interaction handlers for a button. This is only valid
 // for action buttons and is mutually exclusive with Directory/Widget.
 type Handlers struct {
 	Tap           *Action `yaml:"tap,omitempty"`
-	DoublePress   *Action `yaml:"double_press,omitempty"`
+	DoubleTap     *Action `yaml:"double_tap,omitempty"`
 	LongPress     *Action `yaml:"long_press,omitempty"`
 	Repeat        *Action `yaml:"repeat,omitempty"`
 	LongPressMS   int     `yaml:"long_press_ms,omitempty"`
-	DoublePressMS int     `yaml:"double_press_ms,omitempty"`
+	DoubleTapMS   int     `yaml:"double_tap_ms,omitempty"`
 	RepeatEveryMS int     `yaml:"repeat_every_ms,omitempty"`
 }
 
@@ -190,9 +212,9 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 					return err
 				}
 			}
-			if tr.DoublePress != nil {
+			if tr.DoubleTap != nil {
 				actionCount++
-				if err := validateAction(tr.DoublePress, fmt.Sprintf("%s[%d].on.double_press", path, i)); err != nil {
+				if err := validateAction(tr.DoubleTap, fmt.Sprintf("%s[%d].on.double_tap", path, i)); err != nil {
 					return err
 				}
 			}
@@ -214,8 +236,8 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 			if tr.LongPressMS != 0 && tr.LongPressMS < 100 {
 				return fmt.Errorf("%s[%d].on.long_press_ms too small: %d", path, i, tr.LongPressMS)
 			}
-			if tr.DoublePressMS != 0 && tr.DoublePressMS < 100 {
-				return fmt.Errorf("%s[%d].on.double_press_ms too small: %d", path, i, tr.DoublePressMS)
+			if tr.DoubleTapMS != 0 && tr.DoubleTapMS < 100 {
+				return fmt.Errorf("%s[%d].on.double_tap_ms too small: %d", path, i, tr.DoubleTapMS)
 			}
 			if tr.RepeatEveryMS != 0 && tr.RepeatEveryMS < 50 {
 				return fmt.Errorf("%s[%d].on.repeat_every_ms too small: %d", path, i, tr.RepeatEveryMS)
@@ -227,8 +249,18 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 				if w.PollMS != 0 && w.PollMS < 1000 {
 					return fmt.Errorf("%s[%d].widget.poll_ms too small: %d", path, i, w.PollMS)
 				}
+			case "project":
+				if strings.TrimSpace(w.ProjectDir) == "" {
+					return fmt.Errorf("%s[%d].widget.project_dir is empty", path, i)
+				}
+				if w.PollMS != 0 && w.PollMS < 1000 {
+					return fmt.Errorf("%s[%d].widget.poll_ms too small: %d", path, i, w.PollMS)
+				}
+				if w.LongPressMS != 0 && w.LongPressMS < 100 {
+					return fmt.Errorf("%s[%d].widget.long_press_ms too small: %d", path, i, w.LongPressMS)
+				}
 			default:
-				return fmt.Errorf("%s[%d].widget.type %q unknown (memory|spotify_play_pause|spotify_next|spotify_artwork)", path, i, w.Type)
+				return fmt.Errorf("%s[%d].widget.type %q unknown (memory|spotify_play_pause|spotify_next|spotify_artwork|project)", path, i, w.Type)
 			}
 		}
 		if d := btn.Directory; d != nil {
@@ -270,6 +302,10 @@ func resolveButtonPaths(buttons []Button, baseDir string) {
 			if _, err := os.Stat(buttons[i].Icon); err != nil {
 				buttons[i].Icon = filepath.Join(baseDir, buttons[i].Icon)
 			}
+		}
+		if buttons[i].Widget != nil && buttons[i].Widget.ProjectDir != "" &&
+			!filepath.IsAbs(buttons[i].Widget.ProjectDir) && !strings.HasPrefix(buttons[i].Widget.ProjectDir, "~/") {
+			buttons[i].Widget.ProjectDir = filepath.Join(baseDir, buttons[i].Widget.ProjectDir)
 		}
 		if buttons[i].Directory != nil {
 			resolveButtonPaths(buttons[i].Directory.Buttons, baseDir)

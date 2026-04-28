@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
 	xdraw "golang.org/x/image/draw"
 	"golang.org/x/image/font/basicfont"
 
@@ -344,7 +345,11 @@ func NewSpotifyPlayPauseWidget(id string, service *SpotifyService, notify func(s
 	return w, nil
 }
 
-func (w *SpotifyPlayPauseWidget) Press() { w.service.PlayPause() }
+func (w *SpotifyPlayPauseWidget) HandleGesture(kind ig.Kind) {
+	if kind == ig.Tap {
+		w.service.PlayPause()
+	}
+}
 
 func (w *SpotifyPlayPauseWidget) spotifyUpdate(s spotifySnapshot) {
 	img := image.NewRGBA(image.Rect(0, 0, icons.IconWidth, icons.IconHeight))
@@ -373,7 +378,11 @@ func NewSpotifyNextWidget(id string, service *SpotifyService, notify func(string
 	return w, nil
 }
 
-func (w *SpotifyNextWidget) Press() { w.service.NextTrack() }
+func (w *SpotifyNextWidget) HandleGesture(kind ig.Kind) {
+	if kind == ig.Tap {
+		w.service.NextTrack()
+	}
+}
 
 func (w *SpotifyNextWidget) spotifyUpdate(s spotifySnapshot) {
 	img := image.NewRGBA(image.Rect(0, 0, icons.IconWidth, icons.IconHeight))
@@ -402,7 +411,7 @@ func NewSpotifyArtworkWidget(id string, service *SpotifyService, notify func(str
 	return w, nil
 }
 
-func (w *SpotifyArtworkWidget) Press() {}
+func (w *SpotifyArtworkWidget) HandleGesture(kind ig.Kind) {}
 
 func (w *SpotifyArtworkWidget) spotifyUpdate(s spotifySnapshot) {
 	img := image.NewRGBA(image.Rect(0, 0, icons.IconWidth, icons.IconHeight))

@@ -173,7 +173,7 @@ func cmdRun(args []string) error {
 
 	nav := newNavigator(cfg.Buttons)
 	gestures := newGestureManager()
-	widgetMgr, err := widgets.NewManager(cfg.Buttons)
+	widgetMgr, err := widgets.NewManager(cfg)
 	if err != nil {
 		return fmt.Errorf("widgets: %w", err)
 	}
@@ -265,7 +265,7 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 				} else {
 					nextNav := newNavigator(nextCfg.Buttons)
 					nextGestures := newGestureManager()
-					nextWidgetMgr, err := widgets.NewManager(nextCfg.Buttons)
+					nextWidgetMgr, err := widgets.NewManager(nextCfg)
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "widget reload failed: %v\n", err)
 					} else {
@@ -329,6 +329,11 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 				lastKeepalive = time.Now()
 			}
 		}
+		if widgetMgr != nil && nav != nil {
+			if widgetMgr.Tick(nav.currentButtons(), time.Now()) {
+				lastKeepalive = time.Now()
+			}
+		}
 		raw, err := dev.ReadPacket(100 * time.Millisecond)
 		if err != nil {
 			if recovered, recErr := recoverDevice(cfg, &dev, nav, widgetMgr, err); recovered {
@@ -377,9 +382,9 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 				continue
 			}
 		}
-		if ev.Pressed && widgetMgr != nil {
+		if widgetMgr != nil {
 			if btn != nil && btn.Widget != nil {
-				if widgetMgr.Press(btn.RuntimeID) {
+				if widgetMgr.HandleEvent(btn.RuntimeID, ev.Pressed, time.Now()) {
 					lastKeepalive = time.Now()
 					continue
 				}

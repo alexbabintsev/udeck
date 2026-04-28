@@ -32,6 +32,16 @@ func Run(a *config.Action) error {
 	}
 }
 
+// RunAll fires every action in order and returns the first error, if any.
+func RunAll(actions []config.Action) error {
+	for i := range actions {
+		if err := Run(&actions[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func runShell(cmd string) error {
 	c := execCommand("sh", "-c", cmd)
 	if err := c.Start(); err != nil {
