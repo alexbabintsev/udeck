@@ -1,10 +1,10 @@
 device:
   brightness: 65
   icon_margins:
-    top: 30
-    right: 30
-    bottom: 30
-    left: 25
+    top: 8
+    right: 8
+    bottom: 8
+    left: 8
   label_style:
     align: top
     color: "#F6F6F6"
@@ -15,7 +15,7 @@ device:
 
 widgets:
   project:
-    terminal: "Ghostty"
+    terminal: "iTerm"
     editor: "PhpStorm"
     editor_subdir: "www"
 

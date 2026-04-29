@@ -60,8 +60,8 @@ type LabelStyle struct {
 
 // Button describes one key slot on the deck.
 type Button struct {
-	// At is [col, row], zero-indexed. Valid slots are all [0..4,0..2]
-	// except [4,2], because [3,2] is the device's double-wide button.
+	// At is [col, row] internally. YAML config is normalized from
+	// user-facing [row, col] during Load().
 	At          [2]int    `yaml:"at"`
 	Label       string    `yaml:"label,omitempty"`
 	Icon        string    `yaml:"icon,omitempty"` // path, ~ expanded
@@ -138,7 +138,7 @@ type GestureBinding struct {
 	Chain  []ChainStep  `yaml:"chain,omitempty"`
 }
 
-// HIDIndex converts [col, row] to the flat button index the device uses.
+// HIDIndex converts internal [col, row] to the flat button index the device uses.
 func (b Button) HIDIndex() int {
 	if b.At[1] < 2 {
 		return b.At[1]*5 + b.At[0]
@@ -209,6 +209,7 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+	normalizePageButtonCoordinates(c.PagesOrDefault())
 	assignPageButtonIDs(c.PagesOrDefault())
 	resolvePageButtonPaths(c.PagesOrDefault(), filepath.Dir(path))
 	applyPageButtonDefaults(c.PagesOrDefault(), c.Device.IconMargins)
@@ -619,6 +620,21 @@ func validateProjectWidgetActionName(value string, path string) error {
 func resolvePageButtonPaths(pages []Page, baseDir string) {
 	for i := range pages {
 		resolveButtonPaths(pages[i].Buttons, baseDir)
+	}
+}
+
+func normalizePageButtonCoordinates(pages []Page) {
+	for i := range pages {
+		normalizeButtonCoordinates(pages[i].Buttons)
+	}
+}
+
+func normalizeButtonCoordinates(buttons []Button) {
+	for i := range buttons {
+		buttons[i].At = [2]int{buttons[i].At[1], buttons[i].At[0]}
+		if buttons[i].Folder != nil {
+			normalizeButtonCoordinates(buttons[i].Folder.Buttons)
+		}
 	}
 }
 

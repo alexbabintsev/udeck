@@ -28,9 +28,10 @@ Important rules:
 - `buttons` is a shorthand for a single implicit page named `Main`.
 - Every page must contain at least one button.
 - Button coordinates use the D200 physical layout:
-  - columns: `0..4`
   - rows: `0..2`
-  - slot `4_2` does not exist because `3_2` is double-wide
+  - columns: `0..4`
+  - `at` is written as `[row, col]`
+  - `at: [2, 4]` does not exist because `at: [2, 3]` is double-wide
 
 ## Minimal Example
 
@@ -260,16 +261,16 @@ Supported button fields:
 
 Required.
 
-- Type: `[col, row]`
+- Type: `[row, col]`
 - Valid range:
-  - `col = 0..4`
   - `row = 0..2`
-  - slot `4_2` is invalid because `3_2` is double-wide
+  - `col = 0..4`
+  - `at: [2, 4]` is invalid because `at: [2, 3]` is double-wide
 
 Example:
 
 ```yaml
-at: [3, 1]
+at: [1, 3]
 ```
 
 ### `label`
@@ -289,7 +290,7 @@ Rules:
 - Relative paths are resolved relative to the config file.
 - `~/...` is expanded.
 - Static icons are resized to the target slot size and encoded as JPEG for device upload.
-- Most slots are `196x196`; slot `3_2` is `458x196`.
+- Most slots are `196x196`; `at: [2, 3]` is `458x196`.
 
 Example:
 
@@ -302,7 +303,7 @@ icon: test-icons/terminal.png
 Optional per-button override for static icon margins.
 
 Same format and constraints as `device.icon_margins`.
-For the wide `3_2` slot, `left + right` is validated against `458`.
+For the wide `at: [2, 3]` slot, `left + right` is validated against `458`.
 
 Example:
 
@@ -628,7 +629,7 @@ Rules:
 
 - `folder.buttons` must be non-empty
 - nested button positions must still be unique
-- slot `[3, 2]` is reserved for runtime `Back`
+- slot `[2, 3]` is reserved for runtime `Back`
 
 Behavior:
 
@@ -898,7 +899,7 @@ The loader validates:
 ### Shortcut Button
 
 ```yaml
-- at: [1, 0]
+- at: [0, 1]
   label: "Reload"
   icon: test-icons/reload.png
   on:
@@ -910,7 +911,7 @@ The loader validates:
 ### HTTP Endpoint Button
 
 ```yaml
-- at: [2, 0]
+- at: [0, 2]
   label: "Webhook"
   icon: test-icons/lock.png
   on:
@@ -922,7 +923,7 @@ The loader validates:
 ### Hammerspoon Button
 
 ```yaml
-- at: [2, 0]
+- at: [0, 2]
   label: "Left"
   icon: test-icons/find.png
   on:
@@ -934,14 +935,14 @@ The loader validates:
 ### Next / Previous Page
 
 ```yaml
-- at: [3, 0]
+- at: [0, 3]
   label: "Next"
   icon: test-icons/tab.png
   on:
     tap:
       type: page_next
 
-- at: [4, 0]
+- at: [0, 4]
   label: "Prev"
   icon: test-icons/find.png
   on:
@@ -990,7 +991,7 @@ The loader validates:
 ### Chain
 
 ```yaml
-- at: [2, 1]
+- at: [1, 2]
   label: "Chain"
   icon: test-icons/marker.png
   on:

@@ -54,6 +54,34 @@ func TestValidateAcceptsHashPrefixedLabelColor(t *testing.T) {
 	}
 }
 
+func TestLoadNormalizesAtAsRowCol(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	data := []byte(`
+buttons:
+  - at: [0, 1]
+    label: "A"
+  - at: [2, 3]
+    label: "Wide"
+`)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	buttons := cfg.PagesOrDefault()[0].Buttons
+	if got := buttons[0].At; got != [2]int{1, 0} {
+		t.Fatalf("expected [0,1] YAML to normalize to internal [1,0], got %v", got)
+	}
+	if got := buttons[1].At; got != [2]int{3, 2} {
+		t.Fatalf("expected [2,3] YAML to normalize to internal [3,2], got %v", got)
+	}
+}
+
 func TestValidateRejectsInvalidIconMargins(t *testing.T) {
 	cfg := &Config{
 		Device: DeviceConfig{

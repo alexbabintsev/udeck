@@ -36,9 +36,9 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
 
 - Direct HID control of the D200 without Ulanzi Studio
 - `info`, `dump-events`, `set-brightness`, and `run`
-- Upload and refresh multi-page D200 layouts, including the double-wide `3_2` slot
+- Upload and refresh multi-page D200 layouts, including the double-wide bottom-row slot
 - Global label style and brightness control
-- Local icon loading and resize to the physical slot size (`196x196`, except `3_2` = `458x196`)
+- Local icon loading and resize to the physical slot size (`196x196`, except `at: [2, 3]` = `458x196`)
 - Nested button directories with automatic `Back`
 - Top-level pages with looping `page_next` / `page_prev`
 - Unified button handlers via `on:`
@@ -143,7 +143,7 @@ Current config surface:
 - `pages[]`
   - `name`: optional human-readable page name
   - `buttons[]`
-    - `at`: `[col, row]`, zero-based, `col=0..4`, `row=0..2`, except `4_2` does not exist because `3_2` is double-wide
+    - `at`: `[row, col]`, zero-based, `row=0..2`, `col=0..4`, except `at: [2, 4]` does not exist because `at: [2, 3]` is double-wide
     - `label`: button text
     - `icon`: local image path; `~/...` is expanded; images are resized to
       the target slot size and encoded as JPEG before upload
@@ -244,18 +244,18 @@ pages:
                   type: shell
                   cmd: "open -a Terminal"
 
-      - at: [1, 0]
+      - at: [0, 1]
         label: "Next Page"
         icon: test-icons/tab.png
         on:
           tap:
             type: page_next
 
-      - at: [2, 0]
+      - at: [0, 2]
         widget:
           type: spotify_artwork
 
-      - at: [3, 0]
+      - at: [0, 3]
         label: "Project"
         icon: test-icons/work-folder.png
         widget:
@@ -276,7 +276,7 @@ pages:
           tap:
             type: page_prev
 
-      - at: [1, 0]
+      - at: [0, 1]
         label: "Double"
         icon: test-icons/tab.png
         on:
@@ -287,7 +287,7 @@ pages:
             type: shell
             cmd: "open README.md"
 
-      - at: [0, 1]
+      - at: [1, 0]
         label: "Mode A"
         icon: test-icons/apps-folder.png
         on:
