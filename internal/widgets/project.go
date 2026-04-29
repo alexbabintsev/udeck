@@ -104,10 +104,10 @@ func NewProjectWidget(id string, btn config.Button, settings config.ProjectWidge
 	if btn.Icon != "" {
 		w.seedIcon = loadWidgetSeedIcon(btn.Icon)
 	}
-	if err := w.refreshRunning(); err != nil {
+	if _, err := w.refreshRunning(); err != nil {
 		w.lastError = err.Error()
 	}
-	_ = w.render()
+	_, _ = w.render()
 	go w.loop()
 	return w, nil
 }
@@ -157,7 +157,7 @@ func (w *ProjectWidget) loop() {
 		if busy {
 			continue
 		}
-		if err := w.refreshRunning(); err == nil {
+		if changed, err := w.refreshRunning(); err == nil && changed {
 			w.notify(w.id)
 		}
 	}
@@ -173,8 +173,9 @@ func (w *ProjectWidget) trigger(action projectAction) {
 	w.lastAction = action
 	w.lastError = ""
 	w.mu.Unlock()
-	_ = w.render()
-	w.notify(w.id)
+	if changed, err := w.render(); err == nil && changed {
+		w.notify(w.id)
+	}
 
 	go func() {
 		err := w.runAction(action)
@@ -186,8 +187,9 @@ func (w *ProjectWidget) trigger(action projectAction) {
 			w.lastError = ""
 		}
 		w.mu.Unlock()
-		_ = w.refreshRunning()
-		w.notify(w.id)
+		if changed, refreshErr := w.refreshRunning(); refreshErr == nil && changed {
+			w.notify(w.id)
+		}
 	}()
 }
 
@@ -220,8 +222,9 @@ func (w *ProjectWidget) stopNow() error {
 	w.lastAction = projectActionStop
 	w.lastError = ""
 	w.mu.Unlock()
-	_ = w.render()
-	w.notify(w.id)
+	if changed, err := w.render(); err == nil && changed {
+		w.notify(w.id)
+	}
 
 	err := w.runAction(projectActionStop)
 
@@ -233,8 +236,9 @@ func (w *ProjectWidget) stopNow() error {
 		w.lastError = ""
 	}
 	w.mu.Unlock()
-	_ = w.refreshRunning()
-	w.notify(w.id)
+	if changed, refreshErr := w.refreshRunning(); refreshErr == nil && changed {
+		w.notify(w.id)
+	}
 	return err
 }
 
@@ -267,7 +271,7 @@ func (w *ProjectWidget) runScript(scriptPath string) error {
 	return nil
 }
 
-func (w *ProjectWidget) refreshRunning() error {
+func (w *ProjectWidget) refreshRunning() (bool, error) {
 	running, err := projectHasSession(w.session)
 	w.mu.Lock()
 	if err == nil {
@@ -280,13 +284,14 @@ func (w *ProjectWidget) refreshRunning() error {
 		}
 	}
 	w.mu.Unlock()
-	if renderErr := w.render(); renderErr != nil {
-		return renderErr
+	changed, renderErr := w.render()
+	if renderErr != nil {
+		return false, renderErr
 	}
-	return err
+	return changed, err
 }
 
-func (w *ProjectWidget) render() error {
+func (w *ProjectWidget) render() (bool, error) {
 	w.mu.Lock()
 	running := w.running
 	busy := w.busy
@@ -316,10 +321,11 @@ func (w *ProjectWidget) render() error {
 	draw.Draw(img, image.Rect(18, icons.IconHeight-36, 18+projectStatusWidth(running), icons.IconHeight-26), &image.Uniform{accent}, image.Point{}, draw.Src)
 	drawCenteredFace(img, shortenLine(projectFooter(running, busy, lastAction, lastError, session), 18), icons.IconWidth/2, icons.IconHeight-12, color.RGBA{0xc8, 0xc8, 0xc8, 0xff}, basicfont.Face7x13)
 
-	if err := writePNGAtomic(w.iconPath, img); err != nil {
-		return fmt.Errorf("write project widget icon: %w", err)
+	changed, err := writePNGAtomicIfChanged(w.iconPath, img)
+	if err != nil {
+		return false, fmt.Errorf("write project widget icon: %w", err)
 	}
-	return nil
+	return changed, nil
 }
 
 func projectTitle(label, projectDir string) string {

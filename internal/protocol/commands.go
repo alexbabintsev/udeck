@@ -95,6 +95,27 @@ func SetButtonsFromConfig(buttons []config.Button) ([][PacketSize]byte, error) {
 	return SetButtonsPackets(zipData), nil
 }
 
+func PartiallyUpdateButtonsPackets(zipData []byte) [][PacketSize]byte {
+	first := EncodePacket(CmdPartiallyUpdateButtons, zipData)
+	pkts := [][PacketSize]byte{first}
+	for i := FirstChunkSize; i < len(zipData); i += PacketSize {
+		end := i + PacketSize
+		if end > len(zipData) {
+			end = len(zipData)
+		}
+		pkts = append(pkts, EncodeContinuation(zipData[i:end]))
+	}
+	return pkts
+}
+
+func PartiallyUpdateButtonsFromConfig(buttons []config.Button) ([][PacketSize]byte, error) {
+	zipData, err := PartialPageZIP(buttons)
+	if err != nil {
+		return nil, err
+	}
+	return PartiallyUpdateButtonsPackets(zipData), nil
+}
+
 func parseHexColor(s string) (uint64, error) {
 	s = strings.TrimPrefix(strings.TrimSpace(s), "#")
 	if len(s) != 6 {

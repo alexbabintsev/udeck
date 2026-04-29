@@ -75,6 +75,14 @@ actual development milestones rather than formal releases.
   artwork for button actions, while Lucide stroke width scales relative
   to the final icon size in a shared renderer used by both buttons and
   widgets.
+- Reduced runtime widget overhead by skipping identical rendered frames,
+  rewriting widget PNGs only when bytes change, and refreshing visible
+  widget slots with partial updates instead of full-page reflashes.
+- `wide_dashboard` clock-based modes now refresh on minute changes
+  instead of every second, lowering idle CPU use and improving mode
+  switching smoothness.
+- Fixed the contextual `wide_dashboard` folder-back state so entering or
+  leaving a folder no longer leaves the `3_2` slot blank.
 
 ## v2 Workbench
 

@@ -318,12 +318,14 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 			select {
 			case id := <-widgetMgr.Updates():
 				if nav != nil && buttonVisible(nav.currentButtons(), id) {
-					if err := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); err != nil {
-						if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, fmt.Errorf("update widgets: %w", err)); recovered {
-							lastKeepalive = time.Now()
-							continue
-						} else if recErr != nil {
-							return recErr
+					if err := refreshButtonByID(cfg, dev, nav, toggles, widgetMgr, id); err != nil {
+						if fullErr := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); fullErr != nil {
+							if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, fmt.Errorf("update widgets: %w", err)); recovered {
+								lastKeepalive = time.Now()
+								continue
+							} else if recErr != nil {
+								return recErr
+							}
 						}
 					}
 					lastKeepalive = time.Now()
@@ -475,19 +477,48 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 }
 
 func refreshCurrentPage(cfg *config.Config, dev *device.Device, nav *navigator, toggles *toggleManager, widgetMgr *widgets.Manager) error {
+	buttons, err := resolvedCurrentButtons(nav, toggles, widgetMgr)
+	if err != nil {
+		return err
+	}
+	return applyDeviceState(dev, cfg, buttons)
+}
+
+func refreshButtonByID(cfg *config.Config, dev *device.Device, nav *navigator, toggles *toggleManager, widgetMgr *widgets.Manager, id string) error {
+	buttons, err := resolvedCurrentButtons(nav, toggles, widgetMgr)
+	if err != nil {
+		return err
+	}
+	for _, btn := range buttons {
+		if btn.RuntimeID != id {
+			continue
+		}
+		pkts, err := protocol.PartiallyUpdateButtonsFromConfig([]config.Button{btn})
+		if err != nil {
+			return fmt.Errorf("build partial page zip: %w", err)
+		}
+		if err := dev.SendPackets(pkts); err != nil {
+			return fmt.Errorf("send partial page zip: %w", err)
+		}
+		return nil
+	}
+	return nil
+}
+
+func resolvedCurrentButtons(nav *navigator, toggles *toggleManager, widgetMgr *widgets.Manager) ([]config.Button, error) {
 	buttons := nav.currentButtons()
 	if toggles != nil {
 		buttons = toggles.ResolveButtons(buttons)
 	}
 	if widgetMgr != nil {
 		widgetMgr.SetContext(nav.Context())
-		var err error
-		buttons, err = widgetMgr.ResolveButtons(buttons)
+		resolved, err := widgetMgr.ResolveButtons(buttons)
 		if err != nil {
-			return fmt.Errorf("resolve widgets: %w", err)
+			return nil, fmt.Errorf("resolve widgets: %w", err)
 		}
+		buttons = resolved
 	}
-	return applyDeviceState(dev, cfg, buttons)
+	return buttons, nil
 }
 
 func resolveBindingEvent(evt *gestureEvent, toggles *toggleManager) (*config.GestureBinding, bool) {

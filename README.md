@@ -68,6 +68,8 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
 - Auto-recovery on common HID read/write/open failures
 - Widget instances are created on first page visit and then cached
 - Spotify shared runtime is prewarmed when the config contains Spotify widgets
+- Widget icon files are only rewritten when the rendered frame actually changes
+- Visible widget refreshes now update only the changed slot instead of reflashing the whole page
 - macOS power-event handling for sleep / wake / shutdown
 - Startup retry/backoff to survive transient HID access errors
 
@@ -173,6 +175,7 @@ Current config surface:
         - tap cycles `clock -> weather -> clock+weather -> spotify`
         - inside folders it turns into the folder `Back` button
         - on top-level pages `2+` it shows the page number in the corner
+        - clock-based modes refresh on minute changes instead of every second
       - `type: project`
         - `project_dir`: project root; relative paths are resolved relative
           to the config file
@@ -364,6 +367,9 @@ Notes:
   - only one gesture per button can define a toggle sequence
 - Widgets write icons atomically so page refreshes do not race on partial
   PNG files.
+- Widget renders skip identical frames, and visible widget updates use a
+  single-slot partial refresh path to reduce CPU use and avoid full-page
+  flicker.
 - Project widgets detect status from a tmux session and run
   `start` / `stop` / `focus` scripts from the configured project
   directory. By default those paths are `<project_dir>/start`,

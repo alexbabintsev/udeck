@@ -348,11 +348,12 @@ func (w *spotifyBaseWidget) Close() error {
 	return os.RemoveAll(filepath.Dir(w.iconPath))
 }
 
-func (w *spotifyBaseWidget) writeImage(img image.Image) error {
-	if err := writePNGAtomic(w.iconPath, img); err != nil {
-		return fmt.Errorf("write spotify widget icon: %w", err)
+func (w *spotifyBaseWidget) writeImage(img image.Image) (bool, error) {
+	changed, err := writePNGAtomicIfChanged(w.iconPath, img)
+	if err != nil {
+		return false, fmt.Errorf("write spotify widget icon: %w", err)
 	}
-	return nil
+	return changed, nil
 }
 
 type SpotifyPlayPauseWidget struct {
@@ -383,7 +384,7 @@ func (w *SpotifyPlayPauseWidget) spotifyUpdate(s spotifySnapshot) {
 	drawScaledCenteredText(img, spotifyPlayPauseTitle(s), image.Rect(18, 34, icons.IconWidth-18, 88), accent)
 	drawPlayPauseGlyph(img, s.Playing, accent)
 	drawCenteredFace(img, shortenLine(trackLine(s), 15), icons.IconWidth/2, icons.IconHeight-18, color.RGBA{0xc0, 0xc0, 0xc0, 0xff}, basicfont.Face7x13)
-	if err := w.writeImage(img); err == nil {
+	if changed, err := w.writeImage(img); err == nil && changed {
 		w.notify(w.id)
 	}
 }
@@ -416,7 +417,7 @@ func (w *SpotifyNextWidget) spotifyUpdate(s spotifySnapshot) {
 	drawScaledCenteredText(img, "NEXT", image.Rect(18, 28, icons.IconWidth-18, 78), accent)
 	drawNextGlyph(img, accent)
 	drawCenteredFace(img, shortenLine(trackLine(s), 15), icons.IconWidth/2, icons.IconHeight-18, color.RGBA{0xc0, 0xc0, 0xc0, 0xff}, basicfont.Face7x13)
-	if err := w.writeImage(img); err == nil {
+	if changed, err := w.writeImage(img); err == nil && changed {
 		w.notify(w.id)
 	}
 }
@@ -451,7 +452,7 @@ func (w *SpotifyArtworkWidget) spotifyUpdate(s spotifySnapshot) {
 	}
 	drawCenteredFace(img, shortenLine(displayTrackTitle(s), 18), icons.IconWidth/2, icons.IconHeight-30, color.RGBA{0xff, 0xff, 0xff, 0xff}, basicfont.Face7x13)
 	drawCenteredFace(img, shortenLine(displayArtist(s), 18), icons.IconWidth/2, icons.IconHeight-14, color.RGBA{0xd0, 0xd0, 0xd0, 0xff}, basicfont.Face7x13)
-	if err := w.writeImage(img); err == nil {
+	if changed, err := w.writeImage(img); err == nil && changed {
 		w.notify(w.id)
 	}
 }

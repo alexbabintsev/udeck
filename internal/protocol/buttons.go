@@ -29,19 +29,29 @@ type viewParam struct {
 // resized to 196×196, and embedded as JPEG. Returns an error if any icon
 // fails to load.
 func PageZIP(buttons []config.Button) ([]byte, error) {
+	return pageZIP(buttons, true)
+}
+
+func PartialPageZIP(buttons []config.Button) ([]byte, error) {
+	return pageZIP(buttons, false)
+}
+
+func pageZIP(buttons []config.Button, full bool) ([]byte, error) {
 	manifest := map[string]buttonSlot{}
 	iconData := map[string][]byte{} // icon filename → JPEG bytes
 
-	// Build all physical slots. [4,2] does not exist because [3,2] is
-	// the device's double-wide button.
-	for row := 0; row < 3; row++ {
-		for col := 0; col < 5; col++ {
-			if col == 4 && row == 2 {
-				continue
-			}
-			manifest[fmt.Sprintf("%d_%d", col, row)] = buttonSlot{
-				State:     0,
-				ViewParam: []viewParam{{}},
+	if full {
+		// Build all physical slots. [4,2] does not exist because [3,2] is
+		// the device's double-wide button.
+		for row := 0; row < 3; row++ {
+			for col := 0; col < 5; col++ {
+				if col == 4 && row == 2 {
+					continue
+				}
+				manifest[fmt.Sprintf("%d_%d", col, row)] = buttonSlot{
+					State:     0,
+					ViewParam: []viewParam{{}},
+				}
 			}
 		}
 	}

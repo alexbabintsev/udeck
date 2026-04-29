@@ -56,8 +56,8 @@ func NewMemoryWidget(id string, cfg *config.Widget, notify func(string)) (*Memor
 		iconPath: filepath.Join(dir, "memory.png"),
 		notify:   notify,
 	}
-	if err := w.updateMemory(); err != nil {
-		_ = w.render()
+	if _, err := w.updateMemory(); err != nil {
+		_, _ = w.render()
 	}
 	go w.loop()
 	return w, nil
@@ -83,12 +83,13 @@ func (w *MemoryWidget) HandleGesture(kind ig.Kind) {
 		for _, app := range w.apps {
 			_ = restartApp(app)
 		}
-		_ = w.updateMemory()
+		_, _ = w.updateMemory()
 		w.mu.Lock()
 		w.busy = false
 		w.mu.Unlock()
-		_ = w.render()
-		w.notify(w.id)
+		if changed, err := w.render(); err == nil && changed {
+			w.notify(w.id)
+		}
 	}()
 }
 
@@ -109,24 +110,28 @@ func (w *MemoryWidget) loop() {
 		if closed {
 			return
 		}
-		if err := w.updateMemory(); err == nil {
+		if changed, err := w.updateMemory(); err == nil && changed {
 			w.notify(w.id)
 		}
 	}
 }
 
-func (w *MemoryWidget) updateMemory() error {
+func (w *MemoryWidget) updateMemory() (bool, error) {
 	percent, err := readMemoryPercent()
 	if err != nil {
-		return err
+		return false, err
 	}
 	w.mu.Lock()
+	if w.percent == percent && !w.busy {
+		w.mu.Unlock()
+		return false, nil
+	}
 	w.percent = percent
 	w.mu.Unlock()
 	return w.render()
 }
 
-func (w *MemoryWidget) render() error {
+func (w *MemoryWidget) render() (bool, error) {
 	w.mu.RLock()
 	percent := w.percent
 	busy := w.busy
@@ -148,10 +153,11 @@ func (w *MemoryWidget) render() error {
 		drawCenteredFace(img, "MEMORY", memoryWidgetW/2, memoryWidgetH-18, color.RGBA{0x90, 0x90, 0x90, 0xff}, basicfont.Face7x13)
 	}
 
-	if err := writePNGAtomic(w.iconPath, img); err != nil {
-		return fmt.Errorf("write memory widget icon: %w", err)
+	changed, err := writePNGAtomicIfChanged(w.iconPath, img)
+	if err != nil {
+		return false, fmt.Errorf("write memory widget icon: %w", err)
 	}
-	return nil
+	return changed, nil
 }
 
 func pollDuration(ms int) time.Duration {

@@ -94,7 +94,7 @@ func NewFreqtradeWidget(id string, cfg *config.Widget, notify func(string)) (*Fr
 		notify:   notify,
 		mode:     freqtradeModeSummary,
 	}
-	if err := w.render(); err != nil {
+	if _, err := w.render(); err != nil {
 		return nil, err
 	}
 	go w.loop()
@@ -119,8 +119,9 @@ func (w *FreqtradeWidget) HandleGesture(kind ig.Kind) {
 		w.mode = freqtradeModeSummary
 	}
 	w.mu.Unlock()
-	_ = w.render()
-	w.notify(w.id)
+	if changed, err := w.render(); err == nil && changed {
+		w.notify(w.id)
+	}
 }
 
 func (w *FreqtradeWidget) Close() error {
@@ -150,12 +151,12 @@ func (w *FreqtradeWidget) refresh() {
 	w.trades = trades
 	w.summary = summary
 	w.mu.Unlock()
-	if err := w.render(); err == nil {
+	if changed, err := w.render(); err == nil && changed {
 		w.notify(w.id)
 	}
 }
 
-func (w *FreqtradeWidget) render() error {
+func (w *FreqtradeWidget) render() (bool, error) {
 	w.mu.RLock()
 	title := w.title
 	mode := w.mode
@@ -176,10 +177,11 @@ func (w *FreqtradeWidget) render() error {
 		renderFreqtradeSummary(img, summary, title)
 	}
 
-	if err := writePNGAtomic(w.iconPath, img); err != nil {
-		return fmt.Errorf("write freqtrade widget icon: %w", err)
+	changed, err := writePNGAtomicIfChanged(w.iconPath, img)
+	if err != nil {
+		return false, fmt.Errorf("write freqtrade widget icon: %w", err)
 	}
-	return nil
+	return changed, nil
 }
 
 func renderFreqtradeLog(img *image.RGBA, trades []freqtradeTrade, title string) {

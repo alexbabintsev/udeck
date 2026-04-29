@@ -73,14 +73,15 @@ type WideDashboardWidget struct {
 	iconPath    string
 	notify      func(string)
 
-	mu          sync.RWMutex
-	mode        int
-	context     Context
-	closed      bool
-	weather     dashboardWeatherState
-	coords      *dashboardWeatherCoords
-	lastWeather time.Time
-	spotifyNow  spotifySnapshot
+	mu           sync.RWMutex
+	mode         int
+	context      Context
+	closed       bool
+	weather      dashboardWeatherState
+	coords       *dashboardWeatherCoords
+	lastWeather  time.Time
+	spotifyNow   spotifySnapshot
+	lastFrameKey string
 }
 
 func NewWideDashboardWidget(id string, cfg *config.Widget, spotify *SpotifyService, notify func(string)) (*WideDashboardWidget, error) {
@@ -99,7 +100,7 @@ func NewWideDashboardWidget(id string, cfg *config.Widget, spotify *SpotifyServi
 	if spotify != nil {
 		spotify.Subscribe(w)
 	}
-	if err := w.render(time.Now()); err != nil {
+	if _, err := w.render(time.Now()); err != nil {
 		return nil, err
 	}
 	go w.loop()
@@ -120,7 +121,7 @@ func (w *WideDashboardWidget) HandleGesture(kind ig.Kind) {
 	}
 	w.mode = (w.mode + 1) % dashboardModeCount
 	w.mu.Unlock()
-	if err := w.render(time.Now()); err == nil {
+	if changed, err := w.render(time.Now()); err == nil && changed {
 		w.notify(w.id)
 	}
 }
@@ -133,9 +134,7 @@ func (w *WideDashboardWidget) SetContext(ctx Context) {
 	}
 	w.context = ctx
 	w.mu.Unlock()
-	if err := w.render(time.Now()); err == nil {
-		w.notify(w.id)
-	}
+	_, _ = w.render(time.Now())
 }
 
 func (w *WideDashboardWidget) Close() error {
@@ -152,8 +151,13 @@ func (w *WideDashboardWidget) spotifyUpdate(s spotifySnapshot) {
 		return
 	}
 	w.spotifyNow = s
+	mode := w.mode
+	ctx := w.context
 	w.mu.Unlock()
-	if err := w.render(time.Now()); err == nil {
+	if mode != dashboardModeSpotify || ctx.InFolder() {
+		return
+	}
+	if changed, err := w.render(time.Now()); err == nil && changed {
 		w.notify(w.id)
 	}
 }
@@ -174,7 +178,7 @@ func (w *WideDashboardWidget) loop() {
 		if city != "" && (lastWeather.IsZero() || now.Sub(lastWeather) >= poll) {
 			go w.refreshWeather()
 		}
-		if err := w.render(now); err == nil {
+		if changed, err := w.render(now); err == nil && changed {
 			w.notify(w.id)
 		}
 	}
@@ -235,18 +239,23 @@ func (w *WideDashboardWidget) refreshWeather() {
 	w.lastWeather = time.Now()
 	w.mu.Unlock()
 
-	if err := w.render(time.Now()); err == nil {
+	if changed, err := w.render(time.Now()); err == nil && changed {
 		w.notify(w.id)
 	}
 }
 
-func (w *WideDashboardWidget) render(now time.Time) error {
-	w.mu.RLock()
+func (w *WideDashboardWidget) render(now time.Time) (bool, error) {
+	w.mu.Lock()
 	mode := w.mode
 	ctx := w.context
 	weather := w.weather
 	spotifyNow := w.spotifyNow
-	w.mu.RUnlock()
+	frameKey := dashboardFrameKey(now, mode, ctx, weather, spotifyNow)
+	if frameKey == w.lastFrameKey {
+		w.mu.Unlock()
+		return false, nil
+	}
+	w.mu.Unlock()
 
 	img := image.NewRGBA(image.Rect(0, 0, icons.WideWidth, icons.IconHeight))
 	switch {
@@ -264,10 +273,50 @@ func (w *WideDashboardWidget) render(now time.Time) error {
 		renderDashboardClock(img, now, ctx)
 	}
 
-	if err := writePNGAtomic(w.iconPath, img); err != nil {
-		return fmt.Errorf("write dashboard widget icon: %w", err)
+	changed, err := writePNGAtomicIfChanged(w.iconPath, img)
+	if err != nil {
+		return false, fmt.Errorf("write dashboard widget icon: %w", err)
 	}
-	return nil
+	w.mu.Lock()
+	w.lastFrameKey = frameKey
+	w.mu.Unlock()
+	return changed, nil
+}
+
+func dashboardFrameKey(now time.Time, mode int, ctx Context, weather dashboardWeatherState, spotifyNow spotifySnapshot) string {
+	if ctx.InFolder() {
+		return fmt.Sprintf("back:%d:%d:%d", ctx.PageIndex, ctx.TotalPages, ctx.FolderDepth)
+	}
+	switch mode {
+	case dashboardModeClock:
+		return fmt.Sprintf("clock:%s:%d", now.Format("2006-01-02 15:04"), ctx.PageIndex)
+	case dashboardModeWeather:
+		return fmt.Sprintf("weather:%d:%d:%s:%t:%d:%s", ctx.PageIndex, ctx.TotalPages, weatherKey(weather), weather.TempC != nil, weather.Code, weather.Error)
+	case dashboardModeClockWeather:
+		return fmt.Sprintf("clockweather:%s:%d:%s:%t:%d:%s", now.Format("2006-01-02 15:04"), ctx.PageIndex, weatherKey(weather), weather.TempC != nil, weather.Code, weather.Error)
+	case dashboardModeSpotify:
+		sec := int(math.Floor(spotifyNow.PositionSec))
+		if !spotifyNow.Playing {
+			sec = int(math.Round(spotifyNow.PositionSec))
+		}
+		return fmt.Sprintf("spotify:%d:%t:%s:%s:%s:%s:%d:%d:%t", ctx.PageIndex, spotifyNow.Running, spotifyNow.State, spotifyNow.TrackID, spotifyNow.TrackName, spotifyNow.Album, sec, spotifyNow.DurationMS, spotifyNow.Artwork != nil)
+	default:
+		return fmt.Sprintf("clock:%s:%d", now.Format("2006-01-02 15:04"), ctx.PageIndex)
+	}
+}
+
+func weatherKey(weather dashboardWeatherState) string {
+	temp := "--"
+	if weather.TempC != nil {
+		temp = fmt.Sprintf("%.1f", *weather.TempC)
+	}
+	return strings.Join([]string{
+		weather.CityName,
+		temp,
+		fmt.Sprintf("%d", weather.Code),
+		fmt.Sprintf("%t", weather.Ready),
+		weather.Error,
+	}, "|")
 }
 
 func dashboardWeatherPoll(ms int) time.Duration {
