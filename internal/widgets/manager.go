@@ -337,7 +337,13 @@ func (m *Manager) gestureOptions(id string) (ig.Options, bool) {
 			DoubleTapDelay: 300 * time.Millisecond,
 			RepeatEvery:    opts.RepeatEvery,
 		}, true
-	case "memory", "freqtrade", "spotify_play_pause", "spotify_next", "spotify_artwork", "wide_dashboard":
+	case "spotify_play_pause":
+		return ig.Options{
+			HasTap:    true,
+			HasHold:   true,
+			HoldDelay: projectHoldDuration(def.btn.Widget.HoldMS),
+		}, true
+	case "memory", "freqtrade", "spotify_next", "spotify_artwork", "wide_dashboard":
 		return ig.Options{HasTap: true}, true
 	default:
 		return ig.Options{}, false

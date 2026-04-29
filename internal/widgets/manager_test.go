@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 )
@@ -33,6 +34,33 @@ func TestManagerResolveButtonsInjectsWidgetIcon(t *testing.T) {
 	}
 	if got[0].Label != "" {
 		t.Fatalf("expected widget label to be suppressed, got %q", got[0].Label)
+	}
+}
+
+func TestManagerSpotifyPlayPauseEnablesHoldGesture(t *testing.T) {
+	buttons := []config.Button{
+		{
+			At:        [2]int{0, 0},
+			RuntimeID: "buttons[0]",
+			Widget:    &config.Widget{Type: "spotify_play_pause", HoldMS: 900},
+		},
+	}
+
+	m, err := NewManager(&config.Config{Buttons: buttons})
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer m.Close()
+
+	opts, ok := m.gestureOptions("buttons[0]")
+	if !ok {
+		t.Fatal("expected spotify gesture options")
+	}
+	if !opts.HasTap || !opts.HasHold {
+		t.Fatalf("expected tap and hold enabled, got %+v", opts)
+	}
+	if opts.HoldDelay != 900*time.Millisecond {
+		t.Fatalf("unexpected hold delay: %v", opts.HoldDelay)
 	}
 }
 

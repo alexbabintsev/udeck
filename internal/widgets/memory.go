@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"golang.org/x/image/math/fixed"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 )
 
 const (
@@ -30,6 +32,7 @@ const (
 )
 
 var execFile = exec.Command
+var restartAppFunc = restartApp
 
 type MemoryWidget struct {
 	id       string
@@ -78,10 +81,13 @@ func (w *MemoryWidget) HandleGesture(kind ig.Kind) {
 	}
 	w.busy = true
 	w.mu.Unlock()
+	if changed, err := w.render(); err == nil && changed {
+		w.notify(w.id)
+	}
 
 	go func() {
 		for _, app := range w.apps {
-			_ = restartApp(app)
+			_ = restartAppFunc(app)
 		}
 		_, _ = w.updateMemory()
 		w.mu.Lock()
@@ -139,18 +145,17 @@ func (w *MemoryWidget) render() (bool, error) {
 	w.mu.RUnlock()
 
 	img := image.NewRGBA(image.Rect(0, 0, memoryWidgetW, memoryWidgetH))
-	drawMemoryGradient(img)
+	draw.Draw(img, img.Bounds(), image.Black, image.Point{}, draw.Src)
 
 	col := memoryColor(percent)
-	drawCenteredFace(img, "RAM", memoryWidgetW/2, 24, color.RGBA{0x9a, 0x9a, 0x9a, 0xff}, basicfont.Face7x13)
-	drawScaledCenteredText(img, fmt.Sprintf("%d%%", percent), image.Rect(14, 30, memoryWidgetW-14, 120), col)
-	drawProgressBar(img, percent, col)
+	drawMemoryRing(img, percent, col)
 	if busy {
-		drawCenteredFace(img, "RESTARTING", memoryWidgetW/2, memoryWidgetH-18, color.RGBA{0xe0, 0xa0, 0x20, 0xff}, basicfont.Face7x13)
-	} else if hasApps {
-		drawCenteredFace(img, "TAP TO RESTART", memoryWidgetW/2, memoryWidgetH-18, color.RGBA{0x90, 0x90, 0x90, 0xff}, basicfont.Face7x13)
+		_ = icons.DrawPackIcon(img, "lucide/refresh-cw", image.Rect(58, 58, 138, 138), col)
 	} else {
-		drawCenteredFace(img, "MEMORY", memoryWidgetW/2, memoryWidgetH-18, color.RGBA{0x90, 0x90, 0x90, 0xff}, basicfont.Face7x13)
+		drawDashboardCenteredText(img, fmt.Sprintf("%d", percent), image.Rect(28, 48, memoryWidgetW-28, 146), col, 66)
+	}
+	if hasApps && !busy {
+		// Keep app-enabled widgets visually identical; tap behavior is implicit.
 	}
 
 	changed, err := writePNGAtomicIfChanged(w.iconPath, img)
@@ -178,21 +183,6 @@ func memoryColor(percent int) color.RGBA {
 	}
 }
 
-func drawMemoryGradient(img *image.RGBA) {
-	top := color.RGBA{0x08, 0x0b, 0x10, 0xff}
-	bottom := color.RGBA{0x12, 0x18, 0x21, 0xff}
-	for y := 0; y < memoryWidgetH; y++ {
-		ratio := float64(y) / float64(memoryWidgetH-1)
-		c := color.RGBA{
-			R: uint8(float64(top.R)*(1-ratio) + float64(bottom.R)*ratio),
-			G: uint8(float64(top.G)*(1-ratio) + float64(bottom.G)*ratio),
-			B: uint8(float64(top.B)*(1-ratio) + float64(bottom.B)*ratio),
-			A: 0xff,
-		}
-		draw.Draw(img, image.Rect(0, y, memoryWidgetW, y+1), &image.Uniform{c}, image.Point{}, draw.Src)
-	}
-}
-
 func drawCenteredFace(img *image.RGBA, text string, centerX, baselineY int, clr color.Color, face font.Face) {
 	d := &font.Drawer{Dst: img, Src: image.NewUniform(clr), Face: face}
 	width := d.MeasureString(text).Round()
@@ -200,18 +190,49 @@ func drawCenteredFace(img *image.RGBA, text string, centerX, baselineY int, clr 
 	d.DrawString(text)
 }
 
-func drawProgressBar(img *image.RGBA, percent int, clr color.Color) {
-	bg := color.RGBA{0x22, 0x22, 0x22, 0xff}
-	x := 22
-	y := memoryWidgetH - 42
-	w := memoryWidgetW - 44
-	h := 12
-	draw.Draw(img, image.Rect(x, y, x+w, y+h), &image.Uniform{bg}, image.Point{}, draw.Src)
-	fill := w * percent / 100
-	if fill < 4 {
-		fill = 4
+func drawMemoryRing(img *image.RGBA, percent int, clr color.Color) {
+	const (
+		cx       = memoryWidgetW / 2
+		cy       = memoryWidgetH / 2
+		outerR   = 72.0
+		innerR   = 60.0
+		trackDeg = 360.0
+	)
+
+	track := color.RGBA{0x1f, 0x1f, 0x1f, 0xff}
+	fillDeg := trackDeg * clampPercent(percent) / 100.0
+
+	for y := 0; y < memoryWidgetH; y++ {
+		dy := float64(y-cy) + 0.5
+		for x := 0; x < memoryWidgetW; x++ {
+			dx := float64(x-cx) + 0.5
+			dist := math.Hypot(dx, dy)
+			if dist < innerR || dist > outerR {
+				continue
+			}
+
+			ang := math.Atan2(dy, dx)*180/math.Pi + 90
+			if ang < 0 {
+				ang += 360
+			}
+
+			if ang <= fillDeg {
+				img.Set(x, y, clr)
+			} else {
+				img.Set(x, y, track)
+			}
+		}
 	}
-	draw.Draw(img, image.Rect(x, y, x+fill, y+h), &image.Uniform{clr}, image.Point{}, draw.Src)
+}
+
+func clampPercent(percent int) float64 {
+	if percent < 0 {
+		return 0
+	}
+	if percent > 100 {
+		return 100
+	}
+	return float64(percent)
 }
 
 func drawScaledCenteredText(dst *image.RGBA, text string, target image.Rectangle, clr color.Color) {

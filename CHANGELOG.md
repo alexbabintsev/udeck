@@ -83,6 +83,13 @@ actual development milestones rather than formal releases.
   switching smoothness.
 - Fixed the contextual `wide_dashboard` folder-back state so entering or
   leaving a folder no longer leaves the `3_2` slot blank.
+- Simplified `spotify_play_pause` into a minimal black-card widget with
+  green Lucide play/pause iconography, plus hold-to-skip-next behavior.
+- Fixed the initial `spotify_play_pause` render so its icon is visible
+  immediately on first page load instead of only after the first press.
+- Reworked the `memory` widget into a minimal black-card design with a
+  centered numeric reading, circular progress ring, and immediate
+  `refresh-cw` busy state on tap.
 
 ## v2 Workbench
 

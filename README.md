@@ -166,6 +166,8 @@ Current config surface:
         - `title`: optional short title shown at the top
         - `poll_ms`: optional polling override, minimum `3000`
       - `type: spotify_play_pause`
+        - tap toggles play/pause
+        - hold skips to next track
       - `type: spotify_next`
       - `type: spotify_artwork`
       - `type: wide_dashboard`

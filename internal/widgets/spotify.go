@@ -366,27 +366,40 @@ func NewSpotifyPlayPauseWidget(id string, service *SpotifyService, notify func(s
 		return nil, err
 	}
 	w := &SpotifyPlayPauseWidget{spotifyBaseWidget: base}
+	if _, err := w.writeImage(renderSpotifyPlayPauseImage(spotifySnapshot{})); err != nil {
+		return nil, err
+	}
 	service.Subscribe(w)
 	return w, nil
 }
 
 func (w *SpotifyPlayPauseWidget) HandleGesture(kind ig.Kind) {
-	if kind == ig.Tap {
+	switch kind {
+	case ig.Tap:
 		w.service.PlayPause()
+	case ig.Hold:
+		w.service.NextTrack()
 	}
 }
 
 func (w *SpotifyPlayPauseWidget) spotifyUpdate(s spotifySnapshot) {
-	img := image.NewRGBA(image.Rect(0, 0, icons.IconWidth, icons.IconHeight))
-	drawWidgetGradient(img, color.RGBA{0x08, 0x13, 0x0d, 0xff}, color.RGBA{0x11, 0x25, 0x17, 0xff})
-	accent := spotifyAccent(s)
-	drawSmallBadge(img, spotifyStatusChip(s), accent)
-	drawScaledCenteredText(img, spotifyPlayPauseTitle(s), image.Rect(18, 34, icons.IconWidth-18, 88), accent)
-	drawPlayPauseGlyph(img, s.Playing, accent)
-	drawCenteredFace(img, shortenLine(trackLine(s), 15), icons.IconWidth/2, icons.IconHeight-18, color.RGBA{0xc0, 0xc0, 0xc0, 0xff}, basicfont.Face7x13)
+	img := renderSpotifyPlayPauseImage(s)
 	if changed, err := w.writeImage(img); err == nil && changed {
 		w.notify(w.id)
 	}
+}
+
+func renderSpotifyPlayPauseImage(s spotifySnapshot) *image.RGBA {
+	img := image.NewRGBA(image.Rect(0, 0, icons.IconWidth, icons.IconHeight))
+	draw.Draw(img, img.Bounds(), image.Black, image.Point{}, draw.Src)
+
+	iconID := "lucide/play"
+	if s.Playing {
+		iconID = "lucide/pause"
+	}
+	accent := color.RGBA{0x1d, 0xb9, 0x54, 0xff}
+	_ = icons.DrawPackIcon(img, iconID, image.Rect(34, 34, 162, 162), accent)
+	return img
 }
 
 type SpotifyNextWidget struct {

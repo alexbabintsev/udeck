@@ -709,6 +709,10 @@ Optional:
 
 - `poll_ms`
   - minimum `1000`
+- `hold_ms`
+  - optional hold delay override
+  - tap toggles play/pause
+  - hold skips to the next track
 
 ### `widget.type: spotify_next`
 

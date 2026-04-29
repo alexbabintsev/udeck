@@ -51,11 +51,21 @@ var (
 )
 
 type dashboardWeatherState struct {
-	CityName string
+	CityName    string
+	TempC       *float64
+	FeelsLikeC  *float64
+	HumidityPct *int
+	WindSpeedMS *float64
+	Code        int
+	Daily       []dashboardDailyForecast
+	Ready       bool
+	Error       string
+}
+
+type dashboardDailyForecast struct {
+	DayLabel string
 	TempC    *float64
 	Code     int
-	Ready    bool
-	Error    string
 }
 
 type dashboardWeatherCoords struct {
@@ -262,7 +272,7 @@ func (w *WideDashboardWidget) render(now time.Time) (bool, error) {
 	case ctx.InFolder():
 		renderDashboardBack(img, ctx)
 	case mode == dashboardModeClock:
-		renderDashboardClock(img, now, ctx)
+		renderDashboardClock(img, now, weather, ctx)
 	case mode == dashboardModeWeather:
 		renderDashboardWeather(img, weather, ctx)
 	case mode == dashboardModeClockWeather:
@@ -270,7 +280,7 @@ func (w *WideDashboardWidget) render(now time.Time) (bool, error) {
 	case mode == dashboardModeSpotify:
 		renderDashboardSpotify(img, spotifyNow, ctx)
 	default:
-		renderDashboardClock(img, now, ctx)
+		renderDashboardClock(img, now, weather, ctx)
 	}
 
 	changed, err := writePNGAtomicIfChanged(w.iconPath, img)
@@ -291,7 +301,7 @@ func dashboardFrameKey(now time.Time, mode int, ctx Context, weather dashboardWe
 	case dashboardModeClock:
 		return fmt.Sprintf("clock:%s:%d", now.Format("2006-01-02 15:04"), ctx.PageIndex)
 	case dashboardModeWeather:
-		return fmt.Sprintf("weather:%d:%d:%s:%t:%d:%s", ctx.PageIndex, ctx.TotalPages, weatherKey(weather), weather.TempC != nil, weather.Code, weather.Error)
+		return fmt.Sprintf("weather:%d:%d:%s", ctx.PageIndex, ctx.TotalPages, weatherKey(weather))
 	case dashboardModeClockWeather:
 		return fmt.Sprintf("clockweather:%s:%d:%s:%t:%d:%s", now.Format("2006-01-02 15:04"), ctx.PageIndex, weatherKey(weather), weather.TempC != nil, weather.Code, weather.Error)
 	case dashboardModeSpotify:
@@ -310,12 +320,36 @@ func weatherKey(weather dashboardWeatherState) string {
 	if weather.TempC != nil {
 		temp = fmt.Sprintf("%.1f", *weather.TempC)
 	}
+	feels := "--"
+	if weather.FeelsLikeC != nil {
+		feels = fmt.Sprintf("%.1f", *weather.FeelsLikeC)
+	}
+	humidity := "--"
+	if weather.HumidityPct != nil {
+		humidity = fmt.Sprintf("%d", *weather.HumidityPct)
+	}
+	wind := "--"
+	if weather.WindSpeedMS != nil {
+		wind = fmt.Sprintf("%.1f", *weather.WindSpeedMS)
+	}
+	var daily []string
+	for _, fc := range weather.Daily {
+		dayTemp := "--"
+		if fc.TempC != nil {
+			dayTemp = fmt.Sprintf("%.1f", *fc.TempC)
+		}
+		daily = append(daily, strings.Join([]string{fc.DayLabel, dayTemp, fmt.Sprintf("%d", fc.Code)}, ":"))
+	}
 	return strings.Join([]string{
 		weather.CityName,
 		temp,
+		feels,
+		humidity,
+		wind,
 		fmt.Sprintf("%d", weather.Code),
 		fmt.Sprintf("%t", weather.Ready),
 		weather.Error,
+		strings.Join(daily, ","),
 	}, "|")
 }
 
@@ -330,68 +364,96 @@ func dashboardWeatherPoll(ms int) time.Duration {
 	return d
 }
 
-func renderDashboardClock(img *image.RGBA, now time.Time, ctx Context) {
-	draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{0x00, 0x00, 0x00, 0xff}}, image.Point{}, draw.Src)
-	draw.Draw(img, image.Rect(icons.WideWidth-4, 0, icons.WideWidth, icons.IconHeight), &image.Uniform{color.RGBA{0x08, 0x6f, 0xff, 0xff}}, image.Point{}, draw.Src)
-	drawSpaceMonoLeftText(img, now.Format("15:04"), image.Rect(30, 0, 450, 124), color.White, 110, true)
-	drawSpaceMonoLeftText(img, now.Format("02 Jan 2006"), image.Rect(30, 110, 450, 170), color.RGBA{0xbb, 0xbb, 0xbb, 0xff}, 40, true)
-	drawSpaceMonoLeftText(img, dashboardWeekday(now.Weekday()), image.Rect(320, 110, 450, 170), color.RGBA{0x33, 0xbb, 0xff, 0xff}, 40, true)
+func rectWH(x, y, w, h int) image.Rectangle {
+	return image.Rect(x, y, x+w, y+h)
+}
+
+func rgb(hex string, alpha ...int) color.RGBA {
+	hex = strings.TrimPrefix(strings.TrimSpace(hex), "#")
+	if len(hex) != 6 {
+		return color.RGBA{}
+	}
+	var out uint32
+	if _, err := fmt.Sscanf(hex, "%06x", &out); err != nil {
+		return color.RGBA{}
+	}
+	a := 255
+	if len(alpha) > 0 {
+		a = alpha[0]
+		if a < 0 {
+			a = 0
+		} else if a > 255 {
+			a = 255
+		}
+	}
+	return color.RGBA{
+		R: uint8(out >> 16),
+		G: uint8((out >> 8) & 0xff),
+		B: uint8(out & 0xff),
+		A: uint8(a),
+	}
+}
+
+func renderDashboardClock(img *image.RGBA, now time.Time, weather dashboardWeatherState, ctx Context) {
+	draw.Draw(img, img.Bounds(), &image.Uniform{rgb("000000")}, image.Point{}, draw.Src)
+	draw.Draw(img, rectWH(icons.WideWidth-4, 0, 4, icons.IconHeight), &image.Uniform{rgb("086fff")}, image.Point{}, draw.Src)
+	drawSpaceMonoClockText(img, now.Format("15:04"), rectWH(30, 10, 420, 124), color.White, rgb("7a7a7a"), 90, -4)
+	drawSpaceMonoLeftTextTracked(img, now.Format("02 Jan 2006"), rectWH(30, 110, 420, 60), rgb("bbbbbb"), 35, true, -1.5)
+	drawSpaceMonoRightTextTracked(img, dashboardWeekday(now.Weekday()), rectWH(210, 110, 200, 60), rgb("33bbff"), 35, true, -1.5)
+	drawDashboardClockWeatherSummary(img, weather)
 	drawPageChip(img, ctx)
 }
 
 func renderDashboardWeather(img *image.RGBA, weather dashboardWeatherState, ctx Context) {
 	draw.Draw(img, img.Bounds(), &image.Uniform{color.Black}, image.Point{}, draw.Src)
-	draw.Draw(img, image.Rect(228, 18, 229, 174), &image.Uniform{color.RGBA{0x18, 0x18, 0x18, 0xff}}, image.Point{}, draw.Src)
+	draw.Draw(img, rectWH(248, 18, 1, 156), &image.Uniform{rgb("181818")}, image.Point{}, draw.Src)
 
-	city := strings.ToUpper(shortenLine(weather.CityName, 12))
-	if city == "" {
-		city = "WEATHER"
-	}
-	drawSpaceMonoLeftText(img, city, image.Rect(28, 24, 170, 46), color.RGBA{0x99, 0x99, 0x99, 0xff}, 18, false)
-	drawWeatherIcon(img, weather.Code, 178, 42, 18, color.RGBA{0xff, 0x88, 0x00, 0xff})
-
+	drawWeatherIcon(img, weather.Code, 176, 52, 34, rgb("ff8800"))
 	if weather.TempC != nil {
-		drawSpaceMonoLeftText(img, fmt.Sprintf("%.0f°", *weather.TempC), image.Rect(28, 56, 190, 126), color.White, 68, true)
-		drawDashboardLeftText(img, dashboardWeatherLabel(weather.Code), image.Rect(28, 132, 190, 158), color.RGBA{0xbb, 0xbb, 0xbb, 0xff}, 20)
+		drawSpaceMonoLeftText(img, fmt.Sprintf("%.0f°", *weather.TempC), rectWH(30, 30, 162, 78), color.White, 92, true)
 	} else {
-		drawSpaceMonoLeftText(img, "--°", image.Rect(28, 56, 190, 126), color.White, 68, true)
-		drawDashboardLeftText(img, weatherErrorLabel(weather), image.Rect(28, 132, 190, 158), color.RGBA{0xbb, 0xbb, 0xbb, 0xff}, 18)
+		drawSpaceMonoLeftText(img, "--°", rectWH(24, 40, 162, 78), color.White, 92, true)
 	}
 
-	drawDashboardWeatherStat(img, image.Rect(256, 42, 430, 70), "humidity", "Humidity", dashboardHumidityValue(weather))
-	drawDashboardWeatherStat(img, image.Rect(256, 88, 430, 116), "wind", "Wind", dashboardWindValue(weather))
-	drawDashboardWeatherStat(img, image.Rect(256, 134, 430, 162), "thermometer", "Feels like", dashboardFeelsLikeValue(weather))
+	metrics := []string{
+		dashboardHumidityValue(weather),
+		dashboardWindValue(weather),
+		dashboardFeelsLikeValue(weather),
+	}
+	drawDashboardMetricRow(img, rectWH(22, 138, 216, 32), metrics, rgb("bbbbbb"))
+
+	drawDashboardDailyForecast(img, rectWH(270, 24, 160, 148), weather.Daily)
 	drawPageChip(img, ctx)
 }
 
 func renderDashboardClockWeather(img *image.RGBA, now time.Time, weather dashboardWeatherState, ctx Context) {
 	draw.Draw(img, img.Bounds(), &image.Uniform{color.Black}, image.Point{}, draw.Src)
-	draw.Draw(img, image.Rect(252, 20, 253, 172), &image.Uniform{color.RGBA{0x11, 0x11, 0x11, 0xff}}, image.Point{}, draw.Src)
+	draw.Draw(img, rectWH(252, 20, 1, 152), &image.Uniform{rgb("111111")}, image.Point{}, draw.Src)
 
-	drawSpaceMonoLeftText(img, "TIME", image.Rect(28, 24, 126, 44), color.RGBA{0x99, 0x99, 0x99, 0xff}, 18, false)
-	drawSpaceMonoLeftText(img, now.Format("15:04"), image.Rect(28, 50, 222, 104), color.White, 58, true)
-	drawSpaceMonoLeftText(img, fmt.Sprintf("%s · %s", now.Format("02 Jan"), dashboardWeekdayTitle(now.Weekday())), image.Rect(28, 132, 238, 156), color.RGBA{0xbb, 0xbb, 0xbb, 0xff}, 18, false)
+	drawSpaceMonoLeftText(img, "TIME", rectWH(28, 24, 98, 20), rgb("999999"), 18, false)
+	drawSpaceMonoLeftText(img, now.Format("15:04"), rectWH(28, 50, 194, 54), color.White, 58, true)
+	drawSpaceMonoLeftText(img, fmt.Sprintf("%s · %s", now.Format("02 Jan"), dashboardWeekdayTitle(now.Weekday())), rectWH(28, 132, 210, 24), rgb("bbbbbb"), 18, false)
 
 	city := strings.ToUpper(shortenLine(weather.CityName, 10))
 	if city == "" {
 		city = "WEATHER"
 	}
-	drawSpaceMonoLeftText(img, city, image.Rect(276, 24, 408, 44), color.RGBA{0x88, 0x88, 0x88, 0xff}, 18, false)
-	drawWeatherIcon(img, weather.Code, 418, 42, 16, color.RGBA{0xff, 0x88, 0x00, 0xff})
+	drawSpaceMonoLeftText(img, city, rectWH(276, 24, 132, 20), rgb("888888"), 18, false)
+	drawWeatherIcon(img, weather.Code, 418, 42, 16, rgb("ff8800"))
 	if weather.TempC != nil {
-		drawSpaceMonoLeftText(img, fmt.Sprintf("%.0f°", *weather.TempC), image.Rect(276, 50, 416, 100), color.White, 50, true)
+		drawSpaceMonoLeftText(img, fmt.Sprintf("%.0f°", *weather.TempC), rectWH(276, 50, 140, 50), color.White, 50, true)
 	} else {
-		drawSpaceMonoLeftText(img, "--°", image.Rect(276, 50, 416, 100), color.White, 50, true)
+		drawSpaceMonoLeftText(img, "--°", rectWH(276, 50, 140, 50), color.White, 50, true)
 	}
-	drawDashboardWeatherMiniStat(img, image.Rect(276, 118, 426, 142), "wind", dashboardWindValue(weather))
-	drawDashboardWeatherMiniStat(img, image.Rect(276, 144, 426, 168), "droplets", dashboardHumidityValue(weather))
+	drawDashboardWeatherMiniStat(img, rectWH(276, 118, 150, 24), "wind", dashboardWindValue(weather))
+	drawDashboardWeatherMiniStat(img, rectWH(276, 144, 150, 24), "droplets", dashboardHumidityValue(weather))
 	drawPageChip(img, ctx)
 }
 
 func renderDashboardSpotify(img *image.RGBA, s spotifySnapshot, ctx Context) {
 	draw.Draw(img, img.Bounds(), &image.Uniform{color.Black}, image.Point{}, draw.Src)
 
-	artRect := image.Rect(0, 0, 192, 192)
+	artRect := rectWH(0, 0, 192, 192)
 	drawDashboardArtwork(img, artRect, s)
 
 	drawSpotifySourceRow(img, s)
@@ -400,18 +462,18 @@ func renderDashboardSpotify(img *image.RGBA, s spotifySnapshot, ctx Context) {
 		track = "Open Spotify"
 	}
 	artistLine := dashboardSpotifyArtistLine(s)
-	drawDashboardLeftText(img, shortenLine(track, 22), image.Rect(218, 64, 430, 92), color.White, 24)
-	drawDashboardLeftText(img, shortenLine(artistLine, 26), image.Rect(218, 94, 442, 118), color.RGBA{0xbb, 0xbb, 0xbb, 0xff}, 18)
+	drawDashboardLeftText(img, shortenLine(track, 22), rectWH(218, 64, 212, 28), color.White, 24)
+	drawDashboardLeftText(img, shortenLine(artistLine, 26), rectWH(218, 94, 224, 24), color.RGBA{0xbb, 0xbb, 0xbb, 0xff}, 18)
 	drawSpotifyProgressBlock(img, s)
 	drawPageChip(img, ctx)
 }
 
 func renderDashboardBack(img *image.RGBA, ctx Context) {
-	drawWideGradient(img, color.RGBA{0x18, 0x0f, 0x12, 0xff}, color.RGBA{0x2a, 0x16, 0x1d, 0xff})
-	drawDashboardBackIcon(img, 64, 98, 34, color.RGBA{0xff, 0xa9, 0xb6, 0xff})
-	drawDashboardCenteredText(img, "BACK", image.Rect(112, 34, icons.WideWidth-20, 106), color.White, 38)
-	drawDashboardCenteredText(img, "Exit folder", image.Rect(152, 132, 404, 154), color.RGBA{0xf2, 0xc0, 0xc9, 0xff}, 16)
-	drawDashboardCenteredText(img, dashboardFolderLabel(ctx), image.Rect(152, 154, 404, 176), color.RGBA{0xc9, 0x8d, 0x99, 0xff}, 15)
+	drawWideGradient(img, rgb("180f12"), rgb("2a161d"))
+	drawDashboardBackIcon(img, 64, 98, 34, rgb("ffa9b6"))
+	drawDashboardCenteredText(img, "BACK", rectWH(112, 34, icons.WideWidth-132, 72), color.White, 38)
+	drawDashboardCenteredText(img, "Exit folder", rectWH(152, 132, 252, 22), rgb("f2c0c9"), 16)
+	drawDashboardCenteredText(img, dashboardFolderLabel(ctx), rectWH(152, 154, 252, 22), rgb("c98d99"), 15)
 	drawPageChip(img, ctx)
 }
 
@@ -430,9 +492,9 @@ func drawWideGradient(img *image.RGBA, top, bottom color.RGBA) {
 
 func drawModeDots(img *image.RGBA, active int) {
 	for i := 0; i < dashboardModeCount; i++ {
-		clr := color.RGBA{0xff, 0xff, 0xff, 0x30}
+		clr := rgb("ffffff", 48)
 		if i == active {
-			clr = color.RGBA{0xff, 0xff, 0xff, 0xb8}
+			clr = rgb("ffffff", 184)
 		}
 		fillCircle(img, 24+i*16, 172, 4, clr)
 	}
@@ -442,13 +504,13 @@ func drawPageChip(img *image.RGBA, ctx Context) {
 	if ctx.PageIndex <= 0 {
 		return
 	}
-	rect := image.Rect(402, 14, 444, 36)
-	fillRoundRect(img, rect, 10, color.RGBA{0, 0, 0, 0x88})
+	rect := rectWH(402, 14, 42, 22)
+	fillRoundRect(img, rect, 10, rgb("000000", 136))
 	drawDashboardCenteredText(img, fmt.Sprintf("%d", ctx.PageIndex+1), rect, color.White, 14)
 }
 
 func drawDashboardArtwork(img *image.RGBA, rect image.Rectangle, s spotifySnapshot) {
-	fillRoundRect(img, rect, 18, color.RGBA{0x18, 0x18, 0x18, 0xff})
+	fillRoundRect(img, rect, 18, rgb("181818"))
 	if s.Artwork == nil {
 		drawDashboardMusicIcon(img, rect.Min.X+rect.Dx()/2, rect.Min.Y+rect.Dy()/2, 28, spotifyAccent(s))
 		return
@@ -632,11 +694,53 @@ func dashboardWindValue(weather dashboardWeatherState) string {
 }
 
 func dashboardFeelsLikeValue(weather dashboardWeatherState) string {
-	if weather.TempC == nil {
+	if weather.FeelsLikeC == nil {
 		return "--°"
 	}
-	feels := math.Round(*weather.TempC - 2)
-	return fmt.Sprintf("%.0f°", feels)
+	return fmt.Sprintf("%.0f°", math.Round(*weather.FeelsLikeC))
+}
+
+func drawDashboardMetricRow(img *image.RGBA, rect image.Rectangle, values []string, clr color.Color) {
+	if len(values) == 0 {
+		return
+	}
+	colW := rect.Dx() / len(values)
+	for i, value := range values {
+		block := rectWH(rect.Min.X+i*colW, rect.Min.Y, colW, rect.Dy())
+		drawDashboardCenteredText(img, value, block, clr, 20)
+	}
+}
+
+func drawDashboardClockWeatherSummary(img *image.RGBA, weather dashboardWeatherState) {
+	rect := rectWH(350, 25, 84, 92)
+	if weather.TempC == nil {
+		drawDashboardCenteredText(img, "--°", rectWH(rect.Min.X, rect.Min.Y+48, rect.Dx(), 32), rgb("bbbbbb"), 28)
+		return
+	}
+	drawWeatherIcon(img, weather.Code, rect.Min.X+rect.Dx()/2, rect.Min.Y+22, 18, rgb("ff8800"))
+	drawDashboardCenteredText(img, fmt.Sprintf("%.0f°", math.Round(*weather.TempC)), rectWH(rect.Min.X-4, rect.Min.Y+45, rect.Dx()+8, 36), color.White, 35)
+}
+
+func drawDashboardDailyForecast(img *image.RGBA, rect image.Rectangle, daily []dashboardDailyForecast) {
+	rowH := rect.Dy() / 3
+	for i := 0; i < 3; i++ {
+		row := rectWH(rect.Min.X, rect.Min.Y+i*rowH, rect.Dx(), rowH)
+		if i > 0 {
+			draw.Draw(img, rectWH(row.Min.X, row.Min.Y, row.Dx(), 1), &image.Uniform{color.RGBA{0x12, 0x12, 0x12, 0xff}}, image.Point{}, draw.Src)
+		}
+		if i >= len(daily) {
+			drawDashboardCenteredText(img, "--", rectWH(row.Min.X, row.Min.Y+12, row.Dx(), row.Dy()-24), color.RGBA{0x66, 0x66, 0x66, 0xff}, 18)
+			continue
+		}
+		item := daily[i]
+		drawSpaceMonoLeftText(img, item.DayLabel, rectWH(row.Min.X, row.Min.Y+4, 64, row.Dy()-8), color.RGBA{0x99, 0x99, 0x99, 0xff}, 20, false)
+		drawWeatherIcon(img, item.Code, row.Min.X+82, row.Min.Y+row.Dy()/2, 18, color.RGBA{0xff, 0x88, 0x00, 0xff})
+		temp := "--°"
+		if item.TempC != nil {
+			temp = fmt.Sprintf("%.0f°", math.Round(*item.TempC))
+		}
+		drawSpaceMonoLeftText(img, temp, rectWH(row.Min.X+112, row.Min.Y+6, row.Max.X-(row.Min.X+112), row.Dy()-12), color.White, 28, true)
+	}
 }
 
 func drawDashboardTextBlock(img *image.RGBA, rect image.Rectangle, lines []string, colors []color.Color) {
@@ -669,6 +773,20 @@ func drawLeftFace(img *image.RGBA, text string, x, baselineY int, clr color.Colo
 	d.DrawString(text)
 }
 
+func drawLeftFaceTracked(img *image.RGBA, text string, x, baselineY int, clr color.Color, face font.Face, tracking float64) {
+	if tracking == 0 {
+		drawLeftFace(img, text, x, baselineY, clr, face)
+		return
+	}
+	d := &font.Drawer{Dst: img, Src: image.NewUniform(clr), Face: face}
+	d.Dot = fixed.P(x, baselineY)
+	step := fixed.Int26_6(tracking * 64)
+	for _, r := range text {
+		d.DrawString(string(r))
+		d.Dot.X += step
+	}
+}
+
 func drawSpaceMonoLeftText(img *image.RGBA, text string, rect image.Rectangle, clr color.Color, size float64, bold bool) {
 	face, display := spaceMonoFaceForText(text, rect.Dx(), size, bold)
 	if face == nil {
@@ -677,6 +795,60 @@ func drawSpaceMonoLeftText(img *image.RGBA, text string, rect image.Rectangle, c
 	}
 	baseline := rect.Min.Y + (rect.Dy()-face.Metrics().Height.Ceil())/2 + face.Metrics().Ascent.Ceil()
 	drawLeftFace(img, display, rect.Min.X, baseline, clr, face)
+}
+
+func drawSpaceMonoLeftTextTracked(img *image.RGBA, text string, rect image.Rectangle, clr color.Color, size float64, bold bool, tracking float64) {
+	face, display := spaceMonoFaceForText(text, rect.Dx(), size, bold)
+	if face == nil {
+		drawSpaceMonoLeftText(img, display, rect, clr, size, bold)
+		return
+	}
+	baseline := rect.Min.Y + (rect.Dy()-face.Metrics().Height.Ceil())/2 + face.Metrics().Ascent.Ceil()
+	drawLeftFaceTracked(img, display, rect.Min.X, baseline, clr, face, tracking)
+}
+
+func drawSpaceMonoRightTextTracked(img *image.RGBA, text string, rect image.Rectangle, clr color.Color, size float64, bold bool, tracking float64) {
+	face, display := spaceMonoFaceForText(text, rect.Dx(), size, bold)
+	if face == nil {
+		drawSpaceMonoLeftTextTracked(img, display, rect, clr, size, bold, tracking)
+		return
+	}
+	baseline := rect.Min.Y + (rect.Dy()-face.Metrics().Height.Ceil())/2 + face.Metrics().Ascent.Ceil()
+	x := rect.Max.X - trackedTextWidth(face, display, tracking)
+	drawLeftFaceTracked(img, display, x, baseline, clr, face, tracking)
+}
+
+func drawSpaceMonoClockText(img *image.RGBA, text string, rect image.Rectangle, mainClr, colonClr color.Color, size float64, tracking float64) {
+	if len(text) != 5 || text[2] != ':' {
+		drawSpaceMonoLeftTextTracked(img, text, rect, mainClr, size, true, tracking)
+		return
+	}
+	face, _ := spaceMonoFaceForText(text, rect.Dx(), size, true)
+	if face == nil {
+		drawSpaceMonoLeftTextTracked(img, text, rect, mainClr, size, true, tracking)
+		return
+	}
+	baseline := rect.Min.Y + (rect.Dy()-face.Metrics().Height.Ceil())/2 + face.Metrics().Ascent.Ceil()
+	hours := text[:2]
+	colon := text[2:3]
+	minutes := text[3:]
+	drawLeftFaceTracked(img, hours, rect.Min.X, baseline, mainClr, face, tracking)
+	hoursW := trackedTextWidth(face, hours, tracking)
+	drawLeftFaceTracked(img, colon, rect.Min.X+hoursW, baseline, colonClr, face, tracking)
+	colonW := trackedTextWidth(face, colon, tracking)
+	drawLeftFaceTracked(img, minutes, rect.Min.X+hoursW+colonW, baseline, mainClr, face, tracking)
+}
+
+func trackedTextWidth(face font.Face, text string, tracking float64) int {
+	if text == "" {
+		return 0
+	}
+	width := font.MeasureString(face, text).Round()
+	runes := []rune(text)
+	if len(runes) > 1 && tracking != 0 {
+		width += int(math.Round(tracking * float64(len(runes)-1)))
+	}
+	return width
 }
 
 func drawDashboardCenteredText(img *image.RGBA, text string, rect image.Rectangle, clr color.Color, startSize float64) {
@@ -831,19 +1003,19 @@ func loadSpaceMonoFromPaths(name string) *opentype.Font {
 func dashboardWeekday(day time.Weekday) string {
 	switch day {
 	case time.Monday:
-		return "Mon"
+		return "Monday"
 	case time.Tuesday:
-		return "Tue"
+		return "Tuesday"
 	case time.Wednesday:
-		return "Wed"
+		return "Wednesday"
 	case time.Thursday:
-		return "Thu"
+		return "Thursday"
 	case time.Friday:
-		return "Fri"
+		return "Friday"
 	case time.Saturday:
-		return "Sat"
+		return "Saturday"
 	default:
-		return "Sun"
+		return "Sunday"
 	}
 }
 
@@ -1152,7 +1324,9 @@ func fetchDashboardWeather(coords dashboardWeatherCoords) (dashboardWeatherState
 	q := u.Query()
 	q.Set("latitude", fmt.Sprintf("%.4f", coords.Latitude))
 	q.Set("longitude", fmt.Sprintf("%.4f", coords.Longitude))
-	q.Set("current", "temperature_2m,weather_code")
+	q.Set("current", "temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m,apparent_temperature")
+	q.Set("daily", "weather_code,temperature_2m_max")
+	q.Set("forecast_days", "3")
 	if coords.Timezone != "" {
 		q.Set("timezone", coords.Timezone)
 	} else {
@@ -1174,19 +1348,51 @@ func fetchDashboardWeather(coords dashboardWeatherCoords) (dashboardWeatherState
 	}
 	var payload struct {
 		Current struct {
-			Temperature float64 `json:"temperature_2m"`
-			Code        int     `json:"weather_code"`
+			Temperature  float64 `json:"temperature_2m"`
+			Code         int     `json:"weather_code"`
+			Humidity     int     `json:"relative_humidity_2m"`
+			WindSpeed    float64 `json:"wind_speed_10m"`
+			ApparentTemp float64 `json:"apparent_temperature"`
 		} `json:"current"`
+		Daily struct {
+			Time        []string  `json:"time"`
+			Code        []int     `json:"weather_code"`
+			Temperature []float64 `json:"temperature_2m_max"`
+		} `json:"daily"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return dashboardWeatherState{}, err
 	}
 	temp := payload.Current.Temperature
+	feels := payload.Current.ApparentTemp
+	humidity := payload.Current.Humidity
+	wind := payload.Current.WindSpeed
+	daily := make([]dashboardDailyForecast, 0, 3)
+	for i := 0; i < len(payload.Daily.Time) && i < len(payload.Daily.Code) && i < len(payload.Daily.Temperature) && i < 3; i++ {
+		temp := payload.Daily.Temperature[i]
+		daily = append(daily, dashboardDailyForecast{
+			DayLabel: dashboardDayLabel(payload.Daily.Time[i], i),
+			TempC:    &temp,
+			Code:     payload.Daily.Code[i],
+		})
+	}
 	return dashboardWeatherState{
-		TempC: &temp,
-		Code:  payload.Current.Code,
-		Ready: true,
+		TempC:       &temp,
+		FeelsLikeC:  &feels,
+		HumidityPct: &humidity,
+		WindSpeedMS: &wind,
+		Code:        payload.Current.Code,
+		Daily:       daily,
+		Ready:       true,
 	}, nil
+}
+
+func dashboardDayLabel(isoDate string, fallbackIndex int) string {
+	if t, err := time.Parse("2006-01-02", isoDate); err == nil {
+		return strings.ToUpper(t.Format("Mon"))
+	}
+	day := time.Now().AddDate(0, 0, fallbackIndex)
+	return strings.ToUpper(day.Format("Mon"))
 }
 
 func abs(v int) int {
