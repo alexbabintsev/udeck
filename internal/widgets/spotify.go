@@ -38,13 +38,16 @@ var (
 )
 
 type spotifySnapshot struct {
-	Running   bool
-	State     string
-	TrackID   string
-	TrackName string
-	Artist    string
-	Playing   bool
-	Artwork   image.Image
+	Running     bool
+	State       string
+	TrackID     string
+	TrackName   string
+	Album       string
+	Artist      string
+	Playing     bool
+	PositionSec float64
+	DurationMS  int
+	Artwork     image.Image
 }
 
 type spotifySubscriber interface {
@@ -186,7 +189,7 @@ func (s *SpotifyService) refresh() {
 }
 
 func spotifyChanged(a, b spotifySnapshot) bool {
-	if a.Running != b.Running || a.State != b.State || a.TrackID != b.TrackID || a.TrackName != b.TrackName || a.Artist != b.Artist || a.Playing != b.Playing {
+	if a.Running != b.Running || a.State != b.State || a.TrackID != b.TrackID || a.TrackName != b.TrackName || a.Album != b.Album || a.Artist != b.Artist || a.Playing != b.Playing || a.PositionSec != b.PositionSec || a.DurationMS != b.DurationMS {
 		return true
 	}
 	return (a.Artwork == nil) != (b.Artwork == nil)
@@ -203,10 +206,10 @@ func fetchSpotifySnapshot() (spotifySnapshot, error) {
 func spotifyStateScript() string {
 	return `if application "Spotify" is running then
 tell application "Spotify"
-return ("1||" & (player state as string) & "||" & (id of current track) & "||" & (name of current track) & "||" & (artist of current track))
+return ("1||" & (player state as string) & "||" & (id of current track) & "||" & (name of current track) & "||" & (album of current track) & "||" & (artist of current track) & "||" & (player position as string) & "||" & (duration of current track as string))
 end tell
 else
-return "0||||"
+return "0|||||||"
 end if`
 }
 
@@ -215,19 +218,40 @@ func parseSpotifyState(out string) spotifySnapshot {
 	if out == "" {
 		return spotifySnapshot{}
 	}
-	parts := strings.SplitN(out, "||", 5)
-	if len(parts) != 5 {
+	parts := strings.Split(out, "||")
+	if len(parts) < 6 {
 		return spotifySnapshot{}
+	}
+	if len(parts) == 5 {
+		parts = []string{parts[0], parts[1], parts[2], parts[3], "", parts[4]}
+	}
+	if len(parts) == 6 {
+		parts = append(parts, "0", "0")
 	}
 	state := strings.TrimSpace(parts[1])
 	return spotifySnapshot{
-		Running:   strings.TrimSpace(parts[0]) == "1",
-		State:     state,
-		TrackID:   strings.TrimSpace(parts[2]),
-		Playing:   state == "playing",
-		TrackName: strings.TrimSpace(parts[3]),
-		Artist:    strings.TrimSpace(parts[4]),
+		Running:     strings.TrimSpace(parts[0]) == "1",
+		State:       state,
+		TrackID:     strings.TrimSpace(parts[2]),
+		Playing:     state == "playing",
+		TrackName:   strings.TrimSpace(parts[3]),
+		Album:       strings.TrimSpace(parts[4]),
+		Artist:      strings.TrimSpace(parts[5]),
+		PositionSec: parseSpotifyFloat(parts[6]),
+		DurationMS:  parseSpotifyInt(parts[7]),
 	}
+}
+
+func parseSpotifyFloat(s string) float64 {
+	var out float64
+	fmt.Sscanf(strings.TrimSpace(s), "%f", &out)
+	return out
+}
+
+func parseSpotifyInt(s string) int {
+	var out int
+	fmt.Sscanf(strings.TrimSpace(s), "%d", &out)
+	return out
 }
 
 func fetchSpotifyArtwork(trackID string) image.Image {

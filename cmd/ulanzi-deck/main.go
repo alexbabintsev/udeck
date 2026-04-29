@@ -182,6 +182,7 @@ func cmdRun(args []string) error {
 		return fmt.Errorf("widgets: %w", err)
 	}
 	defer widgetMgr.Close()
+	widgetMgr.SetContext(nav.Context())
 
 	initialButtons := toggles.ResolveButtons(nav.currentButtons())
 	initialButtons, err = widgetMgr.ResolveButtons(initialButtons)
@@ -275,6 +276,7 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "widget reload failed: %v\n", err)
 					} else {
+						nextWidgetMgr.SetContext(nextNav.Context())
 						initialButtons := nextToggles.ResolveButtons(nextNav.currentButtons())
 						initialButtons, err := nextWidgetMgr.ResolveButtons(initialButtons)
 						if err != nil {
@@ -392,6 +394,24 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 			continue
 		}
 		btn := nav.findButton(int(ev.Index))
+		if btn != nil && btn.SyntheticBack {
+			changed := nav.handleEvent(int(ev.Index), ev.Pressed)
+			if changed {
+				if gestures != nil {
+					gestures.Reset()
+				}
+				if err := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); err != nil {
+					if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, fmt.Errorf("update page: %w", err)); recovered {
+						lastKeepalive = time.Now()
+						continue
+					} else if recErr != nil {
+						return recErr
+					}
+				}
+			}
+			lastKeepalive = time.Now()
+			continue
+		}
 		changed := nav.handleEvent(int(ev.Index), ev.Pressed)
 		if changed {
 			if gestures != nil {
@@ -460,6 +480,7 @@ func refreshCurrentPage(cfg *config.Config, dev *device.Device, nav *navigator, 
 		buttons = toggles.ResolveButtons(buttons)
 	}
 	if widgetMgr != nil {
+		widgetMgr.SetContext(nav.Context())
 		var err error
 		buttons, err = widgetMgr.ResolveButtons(buttons)
 		if err != nil {
@@ -617,9 +638,21 @@ func newNavigator(pages []config.Page) *navigator {
 func (n *navigator) currentButtons() []config.Button {
 	buttons := append([]config.Button(nil), n.currentPageButtons()...)
 	if len(n.stack) > 0 {
-		buttons = append(buttons, backButton)
+		buttons = append(buttons, n.contextualBackButton())
 	}
 	return buttons
+}
+
+func (n *navigator) contextualBackButton() config.Button {
+	for _, btn := range n.currentRootButtons() {
+		if btn.At == backButton.At && btn.Widget != nil && btn.Widget.Type == "wide_dashboard" {
+			btn.SyntheticBack = true
+			return btn
+		}
+	}
+	btn := backButton
+	btn.SyntheticBack = true
+	return btn
 }
 
 func (n *navigator) handleEvent(index int, pressed bool) (pageChanged bool) {
@@ -627,7 +660,7 @@ func (n *navigator) handleEvent(index int, pressed bool) (pageChanged bool) {
 		if btn.HIDIndex() != index {
 			continue
 		}
-		if len(n.stack) > 0 && btn.At == backButton.At && btn.Label == backButton.Label && btn.Folder == nil && btn.On == nil {
+		if len(n.stack) > 0 && btn.SyntheticBack {
 			if !pressed {
 				return false
 			}
@@ -654,6 +687,13 @@ func (n *navigator) currentPageButtons() []config.Button {
 		return n.pages[n.page].Buttons
 	}
 	return n.stack[len(n.stack)-1].Buttons
+}
+
+func (n *navigator) currentRootButtons() []config.Button {
+	if len(n.pages) == 0 {
+		return nil
+	}
+	return n.pages[n.page].Buttons
 }
 
 func (n *navigator) nextPage() bool {
@@ -688,6 +728,14 @@ func (n *navigator) findButton(index int) *config.Button {
 		}
 	}
 	return nil
+}
+
+func (n *navigator) Context() widgets.Context {
+	return widgets.Context{
+		PageIndex:   n.page,
+		TotalPages:  len(n.pages),
+		FolderDepth: len(n.stack),
+	}
 }
 
 func buttonVisible(buttons []config.Button, id string) bool {

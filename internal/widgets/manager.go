@@ -16,6 +16,10 @@ type Widget interface {
 	Close() error
 }
 
+type contextualWidget interface {
+	SetContext(Context)
+}
+
 type widgetDef struct {
 	kind string
 	btn  config.Button
@@ -31,6 +35,7 @@ type Manager struct {
 	spotify  *SpotifyService
 	settings config.WidgetSettings
 	engine   *ig.Engine
+	context  Context
 }
 
 func NewManager(cfg *config.Config) (*Manager, error) {
@@ -70,6 +75,17 @@ func (m *Manager) Close() error {
 
 func (m *Manager) Updates() <-chan string {
 	return m.updates
+}
+
+func (m *Manager) SetContext(ctx Context) {
+	m.mu.Lock()
+	m.context = ctx
+	for _, item := range m.items {
+		if contextual, ok := item.(contextualWidget); ok {
+			contextual.SetContext(ctx)
+		}
+	}
+	m.mu.Unlock()
 }
 
 func (m *Manager) ResolveButtons(buttons []config.Button) ([]config.Button, error) {
@@ -215,11 +231,25 @@ func (m *Manager) newWidgetLocked(id string) (Widget, error) {
 		return nil, fmt.Errorf("widget %q not found", id)
 	}
 
+	var (
+		item Widget
+		err  error
+	)
+
 	switch def.kind {
 	case "memory":
-		return NewMemoryWidget(id, def.btn.Widget, m.notify)
+		item, err = NewMemoryWidget(id, def.btn.Widget, m.notify)
 	case "freqtrade":
-		return NewFreqtradeWidget(id, def.btn.Widget, m.notify)
+		item, err = NewFreqtradeWidget(id, def.btn.Widget, m.notify)
+	case "wide_dashboard":
+		if m.spotify == nil {
+			service, err := newSpotifyService(defaultSpotifyPollMS)
+			if err != nil {
+				return nil, err
+			}
+			m.spotify = service
+		}
+		item, err = NewWideDashboardWidget(id, def.btn.Widget, m.spotify, m.notify)
 	case "spotify_play_pause", "spotify_next", "spotify_artwork":
 		if m.spotify == nil {
 			service, err := newSpotifyService(def.btn.Widget.PollMS)
@@ -230,17 +260,25 @@ func (m *Manager) newWidgetLocked(id string) (Widget, error) {
 		}
 		switch def.kind {
 		case "spotify_play_pause":
-			return NewSpotifyPlayPauseWidget(id, m.spotify, m.notify)
+			item, err = NewSpotifyPlayPauseWidget(id, m.spotify, m.notify)
 		case "spotify_next":
-			return NewSpotifyNextWidget(id, m.spotify, m.notify)
+			item, err = NewSpotifyNextWidget(id, m.spotify, m.notify)
 		case "spotify_artwork":
-			return NewSpotifyArtworkWidget(id, m.spotify, m.notify)
+			item, err = NewSpotifyArtworkWidget(id, m.spotify, m.notify)
 		}
 	case "project":
-		return NewProjectWidget(id, def.btn, m.settings.Project, m.notify)
+		item, err = NewProjectWidget(id, def.btn, m.settings.Project, m.notify)
+	default:
+		return nil, fmt.Errorf("widget %q type %q unsupported", id, def.kind)
 	}
 
-	return nil, fmt.Errorf("widget %q type %q unsupported", id, def.kind)
+	if err != nil {
+		return nil, err
+	}
+	if contextual, ok := item.(contextualWidget); ok {
+		contextual.SetContext(m.context)
+	}
+	return item, nil
 }
 
 func isSpotifyWidgetType(kind string) bool {
@@ -299,7 +337,7 @@ func (m *Manager) gestureOptions(id string) (ig.Options, bool) {
 			DoubleTapDelay: 300 * time.Millisecond,
 			RepeatEvery:    opts.RepeatEvery,
 		}, true
-	case "memory", "freqtrade", "spotify_play_pause", "spotify_next", "spotify_artwork":
+	case "memory", "freqtrade", "spotify_play_pause", "spotify_next", "spotify_artwork", "wide_dashboard":
 		return ig.Options{HasTap: true}, true
 	default:
 		return ig.Options{}, false

@@ -35,7 +35,7 @@ pages:
                   type: shell
                   cmd: "open -a Terminal"
 
-            - at: [1, 0]
+            - at: [0, 1]
               label: "Browser"
               icon: test-icons/browser.png
               on:
@@ -43,7 +43,7 @@ pages:
                   type: shell
                   cmd: "open -a 'Google Chrome'"
 
-            - at: [2, 0]
+            - at: [0, 2]
               label: "Notes"
               icon: test-icons/notes.png
               on:
@@ -51,7 +51,7 @@ pages:
                   type: shell
                   cmd: "open -a Notes"
 
-            - at: [0, 1]
+            - at: [1, 0]
               label: "Finder"
               icon: test-icons/finder.png
               on:
@@ -59,7 +59,7 @@ pages:
                   type: shell
                   cmd: "open ."
 
-      - at: [1, 0]
+      - at: [0, 1]
         label: "Work"
         icon: test-icons/work-folder.png
         folder:
@@ -72,7 +72,7 @@ pages:
                   type: shell
                   cmd: "open README.md"
 
-            - at: [1, 0]
+            - at: [0, 1]
               label: "Marker"
               icon: test-icons/marker.png
               on:
@@ -80,7 +80,7 @@ pages:
                   type: shell
                   cmd: "date '+%F %T' >> /tmp/ulanzi-deck-test.log"
 
-            - at: [2, 0]
+            - at: [0, 2]
               label: "Find"
               icon: test-icons/find.png
               on:
@@ -88,7 +88,7 @@ pages:
                   type: key
                   key: "cmd f"
 
-            - at: [0, 1]
+            - at: [1, 0]
               label: "New Tab"
               icon: test-icons/tab.png
               on:
@@ -96,7 +96,7 @@ pages:
                   type: key
                   key: "cmd t"
 
-      - at: [2, 0]
+      - at: [0, 2]
         label: "System"
         icon: test-icons/system-folder.png
         folder:
@@ -109,7 +109,7 @@ pages:
                   type: key
                   key: "cmd r"
 
-            - at: [1, 0]
+            - at: [0, 1]
               label: "Escape"
               icon: test-icons/escape.png
               on:
@@ -117,7 +117,7 @@ pages:
                   type: key
                   key: "esc"
 
-            - at: [2, 0]
+            - at: [0, 2]
               label: "Mute"
               icon: test-icons/mute.png
               on:
@@ -125,7 +125,7 @@ pages:
                   type: key
                   key: "cmd shift m"
 
-            - at: [0, 1]
+            - at: [1, 0]
               label: "Lock"
               icon: test-icons/lock.png
               on:
@@ -141,7 +141,7 @@ pages:
                   type: key
                   key: "cmd shift 4"
 
-      - at: [3, 0]
+      - at: [0, 3]
         label: "Spotify"
         icon: test-icons/media-folder.png
         folder:
@@ -150,15 +150,15 @@ pages:
               widget:
                 type: spotify_play_pause
 
-            - at: [1, 0]
+            - at: [0, 1]
               widget:
                 type: spotify_next
 
-            - at: [2, 0]
+            - at: [0, 2]
               widget:
                 type: spotify_artwork
 
-            - at: [0, 1]
+            - at: [1, 0]
               label: "Open App"
               icon: test-icons/browser.png
               on:
@@ -166,7 +166,7 @@ pages:
                   type: shell
                   cmd: "open -a Spotify"
 
-      - at: [4, 0]
+      - at: [0, 4]
         label: "Hammers"
         icon: test-icons/browser.png
         icon_margins:
@@ -184,7 +184,7 @@ pages:
                   type: shell
                   cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.moveToNextScreen()"'
 
-            - at: [1, 0]
+            - at: [0, 1]
               label: "Rotate"
               icon: test-icons/system-folder.png
               on:
@@ -192,7 +192,7 @@ pages:
                   type: shell
                   cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.rotateDisplay()"'
 
-            - at: [2, 0]
+            - at: [0, 2]
               label: "Left"
               icon: test-icons/find.png
               on:
@@ -200,7 +200,7 @@ pages:
                   type: shell
                   cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.windowLeftHalf()"'
 
-            - at: [0, 1]
+            - at: [1, 0]
               label: "Right"
               icon: test-icons/tab.png
               on:
@@ -216,7 +216,7 @@ pages:
                   type: shell
                   cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.windowMaximize()"'
 
-            - at: [2, 1]
+            - at: [1, 2]
               label: "Sleep"
               icon: test-icons/lock.png
               on:
@@ -224,7 +224,7 @@ pages:
                   type: shell
                   cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.systemSleep()"'
 
-      - at: [0, 1]
+      - at: [1, 0]
         label: "Gestures"
         icon: test-icons/tab.png
         folder:
@@ -237,7 +237,7 @@ pages:
                   type: key
                   key: "cmd r"
 
-            - at: [1, 0]
+            - at: [0, 1]
               label: "Double"
               icon: test-icons/tab.png
               on:
@@ -248,7 +248,7 @@ pages:
                   type: shell
                   cmd: "open README.md"
 
-            - at: [2, 0]
+            - at: [0, 2]
               label: "Hold"
               icon: test-icons/marker.png
               on:
@@ -257,7 +257,7 @@ pages:
                   cmd: "date '+%F %T hold' >> /tmp/ulanzi-deck-test.log"
                 hold_ms: 700
 
-            - at: [0, 1]
+            - at: [1, 0]
               label: "Repeat"
               icon: test-icons/space.png
               on:
@@ -288,7 +288,7 @@ pages:
                         type: shell
                         cmd: "echo toggle-c >> /tmp/ulanzi-deck-test.log"
 
-            - at: [2, 1]
+            - at: [1, 2]
               label: "Chain"
               icon: test-icons/work-folder.png
               on:
@@ -311,7 +311,7 @@ pages:
             - "Slack"
             - "Telegram"
 
-      - at: [2, 1]
+      - at: [1, 2]
         label: "Notes"
         icon: test-icons/notes.png
         on:
@@ -319,7 +319,7 @@ pages:
             type: shell
             cmd: "open -a Notes"
 
-      - at: [3, 1]
+      - at: [1, 3]
         label: "Browser"
         icon: test-icons/browser.png
         on:
@@ -327,14 +327,15 @@ pages:
             type: shell
             cmd: "open -a 'Google Chrome'"
 
-      - at: [4, 1]
+      - at: [1, 4]
         label: "Page 2"
-        icon: test-icons/tab.png
+        icon: lucide/arrow-right
+        icon_color: "33BBFF"
         on:
           tap:
             type: page_next
 
-      - at: [0, 2]
+      - at: [2, 0]
         label: "Play"
         icon: test-icons/space.png
         on:
@@ -342,7 +343,7 @@ pages:
             type: key
             key: "space"
 
-      - at: [1, 2]
+      - at: [2, 1]
         label: "Find"
         icon: test-icons/find.png
         on:
@@ -358,7 +359,7 @@ pages:
             type: key
             key: "cmd shift m"
 
-      - at: [3, 2]
+      - at: [2, 3]
         label: "Projects"
         icon: test-icons/work-folder.png
         folder:
@@ -384,14 +385,14 @@ pages:
           tap:
             type: page_prev
 
-      - at: [1, 0]
+      - at: [0, 1]
         label: "Next Loop"
         icon: test-icons/media-folder.png
         on:
           tap:
             type: page_next
 
-      - at: [2, 0]
+      - at: [0, 2]
         label: "Reload"
         icon: test-icons/reload.png
         on:
@@ -399,7 +400,7 @@ pages:
             type: key
             key: "cmd r"
 
-      - at: [3, 0]
+      - at: [0, 3]
         label: "Shot"
         icon: test-icons/screenshot.png
         on:
@@ -407,7 +408,7 @@ pages:
             type: key
             key: "cmd shift 4"
 
-      - at: [4, 0]
+      - at: [0, 4]
         label: "Marker"
         icon: test-icons/marker.png
         on:
@@ -415,7 +416,7 @@ pages:
             type: shell
             cmd: "date '+%F %T page-2' >> /tmp/ulanzi-deck-test.log"
 
-      - at: [0, 1]
+      - at: [1, 0]
         label: "Terminal"
         icon: test-icons/terminal.png
         on:
@@ -431,14 +432,14 @@ pages:
             - at: [0, 0]
               widget:
                 type: spotify_play_pause
-            - at: [1, 0]
+            - at: [0, 1]
               widget:
                 type: spotify_next
-            - at: [2, 0]
+            - at: [0, 2]
               widget:
                 type: spotify_artwork
 
-      - at: [2, 1]
+      - at: [1, 2]
         label: "Memory"
         widget:
           type: memory
@@ -446,7 +447,7 @@ pages:
             - "Google Chrome"
             - "Slack"
 
-      - at: [3, 1]
+      - at: [1, 3]
         label: "Projects"
         icon: test-icons/work-folder.png
         folder:
@@ -463,7 +464,7 @@ pages:
                   double_tap: focus
                   hold: stop
 
-      - at: [4, 1]
+      - at: [1, 4]
         label: "Notes"
         icon: test-icons/notes.png
         on:
@@ -471,7 +472,7 @@ pages:
             type: shell
             cmd: "open -a Notes"
 
-      - at: [0, 2]
+      - at: [2, 0]
         label: "Browser"
         icon: test-icons/browser.png
         on:
@@ -479,7 +480,7 @@ pages:
             type: shell
             cmd: "open -a 'Google Chrome'"
 
-      - at: [1, 2]
+      - at: [2, 1]
         label: "Find"
         icon: test-icons/find.png
         on:
@@ -495,7 +496,7 @@ pages:
             type: key
             key: "cmd shift m"
 
-      - at: [3, 2]
+      - at: [2, 3]
         label: "Page 1"
         icon: test-icons/system-folder.png
         on:

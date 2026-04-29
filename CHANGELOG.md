@@ -66,6 +66,15 @@ actual development milestones rather than formal releases.
   more freqtrade REST APIs, no separate daemon required.
 - Freqtrade widget rendering now uses `PragmataPro` when available to
   match the original plugin style.
+- Added the `wide_dashboard` widget for the physical double-wide `3_2`
+  slot with clock, weather, clock+weather, Spotify, page index, and
+  contextual folder-back modes.
+- Added direct Lucide icon-pack support via `icon: lucide/...`, including
+  optional `icon_color` for pack/SVG icons.
+- Pack/SVG icons now render on a black background as centered `128x128`
+  artwork for button actions, while Lucide stroke width scales relative
+  to the final icon size in a shared renderer used by both buttons and
+  widgets.
 
 ## v2 Workbench
 

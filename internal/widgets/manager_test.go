@@ -143,3 +143,62 @@ func TestManagerResolveButtonsInjectsFreqtradeWidgetIcon(t *testing.T) {
 		t.Fatalf("expected widget label to be suppressed, got %q", got[0].Label)
 	}
 }
+
+func TestManagerResolveButtonsInjectsWideDashboardIcon(t *testing.T) {
+	oldFactory := newSpotifyService
+	oldGeocodeURL := dashboardGeocodeURL
+	oldForecastURL := dashboardForecastURL
+	defer func() {
+		newSpotifyService = oldFactory
+		dashboardGeocodeURL = oldGeocodeURL
+		dashboardForecastURL = oldForecastURL
+	}()
+
+	newSpotifyService = func(pollMS int) (*SpotifyService, error) {
+		s := &SpotifyService{}
+		s.cancel = func() {}
+		return s, nil
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/geocode":
+			_, _ = w.Write([]byte(`{"results":[{"name":"Kyiv","country":"Ukraine","latitude":50.45,"longitude":30.52,"timezone":"Europe/Kiev"}]}`))
+		case "/forecast":
+			_, _ = w.Write([]byte(`{"current":{"temperature_2m":17.4,"weather_code":2}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	dashboardGeocodeURL = srv.URL + "/geocode"
+	dashboardForecastURL = srv.URL + "/forecast"
+
+	buttons := []config.Button{
+		{
+			At:        [2]int{3, 2},
+			Label:     "Dashboard",
+			RuntimeID: "buttons[0]",
+			Widget:    &config.Widget{Type: "wide_dashboard", City: "Kyiv"},
+		},
+	}
+
+	m, err := NewManager(&config.Config{Buttons: buttons})
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer m.Close()
+	m.SetContext(Context{PageIndex: 1, TotalPages: 3})
+
+	got, err := m.ResolveButtons(buttons)
+	if err != nil {
+		t.Fatalf("resolve buttons: %v", err)
+	}
+	if got[0].Icon == "" {
+		t.Fatal("expected resolved widget icon path")
+	}
+	if got[0].Label != "" {
+		t.Fatalf("expected widget label to be suppressed, got %q", got[0].Label)
+	}
+}

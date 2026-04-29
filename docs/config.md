@@ -283,12 +283,14 @@ label: "Terminal"
 
 ### `icon`
 
-Optional static icon path.
+Optional static icon source.
 
 Rules:
 
 - Relative paths are resolved relative to the config file.
 - `~/...` is expanded.
+- Built-in icon packs can be referenced as `pack/name`, for example `lucide/a-arrow-down`.
+- Pack-based SVG icons render on a black background as a centered `128x128` icon.
 - Static icons are resized to the target slot size and encoded as JPEG for device upload.
 - Most slots are `196x196`; `at: [2, 3]` is `458x196`.
 
@@ -298,12 +300,36 @@ Example:
 icon: test-icons/terminal.png
 ```
 
+Or with Lucide:
+
+```yaml
+icon: lucide/a-arrow-down
+```
+
+### `icon_color`
+
+Optional hex color for pack-based SVG icons such as `lucide/...`.
+
+Rules:
+
+- Format is `RRGGBB` or `#RRGGBB`.
+- Applies to pack icons only.
+- Raster image files ignore this field.
+
+Example:
+
+```yaml
+icon: lucide/cloud-rain
+icon_color: 33BBFF
+```
+
 ### `icon_margins`
 
-Optional per-button override for static icon margins.
+Optional per-button override for raster image icon margins.
 
 Same format and constraints as `device.icon_margins`.
 For the wide `at: [2, 3]` slot, `left + right` is validated against `458`.
+Pack-based SVG icons such as `lucide/...` ignore `icon_margins` and always render centered at `128x128`.
 
 Example:
 
@@ -648,6 +674,7 @@ Supported widget types:
 - `spotify_play_pause`
 - `spotify_next`
 - `spotify_artwork`
+- `wide_dashboard`
 - `project`
 
 ### `widget.type: memory`
@@ -707,6 +734,42 @@ Optional:
 
 - `poll_ms`
   - minimum `1000`
+
+### `widget.type: wide_dashboard`
+
+Double-wide multifunction widget for the physical `3_2` slot.
+
+Modes cycle on tap:
+
+- `clock`
+- `weather`
+- `clock+weather`
+- `spotify`
+
+Context-sensitive behavior:
+
+- only valid at `at: [2, 3]`
+- when you open a folder on the current page, this widget becomes the
+  folder `Back` button automatically
+- on top-level pages `2+`, it shows the current page number in the
+  corner
+
+```yaml
+widget:
+  type: wide_dashboard
+  city: "Kyiv"
+  poll_ms: 600000
+```
+
+Fields:
+
+- `type`
+- `city`
+  - optional weather city name
+  - if omitted, weather modes render a setup placeholder
+- `poll_ms`
+  - optional weather refresh override
+  - minimum effective value is `60000`
 
 ### `widget.type: freqtrade`
 

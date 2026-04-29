@@ -61,6 +61,7 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
   - `spotify_play_pause`
   - `spotify_next`
   - `spotify_artwork`
+  - `wide_dashboard`
   - `project`
 - Config hot reload while `run` is active
 - Runtime keepalive to keep the deck out of screensaver
@@ -117,7 +118,9 @@ The demo config includes:
 - standard shell / key / http actions
 - `memory` widget
 - `spotify_*` widgets
+- `wide_dashboard` widget for the double-wide `3_2` slot
 - `project` widget with demo `start/stop/focus` scripts
+- Lucide icon-pack examples via `icon: lucide/...`
 - gesture test buttons
 - Hammerspoon integration examples
 
@@ -145,10 +148,13 @@ Current config surface:
   - `buttons[]`
     - `at`: `[row, col]`, zero-based, `row=0..2`, `col=0..4`, except `at: [2, 4]` does not exist because `at: [2, 3]` is double-wide
     - `label`: button text
-    - `icon`: local image path; `~/...` is expanded; images are resized to
-      the target slot size and encoded as JPEG before upload
-    - `icon_margins`: optional per-button override for static icon insets
+    - `icon`: local image path or icon-pack id such as `lucide/arrow-right`
+      - raster files: `~/...` is expanded; images are resized to the target slot size and encoded as JPEG before upload
+      - pack icons: rendered on a black background as a centered `128x128` icon
+    - `icon_color`: optional hex `RRGGBB` override for pack/SVG icons; defaults to white
+    - `icon_margins`: optional per-button override for raster icon insets; pack icons ignore margins
     - `folder.buttons`: nested page; runtime injects a `Back` button
+      - if the current page has `widget.type: wide_dashboard` at `at: [2, 3]`, that wide widget becomes the folder `Back` button automatically
     - `widget`
       - `type: memory`
         - `apps`: optional app list restarted on press
@@ -160,6 +166,13 @@ Current config surface:
       - `type: spotify_play_pause`
       - `type: spotify_next`
       - `type: spotify_artwork`
+      - `type: wide_dashboard`
+        - only valid at `at: [2, 3]`
+        - `city`: optional weather city name
+        - `poll_ms`: optional weather refresh override
+        - tap cycles `clock -> weather -> clock+weather -> spotify`
+        - inside folders it turns into the folder `Back` button
+        - on top-level pages `2+` it shows the page number in the corner
       - `type: project`
         - `project_dir`: project root; relative paths are resolved relative
           to the config file
@@ -246,7 +259,8 @@ pages:
 
       - at: [0, 1]
         label: "Next Page"
-        icon: test-icons/tab.png
+        icon: lucide/arrow-right
+        icon_color: "33BBFF"
         on:
           tap:
             type: page_next

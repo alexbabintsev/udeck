@@ -41,6 +41,43 @@ func TestNavigatorEnterFolderAndBack(t *testing.T) {
 	}
 }
 
+func TestNavigatorUsesDashboardWidgetAsContextualBackButton(t *testing.T) {
+	dir := &config.Folder{
+		Buttons: []config.Button{
+			{At: [2]int{0, 0}, Label: "Nested"},
+		},
+	}
+
+	nav := newNavigator([]config.Page{{
+		Buttons: []config.Button{
+			{At: [2]int{0, 0}, Label: "Folder", Folder: dir},
+			{At: [2]int{3, 2}, RuntimeID: "buttons[1]", Widget: &config.Widget{Type: "wide_dashboard", City: "Kyiv"}},
+		},
+	}})
+
+	if changed := nav.handleEvent(actionIndex([2]int{0, 0}), true); !changed {
+		t.Fatal("expected folder press to change page")
+	}
+
+	var back *config.Button
+	for _, btn := range nav.currentButtons() {
+		if btn.At == backButton.At {
+			b := btn
+			back = &b
+			break
+		}
+	}
+	if back == nil {
+		t.Fatal("expected back button in wide slot")
+	}
+	if !back.SyntheticBack {
+		t.Fatal("expected contextual back button to be synthetic")
+	}
+	if back.Widget == nil || back.Widget.Type != "wide_dashboard" {
+		t.Fatalf("expected wide dashboard to render back button, got %#v", back.Widget)
+	}
+}
+
 func TestNavigatorIgnoresUnknownIndex(t *testing.T) {
 	nav := newNavigator([]config.Page{{
 		Buttons: []config.Button{

@@ -78,6 +78,9 @@ func (m *toggleManager) ResolveButtons(buttons []config.Button) []config.Button 
 		if step.Icon != "" {
 			out[i].Icon = step.Icon
 		}
+		if step.IconColor != "" {
+			out[i].IconColor = step.IconColor
+		}
 	}
 	return out
 }

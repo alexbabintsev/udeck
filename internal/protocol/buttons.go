@@ -55,7 +55,7 @@ func PageZIP(buttons []config.Button) ([]byte, error) {
 			vp.Text = btn.Label
 		}
 		if btn.Icon != "" {
-			jpeg, err := icons.LoadForButton(btn.Icon, iconInsets(btn.IconMargins), btn.At)
+			jpeg, err := icons.LoadForButton(btn.Icon, iconInsets(btn.IconMargins), btn.At, btn.IconColor)
 			if err != nil {
 				return nil, fmt.Errorf("button [%d,%d] icon: %w", col, row, err)
 			}
@@ -158,6 +158,8 @@ func buildPageZIPRaw(manifest []byte, iconData map[string][]byte, dummy []byte) 
 func buttonIconID(btn config.Button, jpeg []byte) uint32 {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(btn.Icon))
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write([]byte(btn.IconColor))
 	_, _ = h.Write([]byte{0})
 	_, _ = h.Write([]byte(btn.Label))
 	_, _ = h.Write([]byte{0})

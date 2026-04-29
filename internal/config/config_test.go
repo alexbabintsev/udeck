@@ -576,11 +576,28 @@ func TestValidateAcceptsSpotifyWidgets(t *testing.T) {
 			{At: [2]int{0, 0}, Widget: &Widget{Type: "spotify_play_pause"}},
 			{At: [2]int{1, 0}, Widget: &Widget{Type: "spotify_next"}},
 			{At: [2]int{2, 0}, Widget: &Widget{Type: "spotify_artwork", PollMS: 2000}},
+			{At: [2]int{3, 2}, Widget: &Widget{Type: "wide_dashboard", City: "Kyiv"}},
 		},
 	}
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected spotify widgets to validate, got %v", err)
+	}
+}
+
+func TestValidateRejectsWideDashboardOutsideWideSlot(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{At: [2]int{0, 0}, Widget: &Widget{Type: "wide_dashboard", City: "Kyiv"}},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected wide dashboard slot validation error")
+	}
+	if !strings.Contains(err.Error(), `requires wide slot`) {
+		t.Fatalf("expected wide slot error, got %v", err)
 	}
 }
 
@@ -694,12 +711,14 @@ func TestIconPathsCollectsNestedUniqueIcons(t *testing.T) {
 	cfg := &Config{
 		Buttons: []Button{
 			{At: [2]int{0, 0}, Icon: "/tmp/root.png"},
+			{At: [2]int{0, 1}, Icon: "lucide/a-arrow-down"},
 			{
 				At: [2]int{2, 0},
 				On: &Handlers{
 					Tap: &GestureBinding{
 						Toggle: []ToggleStep{
 							{Icon: "/tmp/toggle-a.png", Action: Action{Type: "shell", Cmd: "echo 1"}},
+							{Icon: "lucide/cloud-rain", Action: Action{Type: "shell", Cmd: "echo pack"}},
 							{Icon: "/tmp/toggle-b.png", Action: Action{Type: "shell", Cmd: "echo 2"}},
 						},
 					},
@@ -723,5 +742,90 @@ func TestIconPathsCollectsNestedUniqueIcons(t *testing.T) {
 	}
 	if got[0] != "/tmp/root.png" || got[1] != "/tmp/toggle-a.png" || got[2] != "/tmp/toggle-b.png" || got[3] != "/tmp/nested.png" {
 		t.Fatalf("unexpected icon paths order/content: %v", got)
+	}
+}
+
+func TestLoadKeepsLucideIconsUnresolved(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte(`
+buttons:
+  - at: [0, 0]
+    icon: lucide/a-arrow-down
+    on:
+      tap:
+        type: shell
+        cmd: "echo hi"
+  - at: [0, 1]
+    on:
+      tap:
+        toggle:
+          - icon: lucide/cloud-rain
+            action:
+              type: shell
+              cmd: "echo one"
+          - icon: relative.png
+            action:
+              type: shell
+              cmd: "echo two"
+`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if got := cfg.Buttons[0].Icon; got != "lucide/a-arrow-down" {
+		t.Fatalf("expected lucide icon id to stay unchanged, got %q", got)
+	}
+	if got := cfg.Buttons[1].On.Tap.Toggle[0].Icon; got != "lucide/cloud-rain" {
+		t.Fatalf("expected lucide toggle icon id to stay unchanged, got %q", got)
+	}
+	if got := cfg.Buttons[1].On.Tap.Toggle[1].Icon; got != filepath.Join(dir, "relative.png") {
+		t.Fatalf("expected file icon to resolve relative to config dir, got %q", got)
+	}
+}
+
+func TestValidateRejectsInvalidIconColor(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{At: [2]int{0, 0}, Icon: "lucide/a-arrow-down", IconColor: "GGGGGG", On: &Handlers{Tap: &GestureBinding{Type: "shell", Cmd: "echo hi"}}},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected invalid icon color validation error")
+	}
+	if !strings.Contains(err.Error(), "icon_color") {
+		t.Fatalf("expected icon_color validation error, got %v", err)
+	}
+}
+
+func TestValidateRejectsInvalidToggleIconColor(t *testing.T) {
+	cfg := &Config{
+		Buttons: []Button{
+			{
+				At: [2]int{0, 0},
+				On: &Handlers{
+					Tap: &GestureBinding{
+						Toggle: []ToggleStep{
+							{Icon: "lucide/a-arrow-down", IconColor: "00FF00", Action: Action{Type: "shell", Cmd: "echo 1"}},
+							{Icon: "lucide/cloud-rain", IconColor: "NOPE", Action: Action{Type: "shell", Cmd: "echo 2"}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected invalid toggle icon color validation error")
+	}
+	if !strings.Contains(err.Error(), "icon_color") {
+		t.Fatalf("expected icon_color validation error, got %v", err)
 	}
 }

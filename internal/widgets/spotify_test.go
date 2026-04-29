@@ -3,7 +3,7 @@ package widgets
 import "testing"
 
 func TestParseSpotifyState(t *testing.T) {
-	got := parseSpotifyState("1||playing||spotify:track:123||Song Name||Artist Name")
+	got := parseSpotifyState("1||playing||spotify:track:123||Song Name||Album Name||Artist Name||84.5||200000")
 	if !got.Running {
 		t.Fatal("expected running=true")
 	}
@@ -16,24 +16,33 @@ func TestParseSpotifyState(t *testing.T) {
 	if got.TrackName != "Song Name" {
 		t.Fatalf("unexpected track name: %q", got.TrackName)
 	}
+	if got.Album != "Album Name" {
+		t.Fatalf("unexpected album: %q", got.Album)
+	}
 	if got.Artist != "Artist Name" {
 		t.Fatalf("unexpected artist: %q", got.Artist)
+	}
+	if got.PositionSec != 84.5 {
+		t.Fatalf("unexpected position: %v", got.PositionSec)
+	}
+	if got.DurationMS != 200000 {
+		t.Fatalf("unexpected duration: %d", got.DurationMS)
 	}
 }
 
 func TestParseSpotifyStateEmpty(t *testing.T) {
 	got := parseSpotifyState("")
-	if got.Running || got.TrackID != "" || got.TrackName != "" || got.Artist != "" || got.Playing {
+	if got.Running || got.TrackID != "" || got.TrackName != "" || got.Album != "" || got.Artist != "" || got.Playing || got.PositionSec != 0 || got.DurationMS != 0 {
 		t.Fatalf("expected zero snapshot, got %+v", got)
 	}
 }
 
 func TestParseSpotifyStateNotRunning(t *testing.T) {
-	got := parseSpotifyState("0||||")
+	got := parseSpotifyState("0|||||||")
 	if got.Running {
 		t.Fatal("expected running=false")
 	}
-	if got.State != "" || got.TrackID != "" || got.TrackName != "" || got.Artist != "" {
+	if got.State != "" || got.TrackID != "" || got.TrackName != "" || got.Album != "" || got.Artist != "" || got.PositionSec != 0 || got.DurationMS != 0 {
 		t.Fatalf("expected empty metadata, got %+v", got)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 	"gopkg.in/yaml.v3"
 )
 
@@ -62,20 +63,23 @@ type LabelStyle struct {
 type Button struct {
 	// At is [col, row] internally. YAML config is normalized from
 	// user-facing [row, col] during Load().
-	At          [2]int    `yaml:"at"`
-	Label       string    `yaml:"label,omitempty"`
-	Icon        string    `yaml:"icon,omitempty"` // path, ~ expanded
-	IconMargins *Insets   `yaml:"icon_margins,omitempty"`
-	On          *Handlers `yaml:"on,omitempty"`
-	Folder      *Folder   `yaml:"folder,omitempty"`
-	Widget      *Widget   `yaml:"widget,omitempty"`
-	RuntimeID   string    `yaml:"-"`
+	At            [2]int    `yaml:"at"`
+	Label         string    `yaml:"label,omitempty"`
+	Icon          string    `yaml:"icon,omitempty"` // path, ~ expanded
+	IconColor     string    `yaml:"icon_color,omitempty"`
+	IconMargins   *Insets   `yaml:"icon_margins,omitempty"`
+	On            *Handlers `yaml:"on,omitempty"`
+	Folder        *Folder   `yaml:"folder,omitempty"`
+	Widget        *Widget   `yaml:"widget,omitempty"`
+	RuntimeID     string    `yaml:"-"`
+	SyntheticBack bool      `yaml:"-"`
 }
 
 type ToggleStep struct {
-	Label  string `yaml:"label,omitempty"`
-	Icon   string `yaml:"icon,omitempty"`
-	Action Action `yaml:"action"`
+	Label     string `yaml:"label,omitempty"`
+	Icon      string `yaml:"icon,omitempty"`
+	IconColor string `yaml:"icon_color,omitempty"`
+	Action    Action `yaml:"action"`
 }
 
 type ChainStep struct {
@@ -95,6 +99,7 @@ type Widget struct {
 	Apps         []string      `yaml:"apps,omitempty"`
 	PollMS       int           `yaml:"poll_ms,omitempty"`
 	Title        string        `yaml:"title,omitempty"`
+	City         string        `yaml:"city,omitempty"`
 	DSNs         string        `yaml:"dsns,omitempty"`
 	ProjectDir   string        `yaml:"project_dir,omitempty"`
 	Session      string        `yaml:"session,omitempty"`
@@ -320,6 +325,11 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 		if err := validateInsetsForSize(btn.IconMargins, fmt.Sprintf("%s[%d].icon_margins", path, i), width, height); err != nil {
 			return err
 		}
+		if btn.IconColor != "" {
+			if err := validateHexColor(btn.IconColor); err != nil {
+				return fmt.Errorf("%s[%d].icon_color: %w", path, i, err)
+			}
+		}
 		modeCount := 0
 		if btn.On != nil {
 			modeCount++
@@ -390,6 +400,13 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 				if w.PollMS != 0 && w.PollMS < 1000 {
 					return fmt.Errorf("%s[%d].widget.poll_ms too small: %d", path, i, w.PollMS)
 				}
+			case "wide_dashboard":
+				if btn.At != [2]int{3, 2} {
+					return fmt.Errorf("%s[%d].widget.type %q requires wide slot at [2, 3] in YAML", path, i, w.Type)
+				}
+				if w.PollMS != 0 && w.PollMS < 1000 {
+					return fmt.Errorf("%s[%d].widget.poll_ms too small: %d", path, i, w.PollMS)
+				}
 			case "freqtrade":
 				if strings.TrimSpace(w.DSNs) == "" {
 					return fmt.Errorf("%s[%d].widget.dsns is empty", path, i)
@@ -411,7 +428,7 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 					return err
 				}
 			default:
-				return fmt.Errorf("%s[%d].widget.type %q unknown (memory|spotify_play_pause|spotify_next|spotify_artwork|freqtrade|project)", path, i, w.Type)
+				return fmt.Errorf("%s[%d].widget.type %q unknown (memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|freqtrade|project)", path, i, w.Type)
 			}
 		}
 		if d := btn.Folder; d != nil {
@@ -528,6 +545,11 @@ func validateGestureBinding(g *GestureBinding, path string) (bool, error) {
 		}
 		for i := range g.Toggle {
 			stepPath := fmt.Sprintf("%s.toggle[%d]", path, i)
+			if g.Toggle[i].IconColor != "" {
+				if err := validateHexColor(g.Toggle[i].IconColor); err != nil {
+					return false, fmt.Errorf("%s.icon_color: %w", stepPath, err)
+				}
+			}
 			if err := validateAction(&g.Toggle[i].Action, stepPath+".action"); err != nil {
 				return false, err
 			}
@@ -640,7 +662,7 @@ func normalizeButtonCoordinates(buttons []Button) {
 
 func resolveButtonPaths(buttons []Button, baseDir string) {
 	for i := range buttons {
-		if buttons[i].Icon != "" && !filepath.IsAbs(buttons[i].Icon) && !strings.HasPrefix(buttons[i].Icon, "~/") {
+		if buttons[i].Icon != "" && !icons.IsPackIcon(buttons[i].Icon) && !filepath.IsAbs(buttons[i].Icon) && !strings.HasPrefix(buttons[i].Icon, "~/") {
 			if _, err := os.Stat(buttons[i].Icon); err != nil {
 				buttons[i].Icon = filepath.Join(baseDir, buttons[i].Icon)
 			}
@@ -704,7 +726,7 @@ func collectPageIconPaths(pages []Page, seen map[string]struct{}, out *[]string)
 
 func collectIconPaths(buttons []Button, seen map[string]struct{}, out *[]string) {
 	for _, btn := range buttons {
-		if btn.Icon != "" {
+		if btn.Icon != "" && !icons.IsPackIcon(btn.Icon) {
 			if _, ok := seen[btn.Icon]; !ok {
 				seen[btn.Icon] = struct{}{}
 				*out = append(*out, btn.Icon)
@@ -733,7 +755,7 @@ func resolveGestureBindingPaths(g *GestureBinding, baseDir string) {
 	}
 	for i := range g.Toggle {
 		icon := g.Toggle[i].Icon
-		if icon == "" || filepath.IsAbs(icon) || strings.HasPrefix(icon, "~/") {
+		if icon == "" || icons.IsPackIcon(icon) || filepath.IsAbs(icon) || strings.HasPrefix(icon, "~/") {
 			continue
 		}
 		if _, err := os.Stat(icon); err != nil {
@@ -757,7 +779,7 @@ func collectGestureBindingIconPaths(g *GestureBinding, seen map[string]struct{},
 		return
 	}
 	for _, step := range g.Toggle {
-		if step.Icon == "" {
+		if step.Icon == "" || icons.IsPackIcon(step.Icon) {
 			continue
 		}
 		if _, ok := seen[step.Icon]; ok {

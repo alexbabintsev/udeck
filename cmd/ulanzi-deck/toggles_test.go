@@ -18,8 +18,8 @@ func TestToggleManagerCyclesTapStates(t *testing.T) {
 				On: &config.Handlers{
 					Tap: &config.GestureBinding{
 						Toggle: []config.ToggleStep{
-							{Label: "One", Icon: "one.png", Action: config.Action{Type: "shell", Cmd: "echo 1"}},
-							{Label: "Two", Icon: "two.png", Action: config.Action{Type: "shell", Cmd: "echo 2"}},
+							{Label: "One", Icon: "one.png", IconColor: "FF0000", Action: config.Action{Type: "shell", Cmd: "echo 1"}},
+							{Label: "Two", Icon: "two.png", IconColor: "00FF00", Action: config.Action{Type: "shell", Cmd: "echo 2"}},
 							{Label: "Three", Icon: "three.png", Action: config.Action{Type: "shell", Cmd: "echo 3"}},
 						},
 					},
@@ -30,8 +30,8 @@ func TestToggleManagerCyclesTapStates(t *testing.T) {
 
 	m := newToggleManager(cfg)
 	buttons := m.ResolveButtons(cfg.Buttons)
-	if buttons[0].Label != "One" || buttons[0].Icon != "one.png" {
-		t.Fatalf("expected first toggle visuals, got label=%q icon=%q", buttons[0].Label, buttons[0].Icon)
+	if buttons[0].Label != "One" || buttons[0].Icon != "one.png" || buttons[0].IconColor != "FF0000" {
+		t.Fatalf("expected first toggle visuals, got label=%q icon=%q color=%q", buttons[0].Label, buttons[0].Icon, buttons[0].IconColor)
 	}
 
 	action, changed := m.Handle("buttons[0]", ig.Tap)
@@ -39,8 +39,8 @@ func TestToggleManagerCyclesTapStates(t *testing.T) {
 		t.Fatalf("expected first toggle action and visual change, got action=%#v changed=%v", action, changed)
 	}
 	buttons = m.ResolveButtons(cfg.Buttons)
-	if buttons[0].Label != "Two" || buttons[0].Icon != "two.png" {
-		t.Fatalf("expected second toggle visuals, got label=%q icon=%q", buttons[0].Label, buttons[0].Icon)
+	if buttons[0].Label != "Two" || buttons[0].Icon != "two.png" || buttons[0].IconColor != "00FF00" {
+		t.Fatalf("expected second toggle visuals, got label=%q icon=%q color=%q", buttons[0].Label, buttons[0].Icon, buttons[0].IconColor)
 	}
 
 	_, _ = m.Handle("buttons[0]", ig.Tap)
