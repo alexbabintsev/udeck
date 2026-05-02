@@ -258,11 +258,11 @@ func (w *WideDashboardWidget) render(now time.Time) (bool, error) {
 	img := image.NewRGBA(image.Rect(0, 0, icons.WideWidth, icons.IconHeight))
 	switch {
 	case ctx.InFolder():
-		renderDashboardBack(img, ctx)
+		renderDashboardBack(img)
 	case mode == dashboardModeSpotify:
-		renderDashboardSpotify(img, spotifyNow, ctx)
+		renderDashboardSpotify(img, spotifyNow)
 	default:
-		renderDashboardClock(img, now, weather, ctx)
+		renderDashboardClock(img, now, weather)
 	}
 
 	changed, err := writePNGAtomicIfChanged(w.iconPath, img)
@@ -332,7 +332,7 @@ func rgb(hex string, alpha ...int) color.RGBA {
 	}
 }
 
-func renderDashboardClock(img *image.RGBA, now time.Time, weather dashboardWeatherState, ctx Context) {
+func renderDashboardClock(img *image.RGBA, now time.Time, weather dashboardWeatherState) {
 	draw.Draw(img, img.Bounds(), &image.Uniform{rgb("000000")}, image.Point{}, draw.Src)
 	draw.Draw(img, rectWH(icons.WideWidth-4, 0, 4, icons.IconHeight), &image.Uniform{rgb("086fff")}, image.Point{}, draw.Src)
 
@@ -351,10 +351,9 @@ func renderDashboardClock(img *image.RGBA, now time.Time, weather dashboardWeath
 
 	// weather summary — top right: icon + temp on one row
 	drawDashboardClockWeatherSummary(img, weather)
-	drawPageChip(img, ctx)
 }
 
-func renderDashboardSpotify(img *image.RGBA, s spotifySnapshot, ctx Context) {
+func renderDashboardSpotify(img *image.RGBA, s spotifySnapshot) {
 	draw.Draw(img, img.Bounds(), &image.Uniform{color.Black}, image.Point{}, draw.Src)
 
 	artRect := rectWH(0, 0, 192, 192)
@@ -369,24 +368,14 @@ func renderDashboardSpotify(img *image.RGBA, s spotifySnapshot, ctx Context) {
 	drawDashboardLeftText(img, shortenLine(track, 22), rectWH(218, 64, 212, 28), color.White, 24)
 	drawDashboardLeftText(img, shortenLine(artistLine, 26), rectWH(218, 94, 224, 24), color.RGBA{0xbb, 0xbb, 0xbb, 0xff}, 18)
 	drawSpotifyProgressBlock(img, s)
-	drawPageChip(img, ctx)
 }
 
-func renderDashboardBack(img *image.RGBA, ctx Context) {
+func renderDashboardBack(img *image.RGBA) {
 	draw.Draw(img, img.Bounds(), &image.Uniform{color.Black}, image.Point{}, draw.Src)
 	drawIcon(img, "lucide/arrow-left", CenterX(-80), CenterY(0), 70, 70, rgb("aaaaaa"))
 	drawText(img, "BACK", CenterX(40), CenterY(0), 140, 48, AlignMiddleLeft, color.White, 48, true)
-	drawPageChip(img, ctx)
 }
 
-func drawPageChip(img *image.RGBA, ctx Context) {
-	if ctx.PageIndex <= 0 {
-		return
-	}
-	rect := rectWH(402, 14, 42, 22)
-	fillRoundRect(img, rect, 10, rgb("000000", 136))
-	drawDashboardCenteredText(img, fmt.Sprintf("%d", ctx.PageIndex+1), rect, color.White, 14)
-}
 
 func drawDashboardArtwork(img *image.RGBA, rect image.Rectangle, s spotifySnapshot) {
 	fillRoundRect(img, rect, 18, rgb("181818"))

@@ -9,6 +9,11 @@ actual development milestones rather than formal releases.
 
 - Keep updating this section for user-visible changes that have not been
   grouped into a tagged release yet.
+- `page_next` / `page_prev` action buttons now render with a white rounded
+  badge in the top-left corner showing the current page number, using the
+  button's existing `icon` and `icon_color` — no config changes required.
+- Removed page-number chip from `wide_dashboard` — it now appears only on
+  the dedicated navigation button.
 - Added `drawText` / `drawIcon` / `drawWeatherIconAt` layout helpers in
   `textblock.go`: edge-based anchors (`FromLeft`, `FromRight`, `CenterX`, …),
   9-position block alignment, automatic font shrink-to-fit (min 18 px), and

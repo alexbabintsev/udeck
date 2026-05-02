@@ -36,15 +36,21 @@ type Manager struct {
 	settings config.WidgetSettings
 	engine   *ig.Engine
 	context  Context
+	pageNav  *pageNavOverlay
 }
 
 func NewManager(cfg *config.Config) (*Manager, error) {
+	nav, err := newPageNavOverlay()
+	if err != nil {
+		return nil, fmt.Errorf("page nav overlay: %w", err)
+	}
 	m := &Manager{
 		defs:     map[string]widgetDef{},
 		items:    map[string]Widget{},
 		updates:  make(chan string, 32),
 		settings: cfg.Widgets,
 		engine:   ig.New(),
+		pageNav:  nav,
 	}
 	for _, page := range cfg.PagesOrDefault() {
 		m.collectDefs(page.Buttons)
@@ -69,6 +75,10 @@ func (m *Manager) Close() error {
 	if m.spotify != nil {
 		_ = m.spotify.Close()
 		m.spotify = nil
+	}
+	if m.pageNav != nil {
+		m.pageNav.close()
+		m.pageNav = nil
 	}
 	return nil
 }
@@ -98,8 +108,19 @@ func (m *Manager) ResolveButtons(buttons []config.Button) ([]config.Button, erro
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+
+	pageNumber := m.context.PageIndex + 1
+
 	for i := range resolved {
 		if resolved[i].Widget == nil {
+			// Overlay page number on page_next / page_prev buttons.
+			if m.pageNav != nil && isPageNavButton(resolved[i]) {
+				iconID := pageNavIconID(resolved[i])
+				if path := m.pageNav.resolve(iconID, resolved[i].IconColor, pageNumber); path != "" {
+					resolved[i].Icon = path
+					resolved[i].Label = ""
+				}
+			}
 			continue
 		}
 		// Widget visuals are rendered into the icon itself; suppress the
