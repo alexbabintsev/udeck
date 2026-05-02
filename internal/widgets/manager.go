@@ -266,6 +266,8 @@ func (m *Manager) newWidgetLocked(id string) (Widget, error) {
 		case "spotify_artwork":
 			item, err = NewSpotifyArtworkWidget(id, m.spotify, m.notify)
 		}
+	case "weather_day":
+		item, err = NewWeatherDayWidget(id, def.btn.Widget, m.notify)
 	case "project":
 		item, err = NewProjectWidget(id, def.btn, m.settings.Project, m.notify)
 	default:
@@ -343,7 +345,7 @@ func (m *Manager) gestureOptions(id string) (ig.Options, bool) {
 			HasHold:   true,
 			HoldDelay: projectHoldDuration(def.btn.Widget.HoldMS),
 		}, true
-	case "memory", "freqtrade", "spotify_next", "spotify_artwork", "wide_dashboard":
+	case "memory", "freqtrade", "spotify_next", "spotify_artwork", "wide_dashboard", "weather_day":
 		return ig.Options{HasTap: true}, true
 	default:
 		return ig.Options{}, false

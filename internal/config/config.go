@@ -107,6 +107,7 @@ type Widget struct {
 	Scripts      WidgetScripts `yaml:"scripts,omitempty"`
 	On           *WidgetOn     `yaml:"on,omitempty"`
 	HoldMS       int           `yaml:"hold_ms,omitempty"`
+	DayIndex     int           `yaml:"day_index,omitempty"`
 }
 
 type WidgetScripts struct {
@@ -414,6 +415,16 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 				if w.PollMS != 0 && w.PollMS < 3000 {
 					return fmt.Errorf("%s[%d].widget.poll_ms too small: %d", path, i, w.PollMS)
 				}
+			case "weather_day":
+				if strings.TrimSpace(w.City) == "" {
+					return fmt.Errorf("%s[%d].widget.city is empty", path, i)
+				}
+				if w.DayIndex < 0 || w.DayIndex > 13 {
+					return fmt.Errorf("%s[%d].widget.day_index must be 0-13, got %d", path, i, w.DayIndex)
+				}
+				if w.PollMS != 0 && w.PollMS < 1000 {
+					return fmt.Errorf("%s[%d].widget.poll_ms too small: %d", path, i, w.PollMS)
+				}
 			case "project":
 				if strings.TrimSpace(w.ProjectDir) == "" {
 					return fmt.Errorf("%s[%d].widget.project_dir is empty", path, i)
@@ -428,7 +439,7 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 					return err
 				}
 			default:
-				return fmt.Errorf("%s[%d].widget.type %q unknown (memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|freqtrade|project)", path, i, w.Type)
+				return fmt.Errorf("%s[%d].widget.type %q unknown (memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|freqtrade|project|weather_day)", path, i, w.Type)
 			}
 		}
 		if d := btn.Folder; d != nil {
