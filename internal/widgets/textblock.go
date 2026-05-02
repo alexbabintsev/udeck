@@ -60,6 +60,7 @@ const textMinSize = 18.0
 //   align            — where text sits inside the block (9 positions)
 //   size             — starting font size; shrinks to fit, minimum 18
 //   bold             — use bold/regular face
+//   tracking         — optional letter-spacing in pixels (default 0)
 func drawText(
 	img *image.RGBA,
 	text string,
@@ -69,6 +70,7 @@ func drawText(
 	clr color.Color,
 	size float64,
 	bold bool,
+	tracking ...float64,
 ) {
 	if text == "" {
 		return
@@ -86,9 +88,14 @@ func drawText(
 	}
 	defer face.Close()
 
+	tr := 0.0
+	if len(tracking) > 0 {
+		tr = tracking[0]
+	}
+
 	metrics := face.Metrics()
 	textH := metrics.Height.Ceil()
-	textW := font.MeasureString(face, display).Round()
+	textW := trackedTextWidth(face, display, tr)
 
 	// Horizontal position within block
 	var textX int
@@ -112,7 +119,7 @@ func drawText(
 		baseline = blockY + blockH - metrics.Descent.Ceil()
 	}
 
-	drawLeftFace(img, display, textX, baseline, clr, face)
+	drawLeftFaceTracked(img, display, textX, baseline, clr, face, tr)
 }
 
 func resolveAnchorX(a TextAnchor, blockW, canvasW int) int {

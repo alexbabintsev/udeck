@@ -152,7 +152,7 @@ func (w *MemoryWidget) render() (bool, error) {
 	if busy {
 		_ = icons.DrawPackIcon(img, "lucide/refresh-cw", image.Rect(58, 58, 138, 138), col)
 	} else {
-		drawDashboardCenteredText(img, fmt.Sprintf("%d", percent), image.Rect(28, 48, memoryWidgetW-28, 146), col, 66)
+		drawDashboardCenteredText(img, fmt.Sprintf("%d", percent), image.Rect(28, 48, memoryWidgetW-28, 146), col, 60)
 	}
 	if hasApps && !busy {
 		// Keep app-enabled widgets visually identical; tap behavior is implicit.
@@ -194,8 +194,8 @@ func drawMemoryRing(img *image.RGBA, percent int, clr color.Color) {
 	const (
 		cx       = memoryWidgetW / 2
 		cy       = memoryWidgetH / 2
-		outerR   = 72.0
-		innerR   = 60.0
+		outerR   = 65.0
+		innerR   = 55.0
 		trackDeg = 360.0
 	)
 

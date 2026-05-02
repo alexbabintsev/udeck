@@ -62,6 +62,7 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
   - `spotify_next`
   - `spotify_artwork`
   - `wide_dashboard`
+  - `weather_day`
   - `project`
 - Config hot reload while `run` is active
 - Runtime keepalive to keep the deck out of screensaver
@@ -121,6 +122,7 @@ The demo config includes:
 - `memory` widget
 - `spotify_*` widgets
 - `wide_dashboard` widget for the double-wide `3_2` slot
+- `weather_day` widget for the double-wide `3_2` slot
 - `project` widget with demo `start/stop/focus` scripts
 - Lucide icon-pack examples via `icon: lucide/...`
 - gesture test buttons
@@ -174,10 +176,10 @@ Current config surface:
         - only valid at `at: [2, 3]`
         - `city`: optional weather city name
         - `poll_ms`: optional weather refresh override
-        - tap cycles `clock -> weather -> clock+weather -> spotify`
+        - tap cycles `clock -> spotify`
         - inside folders it turns into the folder `Back` button
         - on top-level pages `2+` it shows the page number in the corner
-        - clock-based modes refresh on minute changes instead of every second
+        - clock mode refreshes on minute changes instead of every second
       - `type: project`
         - `project_dir`: project root; relative paths are resolved relative
           to the config file

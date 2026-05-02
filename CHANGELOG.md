@@ -9,6 +9,22 @@ actual development milestones rather than formal releases.
 
 - Keep updating this section for user-visible changes that have not been
   grouped into a tagged release yet.
+- Added `drawText` / `drawIcon` / `drawWeatherIconAt` layout helpers in
+  `textblock.go`: edge-based anchors (`FromLeft`, `FromRight`, `CenterX`, …),
+  9-position block alignment, automatic font shrink-to-fit (min 18 px), and
+  optional letter-spacing (`tracking`).
+- `wide_dashboard` clock mode redesigned: date and weekday use `drawText`,
+  weekday turns red on weekends, weather summary shows icon + temperature
+  on one row using colored Lucide weather icons matching the `weather_day`
+  widget palette.
+- `wide_dashboard` back mode redesigned: black background, Lucide
+  `arrow-left` icon on the left, "BACK" label on the right, both centered
+  vertically via `drawText`/`drawIcon`.
+- Removed `weather` and `clockweather` dashboard modes — the dedicated
+  `weather_day` widget covers that surface.
+- Added `weather_day` widget: full-width daily forecast card for the
+  double-wide `3_2` slot with current conditions, 5-day outlook, and
+  Lucide weather icons.
 - Added hot reload for configured static icon files, not just the YAML
   config file.
 - `run` now defaults to `examples/test-config.yaml` when `--config` is
