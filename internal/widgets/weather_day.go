@@ -289,79 +289,103 @@ func weatherDayFrameKey(city string, dayIndex int, fc *weatherDayData) string {
 func renderWeatherDayCard(img *image.RGBA, dayIndex int, fc *weatherDayData, city string) {
 	draw.Draw(img, img.Bounds(), &image.Uniform{color.Black}, image.Point{}, draw.Src)
 
-	const headerH = 52
+	const (
+		headerH      = 45
+		row2Y        = headerH + 4
+		row2H        = 85
+		divY         = row2Y + row2H + 2
+		row3Y        = divY + 6
+		row3H        = 30
+		statIconOffX = 20
+	)
+
+	W := icons.IconWidth
 
 	if fc == nil {
-		draw.Draw(img, rectWH(0, 0, icons.IconWidth, headerH), &image.Uniform{rgb("333333")}, image.Point{}, draw.Src)
 		label := city
 		if label == "" {
 			label = "Weather"
 		}
-		drawDashboardCenteredText(img, label, rectWH(4, 0, icons.IconWidth-8, headerH/2), color.White, 18)
-		if dayIndex == 0 {
-			drawDashboardCenteredText(img, "Today", rectWH(4, headerH/2, icons.IconWidth-8, headerH/2), rgb("bbbbbb"), 18)
-		} else {
-			drawDashboardCenteredText(img, fmt.Sprintf("+%d days", dayIndex), rectWH(4, headerH/2, icons.IconWidth-8, headerH/2), rgb("bbbbbb"), 18)
+		drawText(img, label,
+			CenterX(0), FromTop(4),
+			W-8, 22, AlignMiddleCenter,
+			color.White, 22, true)
+		days := "Today"
+		if dayIndex > 0 {
+			days = fmt.Sprintf("+%d days", dayIndex)
 		}
-		drawDashboardCenteredText(img, "--°", rectWH(4, headerH+20, icons.IconWidth-8, 60), rgb("555555"), 44)
+		drawText(img, days,
+			CenterX(0), FromTop(28),
+			W-8, 22, AlignMiddleCenter,
+			rgb("888888"), 20, false)
+		drawText(img, "--°",
+			CenterX(0), CenterY(20),
+			W-8, 60, AlignMiddleCenter,
+			rgb("444444"), 44, true)
 		return
 	}
 
-	// ── Row 1: date header ──────────────────────���───────────────────
+	// ── Row 1: date header ──────────────────────────────────────────
 	isWeekend := fc.Date.Weekday() == time.Saturday || fc.Date.Weekday() == time.Sunday
 	headerBg := rgb("1a4fa8")
 	if isWeekend {
 		headerBg = rgb("a82020")
 	}
-	draw.Draw(img, rectWH(0, 0, icons.IconWidth, headerH), &image.Uniform{headerBg}, image.Point{}, draw.Src)
+	draw.Draw(img, rectWH(0, 0, W, headerH), &image.Uniform{headerBg}, image.Point{}, draw.Src)
+	drawText(img, strings.ToUpper(fc.Date.Format("2 Jan")),
+		FromLeft(10), FromTop(0),
+		W/2, headerH, AlignMiddleLeft,
+		color.White, 30, true)
+	drawText(img, strings.ToUpper(fc.Date.Format("Mon")),
+		FromRight(20), FromTop(0),
+		W/2, headerH, AlignMiddleRight,
+		color.White, 30, false)
 
-	dateLeft := strings.ToUpper(fc.Date.Format("2 Jan"))
-	weekdayShort := strings.ToUpper(fc.Date.Format("Mon"))
-	drawSpaceMonoLeftText(img, dateLeft, rectWH(8, 0, icons.IconWidth/2, headerH), color.White, 22, true)
-	drawSpaceMonoRightTextTracked(img, weekdayShort, rectWH(0, 0, icons.IconWidth-8, headerH), color.White, 22, false, 0)
+	// ── Row 2: temp + icon ──────────────────────────────────────────
+	drawText(img, fmt.Sprintf("%.0f°", math.Round(fc.TempMaxC)),
+		FromLeft(10), FromTop(row2Y),
+		110, row2H, AlignMiddleLeft,
+		color.White, 62, true)
 
-	// ── Row 2: temp (left) + weather icon (right) ───────────────────
-	const row2Y = headerH + 4
-	const row2H = 88
+	drawWeatherIconAt(img, fc.Code,
+		FromRight(12), FromTop(row2Y),
+		56, row2H,
+		weatherDayIconColor(fc.Code))
 
-	tempStr := fmt.Sprintf("%.0f°", math.Round(fc.TempMaxC))
-	drawSpaceMonoLeftText(img, tempStr, rectWH(10, row2Y, 110, row2H), color.White, 62, true)
+	// ── Divider ─────────────────────────────────────────────────────
+	draw.Draw(img, rectWH(10, divY, W-20, 1), &image.Uniform{rgb("222222")}, image.Point{}, draw.Src)
 
-	iconCX := icons.IconWidth - 50
-	iconCY := row2Y + row2H/2
-	drawWeatherIcon(img, fc.Code, iconCX, iconCY, 28, weatherDayIconColor(fc.Code))
+	// ── Row 3: humidity (left) + wind (right) ───────────────────────
+	half := W / 2
+	const iconSz = 22
 
-	// ── Divider ──────────────────────────────────────────────────��──
-	const divY = row2Y + row2H + 2
-	draw.Draw(img, rectWH(10, divY, icons.IconWidth-20, 1), &image.Uniform{rgb("222222")}, image.Point{}, draw.Src)
+	// humidity icon + value
+	drawIcon(img, "lucide/droplets",
+		FromLeft(statIconOffX-iconSz/2), FromTop(row3Y+(row3H-iconSz)/2),
+		iconSz, iconSz, rgb("33bbff"))
+	drawText(img, fmt.Sprintf("%d%%", fc.HumidityPct),
+		FromLeft(statIconOffX+iconSz/2+6), FromTop(row3Y),
+		half-statIconOffX-iconSz/2-8, row3H, AlignMiddleLeft,
+		rgb("eeeeee"), 28, true)
 
-	// ── Row 3: humidity + wind ───────────────────────────────────────
-	const row3Y = divY + 4
-	const row3H = 40
-	half := icons.IconWidth / 2
-
-	drawWeatherDayStat(img, rectWH(6, row3Y, half-8, row3H), "droplets",
-		fmt.Sprintf("%d%%", fc.HumidityPct))
-	drawWeatherDayStat(img, rectWH(half+2, row3Y, half-8, row3H), "wind",
-		fmt.Sprintf("%.0f m/s", fc.WindSpeedMS))
-}
-
-func drawWeatherDayStat(img *image.RGBA, rect image.Rectangle, kind, value string) {
-	iconX := rect.Min.X + 12
-	iconY := rect.Min.Y + rect.Dy()/2
-	drawDashboardStatIcon(img, kind, iconX, iconY, rgb("33bbff"))
-	textRect := image.Rect(rect.Min.X+26, rect.Min.Y, rect.Max.X, rect.Max.Y)
-	drawSpaceMonoLeftText(img, value, textRect, rgb("eeeeee"), 28, true)
+	// wind icon + value
+	drawIcon(img, "lucide/wind",
+		FromRight(20), FromTop(row3Y+(row3H-iconSz)/2),
+		iconSz, iconSz, rgb("33bbff"))
+	drawText(img, fmt.Sprintf("%.0f", fc.WindSpeedMS),
+		FromRight(20+iconSz+6), FromTop(row3Y),
+		half-statIconOffX-iconSz/2-8, row3H, AlignMiddleRight,
+		rgb("eeeeee"), 28, true)
 }
 
 func weatherDayIconColor(code int) color.RGBA {
 	switch {
 	case code == 0:
-		return rgb("ffcc00")
+		return rgb("ffcc00") // clear — yellow
 	case code <= 2:
-		return rgb("aaaaaa")
+		return rgb("ff8800") // partly cloudy / cloud-sun — orange
 	case code == 3:
-		return rgb("888888")
+		return rgb("888888") // overcast — gray
 	case code >= 45 && code <= 48:
 		return rgb("99aaaa")
 	case code >= 51 && code <= 67, code >= 80 && code <= 82:

@@ -317,15 +317,32 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 		if widgetMgr != nil {
 			select {
 			case id := <-widgetMgr.Updates():
-				if nav != nil && buttonVisible(nav.currentButtons(), id) {
-					if err := refreshButtonByID(cfg, dev, nav, toggles, widgetMgr, id); err != nil {
-						if fullErr := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); fullErr != nil {
-							if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, fmt.Errorf("update widgets: %w", err)); recovered {
-								lastKeepalive = time.Now()
-								continue
-							} else if recErr != nil {
-								return recErr
-							}
+				// Drain any additional pending updates — if multiple arrive together
+				// (e.g. a shared weather cache notifying all day widgets at once),
+				// do a single full refresh instead of N partial ones.
+				ids := []string{id}
+			drainLoop:
+				for {
+					select {
+					case next := <-widgetMgr.Updates():
+						ids = append(ids, next)
+					default:
+						break drainLoop
+					}
+				}
+				if nav != nil {
+					var err error
+					if len(ids) == 1 && buttonVisible(nav.currentButtons(), ids[0]) {
+						err = refreshButtonByID(cfg, dev, nav, toggles, widgetMgr, ids[0])
+					} else {
+						err = refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr)
+					}
+					if err != nil {
+						if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, fmt.Errorf("update widgets: %w", err)); recovered {
+							lastKeepalive = time.Now()
+							continue
+						} else if recErr != nil {
+							return recErr
 						}
 					}
 					lastKeepalive = time.Now()
