@@ -9,6 +9,17 @@ actual development milestones rather than formal releases.
 
 - Keep updating this section for user-visible changes that have not been
   grouped into a tagged release yet.
+- HID stability: macOS `hid_read_timeout: error waiting for more data` is
+  no longer treated as fatal — it's a soft poll miss returned as empty
+  read, eliminating spurious device recoveries and UI flicker during
+  power transitions or read contention.
+- HID writes now retry on `IOHIDDeviceSetReport` "device not responding"
+  (0xE00002ED). Retry budget increased to 8 attempts at 60 ms — transient
+  setReport failures recover in-place instead of triggering a full
+  device reopen.
+- Inbound `cmd=0x010B` frames are now recognized as `LABEL_STYLE_ACK`
+  and silently consumed, replacing the noisy `UNKNOWN cmd=010B` log
+  line that fired after every page apply.
 - `project` widget redesign: black background, large centered seed icon,
   uppercase title rendered via `drawText` with auto shrink-to-fit, and a
   small green status dot in the top-left when the tmux session is running.

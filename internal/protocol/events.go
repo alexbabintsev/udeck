@@ -9,6 +9,7 @@ const (
 	EventUnknown EventKind = iota
 	EventButton
 	EventDeviceInfo
+	EventLabelStyleAck
 )
 
 // Event is the parsed form of an inbound HID frame.
@@ -48,6 +49,8 @@ func (e Event) String() string {
 		return fmt.Sprintf("%s index=%d state=%d %s", label, e.Index, e.State, action)
 	case EventDeviceInfo:
 		return fmt.Sprintf("DEVICE_INFO %q", e.Info)
+	case EventLabelStyleAck:
+		return "LABEL_STYLE_ACK"
 	default:
 		return fmt.Sprintf("UNKNOWN cmd=%04X len=%d", uint16(e.Cmd), len(e.Payload))
 	}
@@ -91,6 +94,8 @@ func ParseEvent(raw []byte) (Event, error) {
 			}
 		}
 		ev.Info = string(s)
+	case CmdInLabelStyleAck:
+		ev.Kind = EventLabelStyleAck
 	default:
 		ev.Kind = EventUnknown
 	}

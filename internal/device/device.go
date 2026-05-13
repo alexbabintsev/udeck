@@ -19,8 +19,8 @@ const (
 	openRetries     = 20
 	openRetryDelay  = 250 * time.Millisecond
 	openRetryMax    = 2 * time.Second
-	writeRetries    = 4
-	writeRetryDelay = 120 * time.Millisecond
+	writeRetries    = 8
+	writeRetryDelay = 60 * time.Millisecond
 )
 
 // Device wraps a HID handle for the Ulanzi D200.
@@ -136,6 +136,14 @@ func (d *Device) ReadPacket(timeout time.Duration) ([]byte, error) {
 		if errors.Is(err, hid.ErrTimeout) {
 			return nil, nil
 		}
+		// macOS hidapi sometimes returns -1 from cond_wait with the
+		// message "hid_read_timeout: error waiting for more data" when
+		// the wait is interrupted (e.g. during power transitions or
+		// contention). The device is still healthy — treat it as a
+		// soft poll miss rather than tearing down and reopening.
+		if strings.Contains(err.Error(), "error waiting for more data") {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("hid read: %w", err)
 	}
 	if n == 0 {
@@ -196,7 +204,9 @@ func shouldRetryWrite(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "general error") ||
 		strings.Contains(msg, "resource busy") ||
-		strings.Contains(msg, "busy")
+		strings.Contains(msg, "busy") ||
+		strings.Contains(msg, "not responding") ||
+		strings.Contains(msg, "0xe00002ed")
 }
 
 func openRetryBackoff(attempt int) time.Duration {

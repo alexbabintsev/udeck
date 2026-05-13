@@ -24,6 +24,7 @@ const (
 	CmdPartiallyUpdateButtons  Cmd = 0x000D
 	CmdInButton                Cmd = 0x0101
 	CmdInButton2               Cmd = 0x0102
+	CmdInLabelStyleAck         Cmd = 0x010B
 	CmdInDeviceInfo            Cmd = 0x0303
 )
 

@@ -404,6 +404,9 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 			fmt.Printf("parse error: %v (raw len=%d)\n", err, len(raw))
 			continue
 		}
+		if ev.Kind == protocol.EventLabelStyleAck {
+			continue
+		}
 		fmt.Println(ev.String())
 
 		if ev.Kind != protocol.EventButton {
