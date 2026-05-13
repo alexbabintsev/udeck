@@ -206,7 +206,9 @@ func shouldRetryWrite(err error) bool {
 		strings.Contains(msg, "resource busy") ||
 		strings.Contains(msg, "busy") ||
 		strings.Contains(msg, "not responding") ||
-		strings.Contains(msg, "0xe00002ed")
+		strings.Contains(msg, "not ready") ||
+		strings.Contains(msg, "0xe00002ed") ||
+		strings.Contains(msg, "0xe00002d8")
 }
 
 func openRetryBackoff(attempt int) time.Duration {

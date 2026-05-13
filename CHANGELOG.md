@@ -14,9 +14,9 @@ actual development milestones rather than formal releases.
   read, eliminating spurious device recoveries and UI flicker during
   power transitions or read contention.
 - HID writes now retry on `IOHIDDeviceSetReport` "device not responding"
-  (0xE00002ED). Retry budget increased to 8 attempts at 60 ms — transient
-  setReport failures recover in-place instead of triggering a full
-  device reopen.
+  (0xE00002ED) and "not ready" (0xE00002D8). Retry budget increased to 8
+  attempts at 60 ms — transient setReport failures recover in-place
+  instead of triggering a full device reopen.
 - Inbound `cmd=0x010B` frames are now recognized as `LABEL_STYLE_ACK`
   and silently consumed, replacing the noisy `UNKNOWN cmd=010B` log
   line that fired after every page apply.
