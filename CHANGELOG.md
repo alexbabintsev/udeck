@@ -9,6 +9,18 @@ actual development milestones rather than formal releases.
 
 - Keep updating this section for user-visible changes that have not been
   grouped into a tagged release yet.
+- `project` widget redesign: black background, large centered seed icon,
+  uppercase title rendered via `drawText` with auto shrink-to-fit, and a
+  small green status dot in the top-left when the tmux session is running.
+  Removed the old gradient, badge, glyph fallback, and footer status bar.
+- `project` widget config now supports an explicit `title` field that
+  overrides the button `label` and directory-derived name.
+- Removed bundled `assets/Space_Mono/` TTF fonts (no longer referenced).
+- `examples/project-demo`: rewrote `start` and `stop` to target iTerm
+  instead of macOS Terminal, with AppleScript helpers that focus the
+  existing tmux client tab or spawn a new one on start, and close the
+  matching iTerm tab plus the editor project window on stop. Removed the
+  separate `focus` script (logic merged into `start`).
 - `page_next` / `page_prev` action buttons now render with a white rounded
   badge in the top-left corner showing the current page number, using the
   button's existing `icon` and `icon_color` — no config changes required.

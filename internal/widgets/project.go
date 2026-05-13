@@ -17,7 +17,6 @@ import (
 	"time"
 
 	xdraw "golang.org/x/image/draw"
-	"golang.org/x/image/font/basicfont"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
@@ -89,7 +88,7 @@ func NewProjectWidget(id string, btn config.Button, settings config.ProjectWidge
 		id:           id,
 		projectDir:   projectDir,
 		session:      projectSessionName(projectDir, wcfg.Session),
-		title:        projectTitle(btn.Label, projectDir),
+		title:        projectTitle(wcfg.Title, btn.Label, projectDir),
 		iconPath:     filepath.Join(dir, "project.png"),
 		notify:       notify,
 		pollMS:       pollDurationOrDefault(wcfg.PollMS, defaultProjectPollMS),
@@ -294,32 +293,29 @@ func (w *ProjectWidget) refreshRunning() (bool, error) {
 func (w *ProjectWidget) render() (bool, error) {
 	w.mu.Lock()
 	running := w.running
-	busy := w.busy
-	lastAction := w.lastAction
-	lastError := w.lastError
 	title := w.title
 	seed := w.seedIcon
-	session := w.session
 	w.mu.Unlock()
 
 	img := image.NewRGBA(image.Rect(0, 0, icons.IconWidth, icons.IconHeight))
-	top, bottom := projectGradient(running, busy, lastError != "")
-	drawWidgetGradient(img, top, bottom)
-	accent := projectAccent(running, busy, lastAction, lastError != "")
+	draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{0, 0, 0, 0xff}}, image.Point{}, draw.Src)
 
-	drawSmallBadge(img, projectBadge(running, busy, lastAction, lastError != ""), accent)
-	drawScaledCenteredText(img, shortenLine(strings.ToUpper(title), 12), image.Rect(18, 28, icons.IconWidth-18, 74), color.RGBA{0xf0, 0xf0, 0xf0, 0xff})
-
+	const iconSize = 96
+	iconX := (icons.IconWidth - iconSize) / 2
+	iconY := 24
 	if seed != nil {
-		dst := image.Rect(54, 72, 142, 160)
-		xdraw.BiLinear.Scale(img, dst, seed, seed.Bounds(), draw.Over, nil)
-	} else {
-		drawProjectGlyph(img, accent, firstRune(strings.TrimSpace(title)))
+		dst := image.Rect(iconX, iconY, iconX+iconSize, iconY+iconSize)
+		xdraw.CatmullRom.Scale(img, dst, seed, seed.Bounds(), draw.Over, nil)
 	}
 
-	draw.Draw(img, image.Rect(18, icons.IconHeight-36, icons.IconWidth-18, icons.IconHeight-26), &image.Uniform{color.RGBA{0, 0, 0, 0x88}}, image.Point{}, draw.Over)
-	draw.Draw(img, image.Rect(18, icons.IconHeight-36, 18+projectStatusWidth(running), icons.IconHeight-26), &image.Uniform{accent}, image.Point{}, draw.Src)
-	drawCenteredFace(img, shortenLine(projectFooter(running, busy, lastAction, lastError, session), 18), icons.IconWidth/2, icons.IconHeight-12, color.RGBA{0xc8, 0xc8, 0xc8, 0xff}, basicfont.Face7x13)
+	drawText(img, strings.ToUpper(strings.TrimSpace(title)),
+		FromLeft(8), FromTop(iconY+iconSize+12),
+		icons.IconWidth-16, 40,
+		AlignTopCenter, color.RGBA{0xf0, 0xf0, 0xf0, 0xff}, 28, true)
+
+	if running {
+		fillCircle(img, 28, 28, 8, color.RGBA{0x0e, 0xab, 0x2d, 0xff})
+	}
 
 	changed, err := writePNGAtomicIfChanged(w.iconPath, img)
 	if err != nil {
@@ -328,7 +324,10 @@ func (w *ProjectWidget) render() (bool, error) {
 	return changed, nil
 }
 
-func projectTitle(label, projectDir string) string {
+func projectTitle(title, label, projectDir string) string {
+	if strings.TrimSpace(title) != "" {
+		return strings.TrimSpace(title)
+	}
 	if strings.TrimSpace(label) != "" {
 		return strings.TrimSpace(label)
 	}

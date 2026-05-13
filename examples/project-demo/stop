@@ -3,11 +3,70 @@ set -eu
 
 PROJECT_DIR="${PROJECT_DIR:-$(CDPATH= cd -- "$(dirname "$0")" && pwd)}"
 PROJECT_SESSION="${PROJECT_SESSION:-$(basename "$PROJECT_DIR" | tr '.: ' '___')}"
+PROJECT_EDITOR="${PROJECT_EDITOR:-}"
+PROJECT_EDITOR_TARGET="${PROJECT_EDITOR_TARGET:-$PROJECT_DIR}"
 PROJECT_CHROME_PROJECT="${PROJECT_CHROME_PROJECT:-$(basename "$PROJECT_DIR")}"
 SLATE_CLI_PATH="${SLATE_CLI_PATH:-/Volumes/Black/Projects/chrome-projects/cli/slate}"
 SLATE_EXT_ID="${SLATE_EXT_ID:-jdkjlgbfdjgleildnodgnknmakniinjm}"
 
+CLIENT_TTYS=$(tmux list-clients -t "$PROJECT_SESSION" -F '#{client_tty}' 2>/dev/null | tr '\n' '|' | sed 's/|$//')
+
+if [ -n "$CLIENT_TTYS" ]; then
+  /usr/bin/osascript \
+    -e "on run argv" \
+    -e "set ttyList to item 1 of argv" \
+    -e 'tell application "iTerm"' \
+    -e "  repeat with w in windows" \
+    -e "    set tabsToClose to {}" \
+    -e "    repeat with t in tabs of w" \
+    -e "      repeat with s in sessions of t" \
+    -e "        if ttyList contains (tty of s) then" \
+    -e "          set end of tabsToClose to t" \
+    -e "          exit repeat" \
+    -e "        end if" \
+    -e "      end repeat" \
+    -e "    end repeat" \
+    -e "    repeat with t in tabsToClose" \
+    -e "      try" \
+    -e "        close t" \
+    -e "      end try" \
+    -e "    end repeat" \
+    -e "  end repeat" \
+    -e "end tell" \
+    -e "end run" \
+    "$CLIENT_TTYS" >/dev/null 2>&1 || true
+fi
+
 tmux kill-session -t "$PROJECT_SESSION" 2>/dev/null || true
+
+if [ -n "$PROJECT_EDITOR" ]; then
+  PROJECT_BASENAME=$(basename "$PROJECT_DIR")
+  /usr/bin/osascript \
+    -e "on run argv" \
+    -e "set appName to item 1 of argv" \
+    -e "set needle to item 2 of argv" \
+    -e 'tell application "System Events"' \
+    -e "  if not (exists (processes whose name is appName)) then return" \
+    -e "  tell process appName" \
+    -e "    set winList to windows" \
+    -e "    repeat with w in winList" \
+    -e "      try" \
+    -e "        set wTitle to name of w" \
+    -e "      on error" \
+    -e "        set wTitle to \"\"" \
+    -e "      end try" \
+    -e "      if wTitle contains needle then" \
+    -e "        try" \
+    -e "          set closeBtn to first button of w whose subrole is \"AXCloseButton\"" \
+    -e "          click closeBtn" \
+    -e "        end try" \
+    -e "      end if" \
+    -e "    end repeat" \
+    -e "  end tell" \
+    -e "end tell" \
+    -e "end run" \
+    "$PROJECT_EDITOR" "$PROJECT_BASENAME" >/dev/null 2>&1 || true
+fi
 
 if [ -x "$SLATE_CLI_PATH" ]; then
   SLATE_EXT_ID="$SLATE_EXT_ID" /usr/bin/env bash "$SLATE_CLI_PATH" close "$PROJECT_CHROME_PROJECT" >/dev/null 2>&1 || true
