@@ -244,7 +244,7 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 					case powerEventWake:
 						fmt.Fprintln(os.Stderr, "system wake detected; restoring device")
 						sleeping = false
-						if recovered, recErr := recoverDeviceWithRetries(cfg, &dev, nav, toggles, widgetMgr, errors.New("wake restore"), wakeRecoverRetries); recovered {
+						if recovered, recErr := recoverDeviceWithRetries(cfg, &dev, nav, toggles, widgetMgr, errors.New("wake restore"), wakeRecoverRetries, true); recovered {
 							lastKeepalive = time.Now()
 						} else if recErr != nil {
 							fmt.Fprintf(os.Stderr, "wake recovery failed: %v\n", recErr)
@@ -630,14 +630,22 @@ func runAction(action *config.Action, nav *navigator, widgetMgr *widgets.Manager
 }
 
 func recoverDevice(cfg *config.Config, dev **device.Device, nav *navigator, toggles *toggleManager, widgetMgr *widgets.Manager, cause error) (bool, error) {
-	return recoverDeviceWithRetries(cfg, dev, nav, toggles, widgetMgr, cause, deviceRecoverRetries)
+	return recoverDeviceWithRetries(cfg, dev, nav, toggles, widgetMgr, cause, deviceRecoverRetries, false)
 }
 
-func recoverDeviceWithRetries(cfg *config.Config, dev **device.Device, nav *navigator, toggles *toggleManager, widgetMgr *widgets.Manager, cause error, retries int) (bool, error) {
+func recoverDeviceWithRetries(cfg *config.Config, dev **device.Device, nav *navigator, toggles *toggleManager, widgetMgr *widgets.Manager, cause error, retries int, forceReopen bool) (bool, error) {
 	if nav == nil {
 		return false, cause
 	}
 	fmt.Fprintf(os.Stderr, "recovering device after error: %v\n", cause)
+
+	if !forceReopen && *dev != nil {
+		if err := refreshCurrentPage(cfg, *dev, nav, toggles, widgetMgr); err == nil {
+			fmt.Fprintln(os.Stderr, "device recovered")
+			return true, nil
+		}
+	}
+
 	if *dev != nil {
 		(*dev).Detach()
 	}
