@@ -35,12 +35,19 @@ func Open() (*Device, error) {
 	if err := hid.Init(); err != nil {
 		return nil, fmt.Errorf("hid init: %w", err)
 	}
+	dev, err := openWithRetry()
+	if err != nil {
+		return nil, err
+	}
+	return &Device{dev: dev}, nil
+}
 
+func openWithRetry() (*hid.Device, error) {
 	var lastErr error
 	for attempt := 0; attempt < openRetries; attempt++ {
 		dev, err := hid.OpenFirst(VendorID, ProductID)
 		if err == nil {
-			return &Device{dev: dev}, nil
+			return dev, nil
 		}
 		lastErr = err
 		if !shouldRetryOpen(err) || attempt == openRetries-1 {
@@ -88,17 +95,20 @@ func (d *Device) Detach() {
 // path (which would re-upload the page ZIP and visibly flash all
 // keys).
 func (d *Device) reopen() error {
-	fresh, err := hid.OpenFirst(VendorID, ProductID)
-	if err != nil {
-		return err
-	}
 	d.mu.Lock()
 	old := d.dev
-	d.dev = fresh
+	d.dev = nil
 	d.mu.Unlock()
 	if old != nil {
 		_ = old.Close()
 	}
+	fresh, err := openWithRetry()
+	if err != nil {
+		return err
+	}
+	d.mu.Lock()
+	d.dev = fresh
+	d.mu.Unlock()
 	return nil
 }
 
@@ -246,7 +256,10 @@ func shouldRetryOpen(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "privilege violation") ||
 		strings.Contains(msg, "resource busy") ||
-		strings.Contains(msg, "busy")
+		strings.Contains(msg, "busy") ||
+		strings.Contains(msg, "no hid devices") ||
+		strings.Contains(msg, "not found") ||
+		strings.Contains(msg, "0xe00002c1")
 }
 
 func shouldRetryWrite(err error) bool {

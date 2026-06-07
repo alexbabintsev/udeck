@@ -15,6 +15,12 @@ actual development milestones rather than formal releases.
   stays in host mode and the screen contents survive, so this avoids
   the visible full-page redraw (key flicker) that previously fired
   several times per hour from spurious IOHIDDevice client teardowns.
+- In-place reopen now uses the same retry loop as the initial `Open`
+  (privilege violations, busy device, and transient "no HID devices
+  found" results are all retried for up to a few seconds) and closes
+  the stale hid handle before opening a fresh one. This handles the
+  common macOS pattern where the old IOHIDDevice client lingers in
+  IORegistry for a few hundred milliseconds after teardown.
 - `device.SendPacket` now retries on `IOHIDDeviceSetReport` failures with
   vendor code `0xE0005000` (transient macOS HID write error), preventing
   spurious full-page reinitializations / screen flicker.

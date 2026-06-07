@@ -19,9 +19,15 @@ func TestShouldRetryOpenBusy(t *testing.T) {
 	}
 }
 
+func TestShouldRetryOpenNoDevices(t *testing.T) {
+	if !shouldRetryOpen(errors.New("No HID devices with requested VID/PID found in the system.")) {
+		t.Fatal("expected transient 'no devices' to be retried")
+	}
+}
+
 func TestShouldRetryOpenOtherErrors(t *testing.T) {
-	if shouldRetryOpen(errors.New("device not found")) {
-		t.Fatal("did not expect device not found to be retried")
+	if shouldRetryOpen(errors.New("permission denied")) {
+		t.Fatal("did not expect permission denied to be retried")
 	}
 }
 
