@@ -9,6 +9,9 @@ actual development milestones rather than formal releases.
 
 - Keep updating this section for user-visible changes that have not been
   grouped into a tagged release yet.
+- `device.SendPacket` now retries on `IOHIDDeviceSetReport` failures with
+  vendor code `0xE0005000` (transient macOS HID write error), preventing
+  spurious full-page reinitializations / screen flicker.
 - HID stability: macOS `hid_read_timeout: error waiting for more data` is
   no longer treated as fatal — it's a soft poll miss returned as empty
   read, eliminating spurious device recoveries and UI flicker during
