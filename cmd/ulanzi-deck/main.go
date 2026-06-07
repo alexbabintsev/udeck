@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"strconv"
@@ -47,6 +48,8 @@ If --config is omitted for run, the default is:
 `
 
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
+	log.SetOutput(os.Stderr)
 	if len(os.Args) < 2 {
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)
@@ -113,7 +116,7 @@ func cmdDumpEvents() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	fmt.Println("listening for events. Ctrl-C to exit.")
+	log.Println("listening for events. Ctrl-C to exit.")
 	return readLoop(ctx, "", nil, dev, nil, nil, nil, nil)
 }
 
@@ -200,7 +203,7 @@ func cmdRun(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	fmt.Println("running. Ctrl-C to exit.")
+	log.Println("running. Ctrl-C to exit.")
 	return readLoop(ctx, *cfgPath, cfg, dev, nav, gestures, toggles, widgetMgr)
 }
 
@@ -238,19 +241,19 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 				if ok {
 					switch evt {
 					case powerEventSleep:
-						fmt.Fprintln(os.Stderr, "system sleep detected; dimming and closing device")
+						log.Println("system sleep detected; dimming and closing device")
 						sleeping = true
 						prepareDeviceForSleep(cfg, dev)
 					case powerEventWake:
-						fmt.Fprintln(os.Stderr, "system wake detected; restoring device")
+						log.Println("system wake detected; restoring device")
 						sleeping = false
 						if recovered, recErr := recoverDeviceWithRetries(cfg, &dev, nav, toggles, widgetMgr, errors.New("wake restore"), wakeRecoverRetries, true); recovered {
 							lastKeepalive = time.Now()
 						} else if recErr != nil {
-							fmt.Fprintf(os.Stderr, "wake recovery failed: %v\n", recErr)
+							log.Printf("wake recovery failed: %v", recErr)
 						}
 					case powerEventShutdown:
-						fmt.Fprintln(os.Stderr, "system shutdown detected; dimming and closing device")
+						log.Println("system shutdown detected; dimming and closing device")
 						prepareDeviceForSleep(cfg, dev)
 						return nil
 					}
@@ -267,24 +270,24 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 			case <-reloader.Changes():
 				nextCfg, err := config.Load(cfgPath)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "config reload failed: %v\n", err)
+					log.Printf("config reload failed: %v", err)
 				} else {
 					nextNav := newNavigator(nextCfg.PagesOrDefault())
 					nextGestures := newGestureManager()
 					nextToggles := newToggleManager(nextCfg)
 					nextWidgetMgr, err := widgets.NewManager(nextCfg)
 					if err != nil {
-						fmt.Fprintf(os.Stderr, "widget reload failed: %v\n", err)
+						log.Printf("widget reload failed: %v", err)
 					} else {
 						nextWidgetMgr.SetContext(nextNav.Context())
 						initialButtons := nextToggles.ResolveButtons(nextNav.currentButtons())
 						initialButtons, err := nextWidgetMgr.ResolveButtons(initialButtons)
 						if err != nil {
 							_ = nextWidgetMgr.Close()
-							fmt.Fprintf(os.Stderr, "widget resolve failed: %v\n", err)
+							log.Printf("widget resolve failed: %v", err)
 						} else if err := applyDeviceState(dev, nextCfg, initialButtons); err != nil {
 							_ = nextWidgetMgr.Close()
-							fmt.Fprintf(os.Stderr, "config apply failed: %v\n", err)
+							log.Printf("config apply failed: %v", err)
 						} else {
 							if widgetMgr != nil {
 								_ = widgetMgr.Close()
@@ -296,7 +299,7 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 							widgetMgr = nextWidgetMgr
 							reloader.UpdatePaths(cfgPath, nextCfg.IconPaths())
 							lastKeepalive = time.Now()
-							fmt.Fprintln(os.Stderr, "config reloaded")
+							log.Println("config reloaded")
 						}
 					}
 				}
@@ -368,7 +371,7 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 					continue
 				}
 				if changed, err := runBinding(binding, nav, widgetMgr); err != nil {
-					fmt.Fprintf(os.Stderr, "action error: %v\n", err)
+					log.Printf("action error: %v", err)
 				} else if changed {
 					if err := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); err != nil {
 						if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, fmt.Errorf("switch page: %w", err)); recovered {
@@ -480,7 +483,7 @@ func readLoop(ctx context.Context, cfgPath string, cfg *config.Config, dev *devi
 		}
 		if binding != nil {
 			if changed, err := runBinding(binding, nav, widgetMgr); err != nil {
-				fmt.Fprintf(os.Stderr, "action error: %v\n", err)
+				log.Printf("action error: %v", err)
 			} else if changed {
 				if err := refreshCurrentPage(cfg, dev, nav, toggles, widgetMgr); err != nil {
 					if recovered, recErr := recoverDevice(cfg, &dev, nav, toggles, widgetMgr, fmt.Errorf("switch page: %w", err)); recovered {
@@ -637,11 +640,11 @@ func recoverDeviceWithRetries(cfg *config.Config, dev **device.Device, nav *navi
 	if nav == nil {
 		return false, cause
 	}
-	fmt.Fprintf(os.Stderr, "recovering device after error: %v\n", cause)
+	log.Printf("recovering device after error: %v", cause)
 
 	if !forceReopen && *dev != nil {
 		if err := refreshCurrentPage(cfg, *dev, nav, toggles, widgetMgr); err == nil {
-			fmt.Fprintln(os.Stderr, "device recovered")
+			log.Println("device recovered")
 			return true, nil
 		}
 	}
@@ -664,7 +667,7 @@ func recoverDeviceWithRetries(cfg *config.Config, dev **device.Device, nav *navi
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
-		fmt.Fprintln(os.Stderr, "device recovered")
+		log.Println("device recovered")
 		return true, nil
 	}
 	if lastErr != nil {

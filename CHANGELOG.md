@@ -12,6 +12,11 @@ actual development milestones rather than formal releases.
 - `device.SendPacket` now retries on `IOHIDDeviceSetReport` failures with
   vendor code `0xE0005000` (transient macOS HID write error), preventing
   spurious full-page reinitializations / screen flicker.
+- Runtime diagnostic messages on stderr (sleep/wake, recover, config
+  reload, action errors, etc.) now go through the standard `log` package
+  and are prefixed with a `YYYY/MM/DD HH:MM:SS.uuuuuu` timestamp so the
+  frequency of recurring errors is visible at a glance. CLI usage/error
+  output is unchanged.
 - `recoverDevice` now tries to refresh the current page on the existing
   HID handle before detaching and reopening the device. The reopen path
   is still used when the lightweight refresh fails or after system wake.
