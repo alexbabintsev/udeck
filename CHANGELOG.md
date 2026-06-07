@@ -9,6 +9,12 @@ actual development milestones rather than formal releases.
 
 - Keep updating this section for user-visible changes that have not been
   grouped into a tagged release yet.
+- `device.SendPacket` / `device.ReadPacket` now silently re-open the HID
+  handle in place when macOS hidapi returns "Device is disconnected" /
+  "no such device" on a still-physically-connected D200. The device
+  stays in host mode and the screen contents survive, so this avoids
+  the visible full-page redraw (key flicker) that previously fired
+  several times per hour from spurious IOHIDDevice client teardowns.
 - `device.SendPacket` now retries on `IOHIDDeviceSetReport` failures with
   vendor code `0xE0005000` (transient macOS HID write error), preventing
   spurious full-page reinitializations / screen flicker.

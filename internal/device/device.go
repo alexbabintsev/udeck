@@ -79,21 +79,55 @@ func (d *Device) Detach() {
 	d.mu.Unlock()
 }
 
+// reopen swaps the underlying hid handle for a freshly opened one to
+// the same VID/PID. macOS hidapi occasionally tears down an
+// IOHIDDevice client ("Device is disconnected") while the physical
+// device stays connected and in host mode — the screen contents
+// survive, only the kernel-side handle is dead. Reopening in place
+// lets writes resume without going through the full recoverDevice
+// path (which would re-upload the page ZIP and visibly flash all
+// keys).
+func (d *Device) reopen() error {
+	fresh, err := hid.OpenFirst(VendorID, ProductID)
+	if err != nil {
+		return err
+	}
+	d.mu.Lock()
+	old := d.dev
+	d.dev = fresh
+	d.mu.Unlock()
+	if old != nil {
+		_ = old.Close()
+	}
+	return nil
+}
+
+func isStaleHandleErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "disconnected") ||
+		strings.Contains(msg, "no such device")
+}
+
 // SendPacket writes a single 1024-byte HID frame to the device. macOS
 // hidapi requires a leading 0x00 report-ID byte for devices that don't
 // use numbered reports, so the wire write is 1025 bytes total.
 func (d *Device) SendPacket(pkt [protocol.PacketSize]byte) error {
-	d.mu.Lock()
-	dev := d.dev
-	d.mu.Unlock()
-	if dev == nil {
-		return errors.New("device detached")
-	}
 	buf := make([]byte, 1+protocol.PacketSize)
 	// buf[0] is left at 0x00 (report ID).
 	copy(buf[1:], pkt[:])
+
+	reopenUsed := false
 	var lastErr error
 	for attempt := 0; attempt < writeRetries; attempt++ {
+		d.mu.Lock()
+		dev := d.dev
+		d.mu.Unlock()
+		if dev == nil {
+			return errors.New("device detached")
+		}
 		n, err := dev.Write(buf)
 		if err == nil {
 			if n != len(buf) {
@@ -102,6 +136,13 @@ func (d *Device) SendPacket(pkt [protocol.PacketSize]byte) error {
 			return nil
 		}
 		lastErr = err
+		if isStaleHandleErr(err) && !reopenUsed {
+			reopenUsed = true
+			if rerr := d.reopen(); rerr != nil {
+				return fmt.Errorf("hid write: %w (reopen: %v)", err, rerr)
+			}
+			continue
+		}
 		if !shouldRetryWrite(err) || attempt == writeRetries-1 {
 			break
 		}
@@ -142,6 +183,17 @@ func (d *Device) ReadPacket(timeout time.Duration) ([]byte, error) {
 		// contention). The device is still healthy — treat it as a
 		// soft poll miss rather than tearing down and reopening.
 		if strings.Contains(err.Error(), "error waiting for more data") {
+			return nil, nil
+		}
+		// "Device is disconnected" / similar can be returned by
+		// macOS hidapi when the IOHIDDevice client was torn down even
+		// though the physical device is still attached and in host
+		// mode. Reopen the handle in place and treat the read as a
+		// soft poll miss — the next loop iteration will read again.
+		if isStaleHandleErr(err) {
+			if rerr := d.reopen(); rerr != nil {
+				return nil, fmt.Errorf("hid read: %w (reopen: %v)", err, rerr)
+			}
 			return nil, nil
 		}
 		return nil, fmt.Errorf("hid read: %w", err)
