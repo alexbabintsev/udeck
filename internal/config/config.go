@@ -26,6 +26,9 @@ type Page struct {
 }
 
 type WidgetSettings struct {
+	// Font is an optional TTF/OTF path (~ expanded) for widget text; the
+	// built-in Go Mono family is used when empty.
+	Font    string                `yaml:"font,omitempty"`
 	Project ProjectWidgetSettings `yaml:"project,omitempty"`
 }
 
@@ -103,6 +106,8 @@ type Widget struct {
 	DSNs         string        `yaml:"dsns,omitempty"`
 	ProjectDir   string        `yaml:"project_dir,omitempty"`
 	Session      string        `yaml:"session,omitempty"`
+	URL          string        `yaml:"url,omitempty"`
+	Token        string        `yaml:"token,omitempty"`
 	EditorSubdir string        `yaml:"editor_subdir,omitempty"`
 	Scripts      WidgetScripts `yaml:"scripts,omitempty"`
 	On           *WidgetOn     `yaml:"on,omitempty"`
@@ -344,103 +349,11 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 		if modeCount > 1 {
 			return fmt.Errorf("%s[%d] cannot combine on, folder, and widget", path, i)
 		}
-		if tr := btn.On; tr != nil {
-			actionCount := 0
-			toggleCount := 0
-			if tr.Tap != nil {
-				actionCount++
-				if tg, err := validateGestureBinding(tr.Tap, fmt.Sprintf("%s[%d].on.tap", path, i)); err != nil {
-					return err
-				} else if tg {
-					toggleCount++
-				}
-			}
-			if tr.DoubleTap != nil {
-				actionCount++
-				if tg, err := validateGestureBinding(tr.DoubleTap, fmt.Sprintf("%s[%d].on.double_tap", path, i)); err != nil {
-					return err
-				} else if tg {
-					toggleCount++
-				}
-			}
-			if tr.Hold != nil {
-				actionCount++
-				if tg, err := validateGestureBinding(tr.Hold, fmt.Sprintf("%s[%d].on.hold", path, i)); err != nil {
-					return err
-				} else if tg {
-					toggleCount++
-				}
-			}
-			if tr.Repeat != nil {
-				actionCount++
-				if tg, err := validateGestureBinding(tr.Repeat, fmt.Sprintf("%s[%d].on.repeat", path, i)); err != nil {
-					return err
-				} else if tg {
-					toggleCount++
-				}
-			}
-			if actionCount == 0 {
-				return fmt.Errorf("%s[%d].on has no actions", path, i)
-			}
-			if toggleCount > 1 {
-				return fmt.Errorf("%s[%d].on can define toggle for only one gesture", path, i)
-			}
-			if tr.HoldMS != 0 && tr.HoldMS < 100 {
-				return fmt.Errorf("%s[%d].on.hold_ms too small: %d", path, i, tr.HoldMS)
-			}
-			if tr.DoubleTapMS != 0 && tr.DoubleTapMS < 100 {
-				return fmt.Errorf("%s[%d].on.double_tap_ms too small: %d", path, i, tr.DoubleTapMS)
-			}
-			if tr.RepeatEveryMS != 0 && tr.RepeatEveryMS < 50 {
-				return fmt.Errorf("%s[%d].on.repeat_every_ms too small: %d", path, i, tr.RepeatEveryMS)
-			}
+		if err := validateHandlers(btn.On, fmt.Sprintf("%s[%d].on", path, i)); err != nil {
+			return err
 		}
-		if w := btn.Widget; w != nil {
-			switch w.Type {
-			case "memory", "spotify_play_pause", "spotify_next", "spotify_artwork":
-				if w.PollMS != 0 && w.PollMS < 1000 {
-					return fmt.Errorf("%s[%d].widget.poll_ms too small: %d", path, i, w.PollMS)
-				}
-			case "wide_dashboard":
-				if btn.At != [2]int{3, 2} {
-					return fmt.Errorf("%s[%d].widget.type %q requires wide slot at [2, 3] in YAML", path, i, w.Type)
-				}
-				if w.PollMS != 0 && w.PollMS < 1000 {
-					return fmt.Errorf("%s[%d].widget.poll_ms too small: %d", path, i, w.PollMS)
-				}
-			case "freqtrade":
-				if strings.TrimSpace(w.DSNs) == "" {
-					return fmt.Errorf("%s[%d].widget.dsns is empty", path, i)
-				}
-				if w.PollMS != 0 && w.PollMS < 3000 {
-					return fmt.Errorf("%s[%d].widget.poll_ms too small: %d", path, i, w.PollMS)
-				}
-			case "weather_day":
-				if strings.TrimSpace(w.City) == "" {
-					return fmt.Errorf("%s[%d].widget.city is empty", path, i)
-				}
-				if w.DayIndex < 0 || w.DayIndex > 13 {
-					return fmt.Errorf("%s[%d].widget.day_index must be 0-13, got %d", path, i, w.DayIndex)
-				}
-				if w.PollMS != 0 && w.PollMS < 1000 {
-					return fmt.Errorf("%s[%d].widget.poll_ms too small: %d", path, i, w.PollMS)
-				}
-			case "project":
-				if strings.TrimSpace(w.ProjectDir) == "" {
-					return fmt.Errorf("%s[%d].widget.project_dir is empty", path, i)
-				}
-				if w.PollMS != 0 && w.PollMS < 1000 {
-					return fmt.Errorf("%s[%d].widget.poll_ms too small: %d", path, i, w.PollMS)
-				}
-				if w.HoldMS != 0 && w.HoldMS < 100 {
-					return fmt.Errorf("%s[%d].widget.hold_ms too small: %d", path, i, w.HoldMS)
-				}
-				if err := validateProjectWidgetOn(w.On, fmt.Sprintf("%s[%d].widget.on", path, i)); err != nil {
-					return err
-				}
-			default:
-				return fmt.Errorf("%s[%d].widget.type %q unknown (memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|freqtrade|project|weather_day)", path, i, w.Type)
-			}
+		if err := validateWidget(btn.Widget, btn.At, fmt.Sprintf("%s[%d].widget", path, i)); err != nil {
+			return err
 		}
 		if d := btn.Folder; d != nil {
 			if len(d.Buttons) == 0 {
@@ -451,6 +364,107 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func validateHandlers(tr *Handlers, path string) error {
+	if tr == nil {
+		return nil
+	}
+	gestures := []struct {
+		name    string
+		binding *GestureBinding
+	}{
+		{"tap", tr.Tap}, {"double_tap", tr.DoubleTap}, {"hold", tr.Hold}, {"repeat", tr.Repeat},
+	}
+	actionCount, toggleCount := 0, 0
+	for _, g := range gestures {
+		if g.binding == nil {
+			continue
+		}
+		actionCount++
+		isToggle, err := validateGestureBinding(g.binding, path+"."+g.name)
+		if err != nil {
+			return err
+		}
+		if isToggle {
+			toggleCount++
+		}
+	}
+	switch {
+	case actionCount == 0:
+		return fmt.Errorf("%s has no actions", path)
+	case toggleCount > 1:
+		return fmt.Errorf("%s can define toggle for only one gesture", path)
+	case tr.HoldMS != 0 && tr.HoldMS < 100:
+		return fmt.Errorf("%s.hold_ms too small: %d", path, tr.HoldMS)
+	case tr.DoubleTapMS != 0 && tr.DoubleTapMS < 100:
+		return fmt.Errorf("%s.double_tap_ms too small: %d", path, tr.DoubleTapMS)
+	case tr.RepeatEveryMS != 0 && tr.RepeatEveryMS < 50:
+		return fmt.Errorf("%s.repeat_every_ms too small: %d", path, tr.RepeatEveryMS)
+	}
+	return nil
+}
+
+// widgetMinPollMS is the smallest poll_ms each widget type accepts.
+var widgetMinPollMS = map[string]int{
+	"memory":             1000,
+	"spotify_play_pause": 1000,
+	"spotify_next":       1000,
+	"spotify_artwork":    1000,
+	"wide_dashboard":     1000,
+	"freqtrade":          3000,
+	"site_views":         10000,
+	"site_online":        10000,
+	"weather_day":        1000,
+	"project":            1000,
+}
+
+func validateWidget(w *Widget, at [2]int, path string) error {
+	if w == nil {
+		return nil
+	}
+	minPoll, known := widgetMinPollMS[w.Type]
+	if !known {
+		return fmt.Errorf("%s.type %q unknown (memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|freqtrade|project|weather_day|site_views|site_online)", path, w.Type)
+	}
+	switch w.Type {
+	case "wide_dashboard":
+		if at != [2]int{3, 2} {
+			return fmt.Errorf("%s.type %q requires wide slot at [2, 3] in YAML", path, w.Type)
+		}
+	case "freqtrade":
+		if strings.TrimSpace(w.DSNs) == "" {
+			return fmt.Errorf("%s.dsns is empty", path)
+		}
+	case "site_views", "site_online":
+		if strings.TrimSpace(w.URL) == "" {
+			return fmt.Errorf("%s.url is empty", path)
+		}
+		if !strings.HasPrefix(w.URL, "http://") && !strings.HasPrefix(w.URL, "https://") {
+			return fmt.Errorf("%s.url must start with http:// or https://", path)
+		}
+	case "weather_day":
+		if strings.TrimSpace(w.City) == "" {
+			return fmt.Errorf("%s.city is empty", path)
+		}
+		if w.DayIndex < 0 || w.DayIndex > 13 {
+			return fmt.Errorf("%s.day_index must be 0-13, got %d", path, w.DayIndex)
+		}
+	case "project":
+		if strings.TrimSpace(w.ProjectDir) == "" {
+			return fmt.Errorf("%s.project_dir is empty", path)
+		}
+		if w.HoldMS != 0 && w.HoldMS < 100 {
+			return fmt.Errorf("%s.hold_ms too small: %d", path, w.HoldMS)
+		}
+		if err := validateProjectWidgetOn(w.On, path+".on"); err != nil {
+			return err
+		}
+	}
+	if w.PollMS != 0 && w.PollMS < minPoll {
+		return fmt.Errorf("%s.poll_ms too small: %d", path, w.PollMS)
 	}
 	return nil
 }
