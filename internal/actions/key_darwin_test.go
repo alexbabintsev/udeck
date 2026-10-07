@@ -3,6 +3,7 @@
 package actions
 
 import (
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 	"reflect"
 	"strings"
 	"testing"
@@ -109,5 +110,24 @@ func TestRequestKeyPermissionsPromptsOnlyWhenNeeded(t *testing.T) {
 	RequestKeyPermissions()
 	if promptCount != 1 {
 		t.Fatalf("unexpected prompt count after trusted request: got %d want 1", promptCount)
+	}
+}
+
+func TestNormalizeKeyTokenAliases(t *testing.T) {
+	for in, want := range map[string]string{"command": "cmd", "control": "ctrl", "option": "alt", "enter": "return", "x": "x"} {
+		if got := normalizeKeyToken(in); got != want {
+			t.Fatalf("normalizeKeyToken(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestRunKeyActionUsesSender(t *testing.T) {
+	oldTrusted, oldSend := isAXTrusted, sendShortcutFunc
+	defer func() { isAXTrusted, sendShortcutFunc = oldTrusted, oldSend }()
+	isAXTrusted = func() bool { return true }
+	sent := false
+	sendShortcutFunc = func(parsedShortcut) error { sent = true; return nil }
+	if err := Run(&config.Action{Type: "key", Key: "cmd c"}); err != nil || !sent {
+		t.Fatalf("err=%v sent=%v", err, sent)
 	}
 }

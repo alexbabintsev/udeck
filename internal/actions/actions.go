@@ -14,7 +14,6 @@ import (
 
 var execCommand = exec.Command
 var httpClient = &http.Client{Timeout: 3 * time.Second}
-var sleepFunc = time.Sleep
 
 // Run fires the action associated with a button press.
 func Run(a *config.Action) error {
@@ -33,44 +32,14 @@ func Run(a *config.Action) error {
 	}
 }
 
-// RunBinding executes either a direct action or a chain in order.
-func RunBinding(binding *config.GestureBinding) error {
-	if binding == nil {
-		return nil
-	}
-	if action := binding.Action(); action != nil {
-		return Run(action)
-	}
-	for i := range binding.Chain {
-		step := binding.Chain[i]
-		if step.DelayMS > 0 {
-			sleepFunc(time.Duration(step.DelayMS) * time.Millisecond)
-			continue
-		}
-		if step.Action != nil {
-			if err := Run(step.Action); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// RunAll fires every action in order and returns the first error, if any.
-func RunAll(actions []config.Action) error {
-	for i := range actions {
-		if err := Run(&actions[i]); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func runShell(cmd string) error {
 	c := execCommand("sh", "-c", cmd)
 	if err := c.Start(); err != nil {
 		return fmt.Errorf("start shell action: %w", err)
 	}
+	// Reap the child; without Wait every press leaves a zombie process
+	// for the lifetime of the daemon.
+	go func() { _ = c.Wait() }()
 	return nil
 }
 
