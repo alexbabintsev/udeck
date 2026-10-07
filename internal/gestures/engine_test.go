@@ -30,11 +30,11 @@ func TestEngineDoubleTapFiresOnSecondRelease(t *testing.T) {
 func TestEngineHoldFiresDuringHold(t *testing.T) {
 	e := New()
 	opts := Options{
-		HasTap:         true,
-		HasHold:        true,
-		HasRepeat:      true,
-		HoldDelay:      300 * time.Millisecond,
-		RepeatEvery:    100 * time.Millisecond,
+		HasTap:      true,
+		HasHold:     true,
+		HasRepeat:   true,
+		HoldDelay:   300 * time.Millisecond,
+		RepeatEvery: 100 * time.Millisecond,
 	}
 	now := time.Unix(100, 0)
 	_ = e.HandleEvent("a", opts, true, now)
