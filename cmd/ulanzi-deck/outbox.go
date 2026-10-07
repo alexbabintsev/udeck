@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -57,6 +58,7 @@ type outbox struct {
 	cond        *sync.Cond
 	pendingPage *sendJob
 	pending     map[[2]int]config.Button
+	queuedAt    time.Time // oldest queued, not yet taken work (debug)
 	busy        bool
 
 	lastWrite atomic.Int64 // unix nanos of the last successful write
@@ -100,6 +102,7 @@ func (o *outbox) queuePage(cfg *config.Config, buttons []config.Button) {
 	o.mu.Lock()
 	o.pendingPage = &sendJob{page: true, cfg: cfg, buttons: buttons}
 	clear(o.pending)
+	o.markQueuedLocked()
 	o.mu.Unlock()
 	o.signal()
 }
@@ -118,6 +121,10 @@ func (o *outbox) queueButtons(buttons []config.Button) {
 			continue
 		}
 		o.pending[b.At] = b
+	}
+	o.markQueuedLocked()
+	if o.busy {
+		debug.Logf("queued %s behind a running transfer", slotList(buttons))
 	}
 	o.mu.Unlock()
 	o.signal()
@@ -177,6 +184,12 @@ func (o *outbox) exclusive(fn func()) {
 	fn()
 }
 
+func (o *outbox) markQueuedLocked() {
+	if o.queuedAt.IsZero() {
+		o.queuedAt = time.Now()
+	}
+}
+
 func (o *outbox) signal() {
 	select {
 	case o.wake <- struct{}{}:
@@ -197,8 +210,12 @@ func (o *outbox) loop() {
 			if !ok {
 				break
 			}
+			start := time.Now()
 			packets, err := o.send(j)
 			o.finish()
+			if packets > 0 || err != nil {
+				debug.Logf("transfer of %s done in %s (err=%v)", slotList(j.buttons), time.Since(start).Round(time.Millisecond), err)
+			}
 			if err != nil {
 				o.report(j, err)
 				continue
@@ -218,6 +235,10 @@ func (o *outbox) loop() {
 func (o *outbox) take() (sendJob, bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	if !o.queuedAt.IsZero() && (o.pendingPage != nil || len(o.pending) > 0) {
+		debug.Logf("starting transfer after %s in queue", time.Since(o.queuedAt).Round(time.Millisecond))
+		o.queuedAt = time.Time{}
+	}
 	if o.pendingPage != nil {
 		j := *o.pendingPage
 		o.pendingPage = nil
@@ -301,14 +322,14 @@ func (o *outbox) sendButtonsLocked(buttons []config.Button) (int, error) {
 		}
 	}
 	if len(changed) == 0 {
-		debug.Logf("partial update skipped: keys already up to date")
+		debug.Logf("partial update skipped: %s already up to date", slotList(buttons))
 		return 0, nil
 	}
 	pkts, err := protocol.PartiallyUpdateButtonsFromConfig(changed)
 	if err != nil {
 		return 0, fmt.Errorf("build partial page zip: %w", err)
 	}
-	debug.Logf("partial update: %d buttons, %d packets", len(changed), len(pkts))
+	debug.Logf("partial update: %s, %d packets", slotList(changed), len(pkts))
 	if err := o.dev.SendPackets(pkts); err != nil {
 		return 0, &deviceError{fmt.Errorf("send partial page zip: %w", err)}
 	}
@@ -317,6 +338,19 @@ func (o *outbox) sendButtonsLocked(buttons []config.Button) (int, error) {
 	}
 	o.touch()
 	return len(pkts), nil
+}
+
+// slotList renders keys for logs as "[index:label-or-icon ...]".
+func slotList(buttons []config.Button) string {
+	parts := make([]string, 0, len(buttons))
+	for _, b := range buttons {
+		name := b.RuntimeID
+		if name == "" {
+			name = b.Label
+		}
+		parts = append(parts, fmt.Sprintf("%d:%s", b.HIDIndex(), name))
+	}
+	return "[" + strings.Join(parts, " ") + "]"
 }
 
 // styleAndBrightness returns the packets re-applied after every full

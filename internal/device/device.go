@@ -23,6 +23,10 @@ const (
 	writeRetries    = 8
 	writeRetryDelay = 60 * time.Millisecond
 
+	// slowWriteThreshold flags HID writes the device is slow to accept
+	// in debug logs; a healthy write takes a few milliseconds.
+	slowWriteThreshold = 50 * time.Millisecond
+
 	transferRetries    = 5
 	transferRetryDelay = 150 * time.Millisecond
 
@@ -285,7 +289,11 @@ func (d *Device) writeFrame(pkt [protocol.PacketSize]byte) error {
 	}
 	var buf [1 + protocol.PacketSize]byte
 	copy(buf[1:], pkt[:])
+	start := now()
 	n, err := dev.Write(buf[:])
+	if took := now().Sub(start); took > slowWriteThreshold {
+		debug.Logf("hid write took %s (device busy?)", took.Round(time.Millisecond))
+	}
 	if err != nil {
 		return err
 	}

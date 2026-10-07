@@ -202,8 +202,10 @@ func (s *session) handlePacket(raw []byte) error {
 	if ev.Kind == protocol.EventLabelStyleAck {
 		return nil
 	}
-	if s.nav == nil || debug.Enabled() {
+	if s.nav == nil {
 		fmt.Fprintln(s.out, ev.String())
+	} else {
+		debug.Logf("event %s", ev.String())
 	}
 	if ev.Kind != protocol.EventButton || s.nav == nil {
 		return nil

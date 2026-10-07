@@ -139,6 +139,7 @@ func (s *SpotifyService) PlayPause() {
 	s.snapshot = next
 	subs := append([]spotifySubscriber(nil), s.subscribers...)
 	s.mu.Unlock()
+	debug.Logf("spotify: play/pause tapped, showing playing=%v now", playing)
 	for _, sub := range subs {
 		sub.spotifyUpdate(next)
 	}
@@ -146,6 +147,8 @@ func (s *SpotifyService) PlayPause() {
 	s.bg.Add(1)
 	go func() {
 		defer s.bg.Done()
+		start := time.Now()
+		defer func() { debug.Logf("spotify: playpause command took %s", time.Since(start).Round(time.Millisecond)) }()
 		if err := spotifyOSA(`tell application "Spotify" to playpause`); err != nil {
 			debug.Logf("spotify playpause: %v", err)
 			s.mu.Lock()
@@ -187,9 +190,11 @@ func (s *SpotifyService) applyExpectedLocked(next *spotifySnapshot) {
 	}
 	want := *s.expectPlaying
 	if next.Playing == want || !time.Now().Before(s.expectUntil) {
+		debug.Logf("spotify: read playing=%v, tapped state %v confirmed=%v", next.Playing, want, next.Playing == want)
 		s.expectPlaying = nil
 		return
 	}
+	debug.Logf("spotify: ignoring stale read playing=%v (tapped %v)", next.Playing, want)
 	next.Playing = want
 	next.State = spotifyStateName(want)
 }

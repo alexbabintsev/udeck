@@ -216,6 +216,7 @@ func (m *Manager) HandleEvent(id string, pressed bool, now time.Time) bool {
 	if kind == ig.None {
 		return true
 	}
+	debug.Logf("widget %s gesture %s", id, kind)
 	m.mu.RLock()
 	item, ok := m.items[id]
 	m.mu.RUnlock()
@@ -381,6 +382,7 @@ func (m *Manager) spotifyPollMS() (int, bool) {
 }
 
 func (m *Manager) notify(id string) {
+	debug.Logf("widget %s icon changed", id)
 	m.dirtyMu.Lock()
 	m.dirty[id] = struct{}{}
 	m.dirtyMu.Unlock()
