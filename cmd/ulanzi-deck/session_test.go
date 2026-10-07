@@ -39,21 +39,13 @@ func TestDeviceErrorClassification(t *testing.T) {
 	}
 }
 
-func TestKeepalivePacketNeverUploadsPage(t *testing.T) {
-	level := 40
-	pkt, err := keepalivePacket(&config.Config{Device: config.DeviceConfig{Brightness: &level}})
-	if err != nil {
-		t.Fatal(err)
+func TestKeepalivePacketIsDeviceInfoRequest(t *testing.T) {
+	pkt := keepalivePacket()
+	cmd, n, err := protocol.DecodeHeader(pkt[:])
+	if err != nil || cmd != protocol.CmdGetDeviceInfo || n != 0 {
+		t.Fatalf("cmd=%v n=%d err=%v", cmd, n, err)
 	}
-	cmd, _, err := protocol.DecodeHeader(pkt[:])
-	if err != nil || cmd != protocol.CmdSetBrightness {
-		t.Fatalf("expected brightness keepalive, got cmd=%v err=%v", cmd, err)
-	}
-	pkt, err = keepalivePacket(&config.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cmd, _, _ := protocol.DecodeHeader(pkt[:]); cmd != protocol.CmdSetLabelStyle {
-		t.Fatalf("expected label style keepalive without brightness, got %v", cmd)
+	if compactJSON("{\n  \"a\": 1\n}") != `{"a":1}` || compactJSON("not json") != "not json" {
+		t.Fatal("compactJSON")
 	}
 }

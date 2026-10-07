@@ -400,9 +400,13 @@ func (d *Device) ReadPacket(timeout time.Duration) ([]byte, error) {
 	return buf[:n], nil
 }
 
-// Info reads up to 1 second of device info responses. Returns the first
-// IN_DEVICE_INFO payload as a string, or an error if no info arrives.
+// Info requests the device info (command 0x0003) and returns the JSON
+// payload of the IN_DEVICE_INFO reply, or an error if none arrives in
+// time.
 func (d *Device) Info(timeout time.Duration) (string, error) {
+	if err := d.SendPacket(protocol.DeviceInfoRequestPacket()); err != nil {
+		return "", err
+	}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		raw, err := d.ReadPacket(200 * time.Millisecond)

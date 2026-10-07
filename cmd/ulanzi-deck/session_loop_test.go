@@ -424,7 +424,7 @@ func TestKeepaliveSendsSinglePacket(t *testing.T) {
 	if err := s.run(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if got := fmt.Sprint(dev.cmds()); got != fmt.Sprint([]protocol.Cmd{protocol.CmdSetBrightness}) {
+	if got := fmt.Sprint(dev.cmds()); got != fmt.Sprint([]protocol.Cmd{protocol.CmdGetDeviceInfo}) {
 		t.Fatalf("keepalive sent %v", got)
 	}
 }
@@ -435,8 +435,17 @@ func TestKeepaliveFailureRecovers(t *testing.T) {
 	if err := s.do("keepalive", s.keepalive); err != nil {
 		t.Fatal(err)
 	}
-	if dev.reconnectN != 1 || len(dev.transfers(protocol.CmdSetBrightness)) != 1 {
+	if dev.reconnectN != 1 || len(dev.transfers(protocol.CmdGetDeviceInfo)) != 1 {
 		t.Fatalf("reconnects=%d cmds=%v", dev.reconnectN, dev.cmds())
+	}
+}
+
+func TestDeviceInfoReplyIsLoggedNotPrinted(t *testing.T) {
+	s, dev := newTestSession(t, loopConfig)
+	info := protocol.EncodePacket(protocol.CmdInDeviceInfo, []byte(`{"Dversion": "5.3.1"}`))
+	runReads(t, s, dev, readStep{raw: info[:]})
+	if out := s.out.(*bytes.Buffer).String(); strings.Contains(out, "DEVICE_INFO") {
+		t.Fatalf("device info must go to the debug log, got %q", out)
 	}
 }
 

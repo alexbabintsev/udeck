@@ -115,12 +115,13 @@ func randomASCII(n int) []byte {
 // it is split into packets:
 //
 //   - a continuation packet must not start with 0x00 or 0x7C;
-//   - the ZIP must not end exactly on a packet boundary. The D200 then
-//     keeps waiting for more data and swallows the next transfer as the
-//     tail of this one: that upload is accepted at ~1 packet/s and its
-//     image is lost or late (measured with `ulanzi-deck probe
-//     --playpause`: every upload following a 3064-byte ZIP stalled for
-//     0.7-3.4s, none followed any other size).
+//   - the ZIP must not end exactly on a packet boundary. Ulanzi Studio's
+//     writer never does either: it appends two zero bytes after the data
+//     and pads, adding a whole packet when needed. While the device was
+//     in a bad state, every upload after a 3064-byte ZIP stalled and
+//     this rule removed the stalls; after a device reboot the same ZIP
+//     no longer stalled, so the rule is a precaution matching Studio
+//     rather than a proven fix.
 func zipChunksValid(data []byte) bool {
 	if len(data) >= FirstChunkSize && (len(data)-FirstChunkSize)%PacketSize == 0 {
 		return false

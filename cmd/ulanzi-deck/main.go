@@ -235,6 +235,11 @@ func cmdRun(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	s.out = stdout
+	if r, ok := dev.(infoReader); ok {
+		if info, err := r.Info(time.Second); err == nil {
+			log.Printf("device: %s", compactJSON(info))
+		}
+	}
 	defer s.close()
 
 	if cfg.Device.Brightness != nil {

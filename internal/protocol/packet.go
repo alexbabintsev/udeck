@@ -18,6 +18,7 @@ type Cmd uint16
 
 const (
 	CmdSetButtons             Cmd = 0x0001
+	CmdGetDeviceInfo          Cmd = 0x0003
 	CmdSetSmallWindowData     Cmd = 0x0006
 	CmdSetBrightness          Cmd = 0x000A
 	CmdSetLabelStyle          Cmd = 0x000B

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -201,6 +203,10 @@ func (s *session) handlePacket(raw []byte) error {
 		return nil
 	}
 	if ev.Kind == protocol.EventLabelStyleAck {
+		return nil
+	}
+	if ev.Kind == protocol.EventDeviceInfo && s.nav != nil {
+		debug.Logf("device info: %s", compactJSON(ev.Info))
 		return nil
 	}
 	if s.nav == nil {
@@ -559,11 +565,7 @@ func (s *session) updateButtons(ids []string) error {
 // link still surfaces dead handles and the device sees host traffic. It
 // is skipped while a transfer is running.
 func (s *session) keepalive() error {
-	pkt, err := keepalivePacket(s.cfg)
-	if err != nil {
-		return err
-	}
-	sent, err := s.tx.trySendPacket(pkt)
+	sent, err := s.tx.trySendPacket(keepalivePacket())
 	if err != nil {
 		return fmt.Errorf("keepalive: %w", err)
 	}
@@ -573,17 +575,11 @@ func (s *session) keepalive() error {
 	return nil
 }
 
-// keepalivePacket re-sends the configured brightness, or the label style
-// when no brightness is configured — both are idempotent single packets.
-func keepalivePacket(cfg *config.Config) ([protocol.PacketSize]byte, error) {
-	if cfg != nil && cfg.Device.Brightness != nil {
-		return protocol.SetBrightnessPacket(*cfg.Device.Brightness)
-	}
-	var style *config.LabelStyle
-	if cfg != nil {
-		style = cfg.Device.LabelStyle
-	}
-	return protocol.SetLabelStylePacket(style)
+// keepalivePacket is the device-info request Ulanzi Studio uses to
+// check the device is still connected; it changes nothing on screen and
+// the reply shows up in the --debug log.
+func keepalivePacket() [protocol.PacketSize]byte {
+	return protocol.DeviceInfoRequestPacket()
 }
 
 func prepareDeviceForSleep(dev deck) {
@@ -642,4 +638,13 @@ func (s *session) close() {
 	if s.widgets != nil {
 		_ = s.widgets.Close()
 	}
+}
+
+// compactJSON squeezes the device's pretty-printed JSON onto one line.
+func compactJSON(s string) string {
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, []byte(s)); err != nil {
+		return s
+	}
+	return buf.String()
 }

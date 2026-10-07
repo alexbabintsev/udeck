@@ -167,19 +167,24 @@ func TestReadPacketStaleHandleWithResetOrFailure(t *testing.T) {
 	}
 }
 
-func TestInfoReturnsDeviceInfo(t *testing.T) {
+func TestInfoRequestsAndReturnsDeviceInfo(t *testing.T) {
 	info := protocol.EncodePacket(protocol.CmdInDeviceInfo, []byte("fw 1.0\x00"))
 	btn := protocol.EncodePacket(protocol.CmdInButton, []byte{0, 1, 1, 1})
-	d := &Device{dev: &fakeHandle{reads: []readResult{
+	h := &fakeHandle{reads: []readResult{
 		{data: []byte{1, 2, 3}}, {data: btn[:]}, {data: info[:]},
-	}}}
+	}}
+	d := &Device{dev: h}
 	got, err := d.Info(time.Second)
 	if err != nil || got != "fw 1.0" {
 		t.Fatalf("got %q err=%v", got, err)
 	}
+	if cmd, _, _ := protocol.DecodeHeader(h.lastWrite[1:]); cmd != protocol.CmdGetDeviceInfo {
+		t.Fatalf("Info must request the info first, sent %v", cmd)
+	}
 }
 
 func TestInfoTimesOutAndPropagatesErrors(t *testing.T) {
+	installFakeEnv(t, &fakeEnv{})
 	d := &Device{dev: &fakeHandle{}}
 	if _, err := d.Info(10 * time.Millisecond); err == nil {
 		t.Fatal("expected timeout error")

@@ -121,3 +121,12 @@ func parseHexColor(s string) (uint64, error) {
 	}
 	return c, nil
 }
+
+// DeviceInfoRequestPacket asks the device for its info (empty payload).
+// It answers with IN_DEVICE_INFO (0x0303) carrying JSON such as
+// {"SerialNumber":…,"Dversion":"5.3.1","DeviceType":"D200",…}. Ulanzi
+// Studio sends it on connect and periodically to check the device is
+// still there.
+func DeviceInfoRequestPacket() [PacketSize]byte {
+	return EncodePacket(CmdGetDeviceInfo, nil)
+}

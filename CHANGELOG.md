@@ -43,11 +43,14 @@ actual development milestones rather than formal releases.
   is back within milliseconds, and the full page is uploaded again
   (previously only changed widgets were sent and the rest of the keys
   stayed on the firmware's default icons).
-- Fixed delayed and missing key images: when a page ZIP ended exactly on
-  a 1024-byte packet boundary, the D200 firmware treated the next
-  upload as the tail of that one, accepting it at ~1 packet/s (0.7-3.4s
-  stalls, 0xE00002BC errors) and losing its image. The ZIP padding now
-  avoids that length. Found with the new `probe` diagnostic command.
+- Page ZIPs never end exactly on a 1024-byte packet boundary (as Ulanzi
+  Studio's writer). It removed stalls seen while the device was in a bad
+  state; after a reboot that ZIP no longer stalled, so this is a
+  precaution rather than a proven fix.
+- The keepalive is now the device-info request (command 0x0003) that
+  Ulanzi Studio uses to check the device is connected; `info` actually
+  requests the info, and `run` logs serial, firmware and hardware
+  version at startup.
 - Device writes run on their own goroutine, so key presses are handled
   even while the D200 refuses writes for seconds. Queued uploads are
   coalesced (only the newest page / newest image of a key is sent), and
