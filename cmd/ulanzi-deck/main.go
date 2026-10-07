@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
@@ -28,12 +29,14 @@ const usage = `ulanzi-deck — minimal headless daemon for the Ulanzi D200
 
 Usage:
   ulanzi-deck info
-  ulanzi-deck dump-events [--debug]
+  ulanzi-deck dump-events [--debug] [--log-file <path>]
   ulanzi-deck set-brightness <0..100>
-  ulanzi-deck run [--config <path.yaml>] [--debug]
+  ulanzi-deck run [--config <path.yaml>] [--debug] [--log-file <path>]
 
 --debug (or ULANZI_DEBUG=1) logs every HID error, retry, reconnect and
 page upload, plus widget fetch failures, for diagnosing device drop-outs.
+--log-file also writes the log to a file (rotated at 10 MB). With
+--debug it defaults to ~/Library/Logs/ulanzi-deck/debug.log.
 
 Note: Ulanzi Studio holds an exclusive HID lock. Quit it before running:
   osascript -e 'tell application "Ulanzi Studio" to quit'
@@ -136,12 +139,15 @@ func cmdDumpEvents(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("dump-events", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	debugFlag := fs.Bool("debug", false, "verbose diagnostics")
+	logFile := fs.String("log-file", "", "also write the log to this file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *debugFlag {
-		debug.SetEnabled(true)
+	closeLog, err := setupLogging(*debugFlag, *logFile, stderr)
+	if err != nil {
+		return err
 	}
+	defer closeLog()
 	dev, err := openChecked()
 	if err != nil {
 		return err
@@ -196,12 +202,15 @@ func cmdRun(args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 	cfgPath := fs.String("config", defaultConfigPath, "path to YAML config")
 	debugFlag := fs.Bool("debug", false, "verbose diagnostics")
+	logFile := fs.String("log-file", "", "also write the log to this file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *debugFlag {
-		debug.SetEnabled(true)
+	closeLog, err := setupLogging(*debugFlag, *logFile, stderr)
+	if err != nil {
+		return err
 	}
+	defer closeLog()
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		return err
@@ -261,4 +270,54 @@ func newRunSession(cfgPath string, cfg *config.Config, dev deck) (*session, erro
 		return nil, err
 	}
 	return s, nil
+}
+
+// maxLogFileSize is the size at which the log file is rotated to
+// <path>.1 when the daemon starts.
+const maxLogFileSize = 10 << 20
+
+// defaultDebugLogPath is used for --debug without --log-file.
+var defaultDebugLogPath = func() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, "Library", "Logs", "ulanzi-deck", "debug.log")
+}
+
+// setupLogging enables debug output and mirrors the standard logger into
+// a file when requested. The returned func restores the logger.
+func setupLogging(debugOn bool, path string, stderr io.Writer) (func(), error) {
+	if debugOn {
+		debug.SetEnabled(true)
+		if path == "" {
+			path = defaultDebugLogPath()
+		}
+	}
+	if path == "" {
+		return func() {}, nil
+	}
+	f, err := openLogFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("log file: %w", err)
+	}
+	prev := log.Writer()
+	log.SetOutput(io.MultiWriter(stderr, f))
+	log.Printf("---- ulanzi-deck started (pid %d), logging to %s", os.Getpid(), path)
+	return func() {
+		log.SetOutput(prev)
+		_ = f.Close()
+	}, nil
+}
+
+// openLogFile appends to path (owner-only: logs can contain URLs),
+// rotating it first when it grew past maxLogFileSize.
+func openLogFile(path string) (*os.File, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, err
+	}
+	if info, err := os.Stat(path); err == nil && info.Size() > maxLogFileSize {
+		_ = os.Rename(path, path+".1")
+	}
+	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 }

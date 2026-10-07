@@ -454,7 +454,9 @@ Notes:
 - Keys flicker / the device seems to disconnect
   - Run with `--debug` (or `ULANZI_DEBUG=1`). Every HID write/read
     error, retry, handle reopen, recovery decision, page upload and
-    widget fetch failure is logged with a `[debug]` prefix.
+    widget fetch failure is logged with a `[debug]` prefix. The log is
+    also written to `~/Library/Logs/ulanzi-deck/debug.log` (or the path
+    given with `--log-file`), rotated to `.1` past 10 MB.
 - Spotify artwork updates but then breaks
   - Artwork icons are written atomically now; if updates still fail,
     check Spotify itself is running and that network access is available

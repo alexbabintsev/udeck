@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +28,9 @@ func stubCLI(t *testing.T, dev deck) *int {
 	t.Helper()
 	noPause(t)
 	oldOpen, oldStudio, oldKeys, oldPower, oldCtx := openDevice, studioRunning, requestKeyPermissions, startPowerWatcher, signalContext
+	oldLogPath := defaultDebugLogPath
+	logPath := filepath.Join(t.TempDir(), "logs", "debug.log")
+	defaultDebugLogPath = func() string { return logPath }
 	opens := 0
 	openDevice = func() (deck, error) {
 		opens++
@@ -44,6 +49,7 @@ func stubCLI(t *testing.T, dev deck) *int {
 	}
 	t.Cleanup(func() {
 		openDevice, studioRunning, requestKeyPermissions, startPowerWatcher, signalContext = oldOpen, oldStudio, oldKeys, oldPower, oldCtx
+		defaultDebugLogPath = oldLogPath
 		debug.SetEnabled(false)
 	})
 	return &opens
@@ -203,5 +209,44 @@ func TestCLIRunErrors(t *testing.T) {
 	stubCLI(t, nil)
 	if code, _, _ := cli("run", "--config", path); code != 1 {
 		t.Fatal("expected open error")
+	}
+}
+
+func TestCLIDebugWritesLogFile(t *testing.T) {
+	stubCLI(t, &fakeDeck{})
+	path, _ := writeConfig(t, loopConfig)
+	if code, _, stderr := cli("run", "--config", path, "--debug"); code != 0 {
+		t.Fatalf("code=%d stderr=%q", code, stderr)
+	}
+	data, err := os.ReadFile(defaultDebugLogPath())
+	if err != nil {
+		t.Fatalf("default debug log not written: %v", err)
+	}
+	if !strings.Contains(string(data), "ulanzi-deck started") || !strings.Contains(string(data), "running. Ctrl-C to exit.") {
+		t.Fatalf("log file content: %q", data)
+	}
+	info, _ := os.Stat(defaultDebugLogPath())
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("log file mode = %v, want 0600", info.Mode().Perm())
+	}
+}
+
+func TestCLIExplicitLogFileAndRotation(t *testing.T) {
+	stubCLI(t, &fakeDeck{})
+	logPath := filepath.Join(t.TempDir(), "x.log")
+	if err := os.WriteFile(logPath, make([]byte, maxLogFileSize+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, _ := cli("dump-events", "--log-file", logPath); code != 0 {
+		t.Fatal("dump-events failed")
+	}
+	if info, err := os.Stat(logPath + ".1"); err != nil || info.Size() <= maxLogFileSize {
+		t.Fatal("oversized log must be rotated to .1")
+	}
+	if data, _ := os.ReadFile(logPath); !strings.Contains(string(data), "listening for events") {
+		t.Fatalf("new log content: %q", data)
+	}
+	if code, _, _ := cli("dump-events", "--log-file", "/dev/null/not-a-dir/x.log"); code != 1 {
+		t.Fatal("unwritable log path must fail")
 	}
 }
