@@ -313,6 +313,10 @@ func (m *Manager) newWidgetLocked(id string) (Widget, error) {
 		}
 	case "weather_day":
 		item, err = NewWeatherDayWidget(id, def.btn.Widget, m.notify)
+	case "site_views":
+		item, err = NewSiteViewsWidget(id, def.btn.Widget, m.notify)
+	case "site_online":
+		item, err = NewSiteOnlineWidget(id, def.btn.Widget, m.notify)
 	case "project":
 		item, err = NewProjectWidget(id, def.btn, m.settings.Project, m.notify)
 	default:
@@ -393,7 +397,7 @@ func (m *Manager) gestureOptions(id string) (ig.Options, bool) {
 			HasHold:   true,
 			HoldDelay: projectHoldDuration(def.btn.Widget.HoldMS),
 		}, true
-	case "memory", "freqtrade", "spotify_next", "spotify_artwork", "wide_dashboard", "weather_day":
+	case "memory", "freqtrade", "spotify_next", "spotify_artwork", "wide_dashboard", "weather_day", "site_views", "site_online":
 		return ig.Options{HasTap: true}, true
 	default:
 		return ig.Options{}, false

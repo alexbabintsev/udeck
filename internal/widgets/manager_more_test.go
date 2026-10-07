@@ -173,6 +173,8 @@ func TestManagerCreatesEveryWidgetType(t *testing.T) {
 		{RuntimeID: "c", Widget: &config.Widget{Type: "spotify_artwork"}},
 		{RuntimeID: "d", At: [2]int{3, 2}, Widget: &config.Widget{Type: "wide_dashboard"}},
 		{RuntimeID: "e", Widget: &config.Widget{Type: "weather_day", City: uniqueCity(t)}},
+		{RuntimeID: "f", Widget: &config.Widget{Type: "site_views", URL: "http://127.0.0.1:1"}},
+		{RuntimeID: "g", Widget: &config.Widget{Type: "site_online", URL: "http://127.0.0.1:1"}},
 		{RuntimeID: "h", Widget: &config.Widget{Type: "project", ProjectDir: dir}},
 	}
 	m, err := NewManager(&config.Config{Buttons: buttons})
