@@ -63,6 +63,8 @@ func NewSiteViewsWidget(id string, cfg *config.Widget, notify func(string)) (*Si
 	return w, nil
 }
 
+func (w *SiteViewsWidget) resume() { w.refresh() }
+
 // HandleGesture forces an immediate refresh on tap.
 func (w *SiteViewsWidget) HandleGesture(kind ig.Kind) {
 	if kind == ig.Tap {

@@ -31,6 +31,10 @@ actual development milestones rather than formal releases.
 - Lucide icons are embedded into the binary.
 - Widget HTTP responses are size-limited and remote artwork dimensions
   are checked before decoding.
+- Widgets that are not on screen pause their polling and refresh as soon
+  as their page is shown again (previously a page opened once, e.g.
+  freqtrade, kept polling its API forever). The Spotify service stops
+  calling osascript while no Spotify widget is visible.
 - Widget text now renders on every machine: the embedded Go Mono family
   is the default and `widgets.font` selects a custom TTF/OTF. Previously
   text silently disappeared unless a specific commercial font was

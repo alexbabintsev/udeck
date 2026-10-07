@@ -140,6 +140,8 @@ func (w *WideDashboardWidget) spotifyUpdate(s spotifySnapshot) {
 	_, _ = w.render(time.Now())
 }
 
+func (w *WideDashboardWidget) resume() { w.tick(time.Now()) }
+
 func (w *WideDashboardWidget) tick(now time.Time) {
 	w.mu.RLock()
 	stale := w.city != "" && !w.fetching && (w.lastWeather.IsZero() || now.Sub(w.lastWeather) >= w.weatherPoll)

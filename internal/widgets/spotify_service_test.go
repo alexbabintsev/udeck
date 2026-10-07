@@ -20,6 +20,7 @@ import (
 type subscriberFunc func(spotifySnapshot)
 
 func (f subscriberFunc) spotifyUpdate(s spotifySnapshot) { f(s) }
+func (f subscriberFunc) isActive() bool                  { return true }
 
 // fakeOSA makes osascript print state for every call.
 func fakeOSA(t *testing.T, state *atomic.Value) *atomic.Int32 {
@@ -102,6 +103,7 @@ func TestSpotifyServiceLoopsAndControls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.Subscribe(&activeSub{active: true})
 	waitFor(t, "polls", func() bool { return calls.Load() > 2 })
 	s.PlayPause()
 	s.NextTrack()

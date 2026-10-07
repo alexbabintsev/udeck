@@ -51,6 +51,9 @@ type spotifySnapshot struct {
 
 type spotifySubscriber interface {
 	spotifyUpdate(spotifySnapshot)
+	// isActive reports whether the subscriber is on screen; the service
+	// stops polling Spotify when none is.
+	isActive() bool
 }
 
 type SpotifyService struct {
@@ -93,6 +96,17 @@ func (s *SpotifyService) Subscribe(sub spotifySubscriber) {
 	sub.spotifyUpdate(snapshot)
 }
 
+func (s *SpotifyService) hasActiveSubscriber() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, sub := range s.subscribers {
+		if sub.isActive() {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *SpotifyService) requestRefresh() {
 	select {
 	case s.requestCh <- struct{}{}:
@@ -123,7 +137,9 @@ func (s *SpotifyService) refreshLoop(ctx context.Context, poll time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.refresh()
+			if s.hasActiveSubscriber() {
+				s.refresh()
+			}
 		case <-s.requestCh:
 			s.refresh()
 		}
@@ -313,6 +329,12 @@ func parseSpotifyArtworkURL(body []byte) (string, error) {
 type spotifyBaseWidget struct {
 	*widgetBase
 	service *SpotifyService
+}
+
+func (w *spotifyBaseWidget) resume() {
+	if w.service != nil {
+		w.service.requestRefresh()
+	}
 }
 
 func newSpotifyBaseWidget(id string, service *SpotifyService, notify func(string), filename string) (*spotifyBaseWidget, error) {

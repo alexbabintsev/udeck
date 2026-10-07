@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
 	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
 )
 
@@ -18,6 +19,16 @@ type Widget interface {
 
 type contextualWidget interface {
 	SetContext(Context)
+}
+
+// pausable widgets stop polling while off screen (see widgetBase).
+type pausable interface {
+	setActive(on bool) (resumed bool)
+}
+
+// resumer widgets refresh stale data when shown again.
+type resumer interface {
+	resume()
 }
 
 type widgetDef struct {
@@ -173,6 +184,25 @@ func (m *Manager) SyncVisible(buttons []config.Button) error {
 			return err
 		}
 		m.items[btn.RuntimeID] = item
+	}
+
+	visible := make(map[string]bool, len(buttons))
+	for _, btn := range buttons {
+		if btn.Widget != nil {
+			visible[btn.RuntimeID] = true
+		}
+	}
+	for id, item := range m.items {
+		p, ok := item.(pausable)
+		if !ok {
+			continue
+		}
+		if p.setActive(visible[id]) {
+			debug.Logf("widget %s resumed", id)
+			if r, ok := item.(resumer); ok {
+				go r.resume()
+			}
+		}
 	}
 	return nil
 }

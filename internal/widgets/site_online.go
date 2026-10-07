@@ -52,6 +52,8 @@ func NewSiteOnlineWidget(id string, cfg *config.Widget, notify func(string)) (*S
 	return w, nil
 }
 
+func (w *SiteOnlineWidget) resume() { w.refresh() }
+
 // HandleGesture forces an immediate refresh on tap.
 func (w *SiteOnlineWidget) HandleGesture(kind ig.Kind) {
 	if kind == ig.Tap {

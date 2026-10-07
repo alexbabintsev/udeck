@@ -70,6 +70,8 @@ func NewMemoryWidget(id string, cfg *config.Widget, notify func(string)) (*Memor
 	return w, nil
 }
 
+func (w *MemoryWidget) resume() { _, _ = w.updateMemory() }
+
 func (w *MemoryWidget) HandleGesture(kind ig.Kind) {
 	if kind != ig.Tap {
 		return

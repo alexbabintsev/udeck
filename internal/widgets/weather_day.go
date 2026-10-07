@@ -191,6 +191,8 @@ func (w *WeatherDayWidget) onData(days weatherForecast) {
 
 func (w *WeatherDayWidget) HandleGesture(_ ig.Kind) {}
 
+func (w *WeatherDayWidget) resume() { w.cache.refresh(w.city, w.pollMS) }
+
 func (w *WeatherDayWidget) Close() error {
 	w.cache.unsubscribe(w.subToken)
 	return w.widgetBase.Close()

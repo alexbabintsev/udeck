@@ -104,6 +104,8 @@ func (w *FreqtradeWidget) HandleGesture(kind ig.Kind) {
 	_, _ = w.render()
 }
 
+func (w *FreqtradeWidget) resume() { w.refresh() }
+
 func (w *FreqtradeWidget) refresh() {
 	trades, summary := fetchAllFreqtradeData(w.apis)
 	w.mu.Lock()

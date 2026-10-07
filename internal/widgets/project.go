@@ -152,6 +152,8 @@ func (w *ProjectWidget) HandleGesture(kind ig.Kind) {
 	}
 }
 
+func (w *ProjectWidget) resume() { _, _ = w.refreshRunning() }
+
 func (w *ProjectWidget) trigger(action projectAction) {
 	w.mu.Lock()
 	if w.busy || w.isClosed() {

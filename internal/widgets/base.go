@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -13,7 +14,9 @@ import (
 // directory holding the rendered icon, change notification towards the
 // Manager, and background loops that stop as soon as the widget is
 // closed (not on their next tick, which for slow pollers can be minutes
-// after a config reload replaced the widget).
+// after a config reload replaced the widget). Loops are also paused
+// while the widget is not on screen, so e.g. a freqtrade page that was
+// opened once does not keep polling its API forever.
 type widgetBase struct {
 	id       string
 	iconPath string
@@ -21,6 +24,7 @@ type widgetBase struct {
 
 	done      chan struct{}
 	closeOnce sync.Once
+	active    atomic.Bool
 }
 
 func newWidgetBase(id, kind, filename string, notify func(string)) (*widgetBase, error) {
@@ -31,12 +35,23 @@ func newWidgetBase(id, kind, filename string, notify func(string)) (*widgetBase,
 	if notify == nil {
 		notify = func(string) {}
 	}
-	return &widgetBase{
+	b := &widgetBase{
 		id:       id,
 		iconPath: filepath.Join(dir, filename),
 		notify:   notify,
 		done:     make(chan struct{}),
-	}, nil
+	}
+	b.active.Store(true) // widgets are created when their page is shown
+	return b, nil
+}
+
+// isActive reports whether the widget is on screen and not closed.
+func (b *widgetBase) isActive() bool { return b.active.Load() && !b.isClosed() }
+
+// setActive pauses (false) or resumes (true) the widget's loops and
+// reports whether it was just resumed.
+func (b *widgetBase) setActive(on bool) bool {
+	return b.active.Swap(on) != on && on
 }
 
 // IconPath returns the file the widget renders into.
@@ -80,7 +95,8 @@ func (b *widgetBase) publish(img image.Image) (bool, error) {
 	return changed, nil
 }
 
-// every runs fn on its own goroutine every interval until Close.
+// every runs fn on its own goroutine every interval until Close,
+// skipping ticks while the widget is paused.
 func (b *widgetBase) every(interval time.Duration, fn func(now time.Time)) {
 	go func() {
 		ticker := time.NewTicker(interval)
@@ -90,7 +106,9 @@ func (b *widgetBase) every(interval time.Duration, fn func(now time.Time)) {
 			case <-b.done:
 				return
 			case now := <-ticker.C:
-				fn(now)
+				if b.active.Load() {
+					fn(now)
+				}
 			}
 		}
 	}()
