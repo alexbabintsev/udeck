@@ -14,7 +14,6 @@ import (
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/device"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/widgets"
 )
@@ -78,6 +77,9 @@ type session struct {
 	// tx performs all device writes off the loop goroutine; nil in
 	// dump-events mode.
 	tx *outbox
+	// firmware is the device's firmware version ("" if unknown); it
+	// decides whether key images can be WebP.
+	firmware string
 
 	sleeping bool
 	// offline is set when recovery gave up; the loop then polls for the
@@ -424,7 +426,7 @@ func (s *session) reloadConfig(reloader *configReloader) {
 		log.Printf("config reload failed: %v", err)
 		return
 	}
-	icons.SetJPEGQuality(nextCfg.Device.JPEGQuality)
+	applyImageSettings(nextCfg, s.firmware)
 	nextNav := newNavigator(nextCfg.PagesOrDefault())
 	nextToggles := newToggleManager(nextCfg)
 	nextWidgetMgr, err := widgets.NewManager(nextCfg)

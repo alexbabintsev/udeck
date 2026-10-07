@@ -69,7 +69,7 @@ func pageZIP(buttons []config.Button, full bool) ([]byte, error) {
 			if err != nil {
 				return nil, fmt.Errorf("button [%d,%d] icon: %w", col, row, err)
 			}
-			iconFile := fmt.Sprintf("btn_%d_%d_%08x.jpg", col, row, buttonIconID(btn, jpeg))
+			iconFile := fmt.Sprintf("btn_%d_%d_%08x.%s", col, row, buttonIconID(btn, jpeg), icons.CurrentFormat().Extension())
 			iconData[iconFile] = jpeg
 			vp.Icon = "icons/" + iconFile
 		}

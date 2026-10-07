@@ -87,18 +87,31 @@ brightness: 65
 brightness: 100
 ```
 
-#### `device.jpeg_quality`
+#### `device.image_format`
+
+- Type: string
+- Allowed values: `auto` (default), `webp`, `jpeg`
+
+Encoding of key images sent to the device. WebP is roughly half the size
+of JPEG at the same quality, which keeps fast page switching smooth on
+the D200's limited link. `auto` asks the device for its firmware version
+at startup and uses WebP on firmware 5.3.6 and newer (verified), JPEG on
+older or unknown firmware. Force `webp` or `jpeg` if needed; if keys
+stay black with `webp`, your firmware cannot decode it - update it from
+Ulanzi Studio or use `jpeg`.
+
+#### `device.image_quality`
 
 - Type: integer
 - Range: `1..100`
 - Default: `75`
 
-JPEG quality of key images sent to the device. The D200 has limited
-throughput: smaller images keep fast page switching smooth. Raise it
-only if you see compression artifacts.
+Quality of key images for both formats. Raise it only if you see
+compression artifacts.
 
 ```yaml
-jpeg_quality: 85
+image_format: auto
+image_quality: 85
 ```
 
 #### `device.icon_margins`

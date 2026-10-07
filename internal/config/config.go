@@ -40,10 +40,13 @@ type ProjectWidgetSettings struct {
 
 type DeviceConfig struct {
 	Brightness *int `yaml:"brightness,omitempty"`
-	// JPEGQuality (1-100) of uploaded key images; 0 means the default.
-	JPEGQuality int         `yaml:"jpeg_quality,omitempty"`
-	LabelStyle  *LabelStyle `yaml:"label_style,omitempty"`
-	IconMargins *Insets     `yaml:"icon_margins,omitempty"`
+	// ImageFormat of uploaded key images: "auto" (default; WebP when the
+	// firmware is known to support it), "webp" or "jpeg".
+	ImageFormat string `yaml:"image_format,omitempty"`
+	// ImageQuality (1-100) of uploaded key images; 0 means the default.
+	ImageQuality int         `yaml:"image_quality,omitempty"`
+	LabelStyle   *LabelStyle `yaml:"label_style,omitempty"`
+	IconMargins  *Insets     `yaml:"icon_margins,omitempty"`
 }
 
 type Insets struct {
@@ -236,8 +239,13 @@ func (c *Config) Validate() error {
 	if len(c.Pages) > 0 && len(c.Buttons) > 0 {
 		return fmt.Errorf("config cannot define both pages and buttons")
 	}
-	if q := c.Device.JPEGQuality; q < 0 || q > 100 {
-		return fmt.Errorf("device.jpeg_quality out of range: %d (1-100)", q)
+	if q := c.Device.ImageQuality; q < 0 || q > 100 {
+		return fmt.Errorf("device.image_quality out of range: %d (1-100)", q)
+	}
+	switch c.Device.ImageFormat {
+	case "", "auto", "webp", "jpeg":
+	default:
+		return fmt.Errorf("device.image_format %q unknown (auto|webp|jpeg)", c.Device.ImageFormat)
 	}
 	if c.Device.Brightness != nil {
 		b := *c.Device.Brightness

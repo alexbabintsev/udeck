@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/chai2010/webp"
 	"github.com/srwiley/oksvg"
 	"github.com/srwiley/rasterx"
 	"golang.org/x/image/draw"
@@ -29,27 +30,75 @@ const (
 	PackIconSize = 128
 )
 
-// DefaultJPEGQuality balances size against looks on the 196px keys: the
-// D200 has limited throughput, and at 75 a typical widget image is ~30%
+// Format is the encoding of key images uploaded to the device.
+type Format int32
+
+const (
+	// JPEG works with every firmware.
+	JPEG Format = iota
+	// WebP is about 45% smaller than JPEG at the same quality for widget
+	// images. Firmware 5.3.6 renders it; older firmware may not.
+	WebP
+)
+
+// Extension is the file extension used inside page ZIPs.
+func (f Format) Extension() string {
+	if f == WebP {
+		return "webp"
+	}
+	return "jpg"
+}
+
+func (f Format) String() string { return f.Extension() }
+
+// DefaultQuality balances size against looks on the 196px keys: the D200
+// has limited throughput, and at 75 a typical widget image is ~30%
 // smaller than at 90 with no visible difference on the device.
-const DefaultJPEGQuality = 75
+const DefaultQuality = 75
 
-var quality atomic.Int32
+var (
+	quality atomic.Int32
+	format  atomic.Int32
+)
 
-// SetJPEGQuality sets the quality (1-100) of key images; 0 restores the
-// default.
-func SetJPEGQuality(q int) {
+// SetQuality sets the quality (1-100) of key images; out-of-range values
+// (including 0) restore the default.
+func SetQuality(q int) {
 	if q < 1 || q > 100 {
-		q = DefaultJPEGQuality
+		q = DefaultQuality
 	}
 	quality.Store(int32(q))
 }
 
-func jpegQuality() int {
+// SetFormat selects the image encoding for key images.
+func SetFormat(f Format) { format.Store(int32(f)) }
+
+// CurrentFormat reports the encoding key images are produced in.
+func CurrentFormat() Format { return Format(format.Load()) }
+
+// Quality reports the effective image quality (1-100).
+func Quality() int { return imageQuality() }
+
+func imageQuality() int {
 	if q := quality.Load(); q > 0 {
 		return int(q)
 	}
-	return DefaultJPEGQuality
+	return DefaultQuality
+}
+
+// encode renders img in the current format and quality.
+func encode(img image.Image) ([]byte, error) {
+	var buf bytes.Buffer
+	var err error
+	if CurrentFormat() == WebP {
+		err = webp.Encode(&buf, img, &webp.Options{Quality: float32(imageQuality())})
+	} else {
+		err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: imageQuality()})
+	}
+	if err != nil {
+		return nil, fmt.Errorf("encode icon as %s: %w", CurrentFormat(), err)
+	}
+	return buf.Bytes(), nil
 }
 
 type Insets struct {
@@ -106,11 +155,7 @@ func loadSized(path string, margins Insets, width, height int, iconColor string)
 	}
 	draw.BiLinear.Scale(dst, target, src, src.Bounds(), draw.Over, nil)
 
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: jpegQuality()}); err != nil {
-		return nil, fmt.Errorf("encode icon: %w", err)
-	}
-	return buf.Bytes(), nil
+	return encode(dst)
 }
 
 func aspectFitRect(target image.Rectangle, src image.Rectangle) image.Rectangle {
@@ -224,11 +269,7 @@ func loadLucideSized(name string, _ Insets, width, height int, iconColor string)
 		return nil, err
 	}
 
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: jpegQuality()}); err != nil {
-		return nil, fmt.Errorf("encode icon: %w", err)
-	}
-	return buf.Bytes(), nil
+	return encode(dst)
 }
 
 func drawLucideIcon(dst stddraw.Image, name string, target image.Rectangle, clr color.Color) error {

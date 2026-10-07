@@ -31,10 +31,11 @@ actual development milestones rather than formal releases.
 - Lucide icons are embedded into the binary.
 - Widget HTTP responses are size-limited and remote artwork dimensions
   are checked before decoding.
-- Key images are encoded at JPEG quality 75 by default (was 90), about
-  30% fewer bytes; configurable with `device.jpeg_quality`. Fast
-  navigation through several large pages exceeded what the D200 can
-  take in and made it reject writes.
+- Key images are sent as WebP on firmware 5.3.6+ (detected at startup,
+  `device.image_format: auto|webp|jpeg`) and at quality 75 by default
+  (`device.image_quality`). Together they cut uploads to about a third:
+  the main page went from ~60 to 18 packets. libwebp is compiled in via
+  cgo, no extra install is needed.
 - Fixed the device hanging for up to a minute (and finally rebooting)
   after a write error: an interrupted upload is now completed with
   filler packets before it is resent. Restarting from the header made

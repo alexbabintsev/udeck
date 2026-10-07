@@ -1,12 +1,17 @@
 package icons
 
 import (
+	"bytes"
+	"image/jpeg"
+
 	"image"
 	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
+
+	xwebp "golang.org/x/image/webp"
 )
 
 func TestDrawPackIcon(t *testing.T) {
@@ -63,8 +68,9 @@ func TestExpandTildeAndHelpers(t *testing.T) {
 	}
 }
 
-func TestJPEGQualityAffectsSize(t *testing.T) {
-	defer SetJPEGQuality(0)
+func TestQualityAndFormat(t *testing.T) {
+	defer SetQuality(0)
+	defer SetFormat(JPEG)
 	path := filepath.Join(t.TempDir(), "noise.png")
 	img := image.NewRGBA(image.Rect(0, 0, 196, 196))
 	for i := range img.Pix {
@@ -74,22 +80,48 @@ func TestJPEGQualityAffectsSize(t *testing.T) {
 	_ = png.Encode(f, img)
 	f.Close()
 
-	SetJPEGQuality(95)
+	SetFormat(JPEG)
+	SetQuality(95)
 	big, err := LoadForButton(path, Insets{}, [2]int{0, 0}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	SetJPEGQuality(40)
+	SetQuality(40)
 	small, _ := LoadForButton(path, Insets{}, [2]int{0, 0}, "")
 	if len(small) >= len(big) {
 		t.Fatalf("q40 (%d bytes) must be smaller than q95 (%d)", len(small), len(big))
 	}
-	SetJPEGQuality(0)
-	if jpegQuality() != DefaultJPEGQuality {
+	if _, err := jpeg.Decode(bytes.NewReader(small)); err != nil {
+		t.Fatalf("not a JPEG: %v", err)
+	}
+
+	SetFormat(WebP)
+	SetQuality(75)
+	w, err := LoadForButton(path, Insets{}, [2]int{3, 2}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := xwebp.Decode(bytes.NewReader(w))
+	if err != nil {
+		t.Fatalf("not a WebP: %v", err)
+	}
+	if b := decoded.Bounds(); b.Dx() != WideWidth || b.Dy() != IconHeight {
+		t.Fatalf("WebP size %v", b)
+	}
+	pack, err := LoadForButton("lucide/play", Insets{}, [2]int{0, 0}, "ff0000")
+	if err != nil || !bytes.HasPrefix(pack, []byte("RIFF")) {
+		t.Fatalf("pack icon must be WebP too: err=%v", err)
+	}
+	if WebP.Extension() != "webp" || JPEG.Extension() != "jpg" || WebP.String() != "webp" {
+		t.Fatal("extensions")
+	}
+
+	SetQuality(0)
+	if imageQuality() != DefaultQuality {
 		t.Fatal("0 must restore the default")
 	}
-	SetJPEGQuality(500)
-	if jpegQuality() != DefaultJPEGQuality {
+	SetQuality(500)
+	if imageQuality() != DefaultQuality {
 		t.Fatal("out-of-range must fall back to the default")
 	}
 }

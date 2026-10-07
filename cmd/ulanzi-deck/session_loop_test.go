@@ -67,7 +67,7 @@ func newTestSession(t *testing.T, yaml string) (*session, *fakeDeck) {
 	noPause(t)
 	path, cfg := writeConfig(t, yaml)
 	dev := &fakeDeck{}
-	s, err := newRunSession(path, cfg, dev)
+	s, err := newRunSession(path, cfg, dev, "")
 	if err != nil {
 		t.Fatalf("newRunSession: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestNewRunSessionUploadsInitialPage(t *testing.T) {
 	noPause(t)
 	path, cfg := writeConfig(t, loopConfig)
 	dev := &fakeDeck{}
-	s, err := newRunSession(path, cfg, dev)
+	s, err := newRunSession(path, cfg, dev, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +135,7 @@ func TestNewRunSessionUploadsInitialPage(t *testing.T) {
 func TestNewRunSessionFailsOnDeviceError(t *testing.T) {
 	noPause(t)
 	path, cfg := writeConfig(t, loopConfig)
-	if _, err := newRunSession(path, cfg, &fakeDeck{sendErrs: []error{errHID}}); err == nil {
+	if _, err := newRunSession(path, cfg, &fakeDeck{sendErrs: []error{errHID}}, ""); err == nil {
 		t.Fatal("expected error")
 	}
 }

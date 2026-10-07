@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
+
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/device"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
@@ -47,5 +49,36 @@ func TestKeepalivePacketIsDeviceInfoRequest(t *testing.T) {
 	}
 	if compactJSON("{\n  \"a\": 1\n}") != `{"a":1}` || compactJSON("not json") != "not json" {
 		t.Fatal("compactJSON")
+	}
+}
+
+func TestImageFormatSelection(t *testing.T) {
+	cases := []struct {
+		setting, firmware string
+		want              icons.Format
+	}{
+		{"", "5.3.6", icons.WebP},
+		{"auto", "5.4.0", icons.WebP},
+		{"", "5.3.1", icons.JPEG},
+		{"", "", icons.JPEG},
+		{"", "garbage", icons.JPEG},
+		{"webp", "5.3.1", icons.WebP},
+		{"jpeg", "5.3.6", icons.JPEG},
+	}
+	for _, c := range cases {
+		if got := imageFormatFor(c.setting, c.firmware); got != c.want {
+			t.Fatalf("imageFormatFor(%q, %q) = %s, want %s", c.setting, c.firmware, got, c.want)
+		}
+	}
+	if !versionAtLeast("5.3.6", "5.3.6") || !versionAtLeast("6", "5.3.6") || versionAtLeast("5.3", "5.3.6") || !versionAtLeast("5.10", "5.3.6") {
+		t.Fatal("versionAtLeast")
+	}
+	if firmwareVersion(`{"Dversion": " 5.3.6 "}`) != "5.3.6" || firmwareVersion("nope") != "" {
+		t.Fatal("firmwareVersion")
+	}
+	defer icons.SetFormat(icons.JPEG)
+	applyImageSettings(&config.Config{Device: config.DeviceConfig{ImageFormat: "webp", ImageQuality: 60}}, "")
+	if icons.CurrentFormat() != icons.WebP {
+		t.Fatal("applyImageSettings must set the format")
 	}
 }

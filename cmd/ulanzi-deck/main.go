@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -230,16 +232,18 @@ func cmdRun(args []string, stdout, stderr io.Writer) error {
 	}
 	defer dev.Close()
 
-	s, err := newRunSession(*cfgPath, cfg, dev)
+	firmware := ""
+	if r, ok := dev.(infoReader); ok {
+		if info, err := r.Info(time.Second); err == nil {
+			log.Printf("device: %s", compactJSON(info))
+			firmware = firmwareVersion(info)
+		}
+	}
+	s, err := newRunSession(*cfgPath, cfg, dev, firmware)
 	if err != nil {
 		return err
 	}
 	s.out = stdout
-	if r, ok := dev.(infoReader); ok {
-		if info, err := r.Info(time.Second); err == nil {
-			log.Printf("device: %s", compactJSON(info))
-		}
-	}
 	defer s.close()
 
 	if cfg.Device.Brightness != nil {
@@ -258,8 +262,8 @@ func cmdRun(args []string, stdout, stderr io.Writer) error {
 
 // newRunSession builds the runtime state for cfg and uploads the initial
 // page. On error nothing is left running.
-func newRunSession(cfgPath string, cfg *config.Config, dev deck) (*session, error) {
-	icons.SetJPEGQuality(cfg.Device.JPEGQuality)
+func newRunSession(cfgPath string, cfg *config.Config, dev deck, firmware string) (*session, error) {
+	applyImageSettings(cfg, firmware)
 	nav := newNavigator(cfg.PagesOrDefault())
 	toggles := newToggleManager(cfg)
 	widgetMgr, err := widgets.NewManager(cfg)
@@ -276,6 +280,7 @@ func newRunSession(cfgPath string, cfg *config.Config, dev deck) (*session, erro
 		widgets:  widgetMgr,
 		actions:  newActionRunner(),
 		tx:       newOutbox(dev),
+		firmware: firmware,
 	}
 	if err := s.refreshPage(); err != nil {
 		s.close()
@@ -332,4 +337,78 @@ func openLogFile(path string) (*os.File, error) {
 		_ = os.Rename(path, path+".1")
 	}
 	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+}
+
+// webpMinFirmware is the oldest firmware verified to render WebP keys
+// (5.3.1 runs an older, Qt-based key app without WebP support).
+const webpMinFirmware = "5.3.6"
+
+// applyImageSettings sets the key image format and quality from the
+// config and the firmware version the device reported ("" if unknown).
+func applyImageSettings(cfg *config.Config, firmware string) {
+	icons.SetQuality(cfg.Device.ImageQuality)
+	f := imageFormatFor(cfg.Device.ImageFormat, firmware)
+	icons.SetFormat(f)
+	debug.Logf("key images: %s, quality %d (image_format %q, firmware %q)", f, icons.Quality(), cfg.Device.ImageFormat, firmware)
+}
+
+func imageFormatFor(setting, firmware string) icons.Format {
+	switch setting {
+	case "webp":
+		return icons.WebP
+	case "jpeg":
+		return icons.JPEG
+	}
+	if versionAtLeast(firmware, webpMinFirmware) {
+		return icons.WebP
+	}
+	return icons.JPEG
+}
+
+// firmwareVersion extracts "Dversion" from the device-info JSON.
+func firmwareVersion(info string) string {
+	var v struct {
+		Dversion string
+	}
+	if err := json.Unmarshal([]byte(info), &v); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(v.Dversion)
+}
+
+// versionAtLeast compares dotted numeric versions; an unparsable v is
+// never at least min.
+func versionAtLeast(v, min string) bool {
+	parse := func(s string) ([]int, bool) {
+		if s == "" {
+			return nil, false
+		}
+		var out []int
+		for _, p := range strings.Split(s, ".") {
+			n, err := strconv.Atoi(p)
+			if err != nil {
+				return nil, false
+			}
+			out = append(out, n)
+		}
+		return out, true
+	}
+	a, ok1 := parse(v)
+	b, ok2 := parse(min)
+	if !ok1 || !ok2 {
+		return false
+	}
+	for i := 0; i < max(len(a), len(b)); i++ {
+		x, y := 0, 0
+		if i < len(a) {
+			x = a[i]
+		}
+		if i < len(b) {
+			y = b[i]
+		}
+		if x != y {
+			return x > y
+		}
+	}
+	return true
 }

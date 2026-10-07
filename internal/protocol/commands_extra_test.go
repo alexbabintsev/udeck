@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
@@ -246,5 +247,20 @@ func TestParseHexColor(t *testing.T) {
 func TestPageZIPReportsIconErrors(t *testing.T) {
 	if _, err := PageZIP([]config.Button{{At: [2]int{0, 0}, Icon: "/nonexistent/icon.png"}}); err == nil {
 		t.Fatal("expected icon error")
+	}
+}
+
+func TestIconFileExtensionFollowsFormat(t *testing.T) {
+	defer icons.SetFormat(icons.JPEG)
+	for _, f := range []icons.Format{icons.JPEG, icons.WebP} {
+		icons.SetFormat(f)
+		data, err := PartialPageZIP([]config.Button{{At: [2]int{0, 0}, Icon: "lucide/play"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := readManifest(t, data)
+		if icon := m["0_0"].ViewParam[0].Icon; !strings.HasSuffix(icon, "."+f.Extension()) {
+			t.Fatalf("format %s: manifest icon %q", f, icon)
+		}
 	}
 }
