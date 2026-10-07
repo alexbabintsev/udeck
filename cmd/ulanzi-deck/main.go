@@ -32,6 +32,8 @@ Usage:
   ulanzi-deck dump-events [--debug] [--log-file <path>]
   ulanzi-deck set-brightness <0..100>
   ulanzi-deck run [--config <path.yaml>] [--debug] [--log-file <path>]
+  ulanzi-deck probe [--key N] [--sizes 3,8,14] [--gaps 2000,...,0] [--reps 3] [--read]
+  ulanzi-deck probe --playpause N [--key N]
 
 --debug (or ULANZI_DEBUG=1) logs every HID error, retry, reconnect and
 page upload, plus widget fetch failures, for diagnosing device drop-outs.
@@ -86,6 +88,8 @@ func runCLI(args []string, stdout, stderr io.Writer) int {
 		err = cmdSetBrightness(rest, stdout, stderr)
 	case "run":
 		err = cmdRun(rest, stdout, stderr)
+	case "probe":
+		err = cmdProbe(rest, stdout, stderr)
 	case "-h", "--help", "help":
 		fmt.Fprint(stdout, usage)
 		return 0

@@ -31,11 +31,15 @@ actual development milestones rather than formal releases.
 - Lucide icons are embedded into the binary.
 - Widget HTTP responses are size-limited and remote artwork dimensions
   are checked before decoding.
+- Fixed delayed and missing key images: when a page ZIP ended exactly on
+  a 1024-byte packet boundary, the D200 firmware treated the next
+  upload as the tail of that one, accepting it at ~1 packet/s (0.7-3.4s
+  stalls, 0xE00002BC errors) and losing its image. The ZIP padding now
+  avoids that length. Found with the new `probe` diagnostic command.
 - Device writes run on their own goroutine, so key presses are handled
   even while the D200 refuses writes for seconds. Queued uploads are
-  coalesced (only the newest page / newest image of a key is sent),
-  keys already showing the same content are skipped, and uploads are
-  paced in proportion to their size so the device can unpack them.
+  coalesced (only the newest page / newest image of a key is sent), and
+  keys already showing the same content are skipped.
 - The Spotify play/pause icon flips immediately on tap.
 - Widgets that are not on screen pause their polling and refresh as soon
   as their page is shown again (previously a page opened once, e.g.

@@ -111,8 +111,20 @@ func randomASCII(n int) []byte {
 	return b
 }
 
-// zipChunksValid returns false if any chunk-boundary byte is 0x00 or 0x7C.
+// zipChunksValid reports whether the device parses data correctly when
+// it is split into packets:
+//
+//   - a continuation packet must not start with 0x00 or 0x7C;
+//   - the ZIP must not end exactly on a packet boundary. The D200 then
+//     keeps waiting for more data and swallows the next transfer as the
+//     tail of this one: that upload is accepted at ~1 packet/s and its
+//     image is lost or late (measured with `ulanzi-deck probe
+//     --playpause`: every upload following a 3064-byte ZIP stalled for
+//     0.7-3.4s, none followed any other size).
 func zipChunksValid(data []byte) bool {
+	if len(data) >= FirstChunkSize && (len(data)-FirstChunkSize)%PacketSize == 0 {
+		return false
+	}
 	for i := FirstChunkSize; i < len(data); i += PacketSize {
 		if data[i] == 0x00 || data[i] == 0x7C {
 			return false

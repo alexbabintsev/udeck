@@ -5,10 +5,16 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 )
 
 func TestSetBrightnessPacket(t *testing.T) {
@@ -173,6 +179,44 @@ func TestZipChunksValid(t *testing.T) {
 	data[FirstChunkSize+PacketSize] = 0x00
 	if zipChunksValid(data) {
 		t.Fatal("0x00 at chunk boundary must be invalid")
+	}
+	// A ZIP ending exactly on a packet boundary makes the device swallow
+	// the next transfer.
+	for _, n := range []int{FirstChunkSize, FirstChunkSize + PacketSize, FirstChunkSize + 2*PacketSize} {
+		if zipChunksValid(bytes.Repeat([]byte{0x41}, n)) {
+			t.Fatalf("length %d ends on a packet boundary and must be invalid", n)
+		}
+	}
+	if !zipChunksValid(bytes.Repeat([]byte{0x41}, FirstChunkSize+2*PacketSize+1)) {
+		t.Fatal("one byte past the boundary is fine")
+	}
+}
+
+// Regression: the Spotify pause icon (#1db954 on black) produced a
+// 3064-byte ZIP, exactly three packets, and every upload after it
+// stalled on the device.
+func TestPageZIPNeverEndsOnPacketBoundary(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 196, 196))
+	for p := 3; p < len(img.Pix); p += 4 {
+		img.Pix[p] = 0xff
+	}
+	if err := icons.DrawPackIcon(img, "lucide/pause", image.Rect(34, 34, 162, 162), color.RGBA{0x1d, 0xb9, 0x54, 0xff}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "pause.png")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = png.Encode(f, img)
+	f.Close()
+
+	data, err := PartialPageZIP([]config.Button{{At: [2]int{0, 2}, Icon: path}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if (len(data)-FirstChunkSize)%PacketSize == 0 {
+		t.Fatalf("ZIP of %d bytes ends on a packet boundary", len(data))
 	}
 }
 
