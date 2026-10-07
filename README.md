@@ -21,7 +21,7 @@ it with whatever automation you already run.
 ## Requirements
 
 - macOS (Linux/Windows untested in v1)
-- Go 1.21+
+- Go 1.27.1+
 - `hidapi` system library: `brew install hidapi`
 
 ## Install
@@ -90,14 +90,18 @@ Then:
 ./ulanzi-deck set-brightness 70
 ./ulanzi-deck run --config examples/test-config.yaml
 ./ulanzi-deck run
+./ulanzi-deck run --debug   # or ULANZI_DEBUG=1
 ```
 
 `run` uploads the configured button layout, switches the device into
 host-controlled mode, applies label style / brightness, starts listening
 for button events, hot-reloads the config when the YAML changes, and
 hot-reloads static button icons when their image files change, and
-periodically refreshes device state to avoid falling back into the
-firmware screensaver. On macOS it also listens for system sleep, wake,
+sends a lightweight keepalive packet (re-applied brightness) when the
+link is idle so the firmware screensaver does not take over. Widget and
+toggle changes redraw only the affected keys; the full layout is
+uploaded only on start, page switch, config reload, wake, or after the
+device was actually reset. On macOS it also listens for system sleep, wake,
 and shutdown notifications so it can dim/close the device cleanly before
 sleep and restore the current page after wake.
 
@@ -443,9 +447,14 @@ Notes:
     runtime now retries with backoff during startup, and this error is
     often transient on macOS.
 - The deck falls into screensaver or stops responding
-  - The runtime already sends periodic keepalive refreshes. If the
+  - The runtime already sends periodic keepalive packets. If the
     screen is still frozen, unplugging and reconnecting USB remains the
-    safest hard reset.
+    safest hard reset. While the device is unplugged the daemon keeps
+    running and redraws the page when it comes back.
+- Keys flicker / the device seems to disconnect
+  - Run with `--debug` (or `ULANZI_DEBUG=1`). Every HID write/read
+    error, retry, handle reopen, recovery decision, page upload and
+    widget fetch failure is logged with a `[debug]` prefix.
 - Spotify artwork updates but then breaks
   - Artwork icons are written atomically now; if updates still fail,
     check Spotify itself is running and that network access is available

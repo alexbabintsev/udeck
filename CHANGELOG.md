@@ -9,6 +9,48 @@ actual development milestones rather than formal releases.
 
 - Keep updating this section for user-visible changes that have not been
   grouped into a tagged release yet.
+- Stop the periodic full-page re-upload: the idle keepalive is now a
+  single brightness (or label-style) packet, so the keys no longer
+  flash every 30 seconds.
+- Widget updates are coalesced and sent as one partial update for the
+  visible widgets only. Updates from widgets on other pages no longer
+  trigger a full-page redraw, and bursts of updates are never dropped.
+- Toggle state changes redraw only the toggled key.
+- Device recovery reconnects the HID handle and repeats only the failed
+  request; the full page is re-sent only when the device really vanished
+  from the bus. Icon/widget render errors no longer trigger recovery.
+- The stale handle is now closed (not leaked) on recovery, which on
+  macOS's exclusive open caused repeated privilege-violation retries.
+- A transfer interrupted by an in-place reopen restarts from its header
+  packet instead of sending orphaned continuation chunks.
+- When recovery fails the daemon stays up and redraws the page once the
+  device is reconnected, instead of exiting.
+- Shell, key, HTTP and delayed chain actions run on a worker goroutine
+  so they no longer block HID reads; shell children are reaped.
+- New `--debug` flag / `ULANZI_DEBUG=1` for verbose diagnostics.
+- Lucide icons are embedded into the binary.
+- Widget HTTP responses are size-limited and remote artwork dimensions
+  are checked before decoding.
+- Widget text now renders on every machine: the embedded Go Mono family
+  is the default and `widgets.font` selects a custom TTF/OTF. Previously
+  text silently disappeared unless a specific commercial font was
+  installed.
+- Fixed an infinite loop when dashboard text did not fit even at the
+  minimum font size (could hang the event loop on long track names).
+- Closing one `weather_day` widget no longer unsubscribes a different
+  widget of the same city; closed widgets are actually unsubscribed.
+- Widget background loops stop immediately on close instead of at their
+  next tick (up to minutes after a config reload).
+- The dashboard no longer starts overlapping weather requests while the
+  API is slow, and Spotify artwork is fetched outside the service lock.
+- AppleScript numbers in comma-decimal locales are parsed correctly.
+- `weather_day` wind speed is requested in m/s to match its field.
+- A multi-packet transfer that hits a write error is restarted from its
+  header instead of retrying the failed chunk in place (which could
+  corrupt the page ZIP so the device kept showing the old page).
+- Internal: shared widget lifecycle (`widgetBase`), single HTTP/JSON
+  helper, single text-fitting routine, event loop behind a `deck`
+  interface, testable CLI; removed dead code. Test coverage ~93%.
 - `device.SendPacket` / `device.ReadPacket` now silently re-open the HID
   handle in place when macOS hidapi returns "Device is disconnected" /
   "no such device" on a still-physically-connected D200. The device

@@ -156,11 +156,19 @@ Currently supported:
 
 ```yaml
 widgets:
+  font: ~/Library/Fonts/MyFont-Regular.ttf
   project:
     terminal: "iTerm"
     editor: "PhpStorm"
     editor_subdir: "www"
 ```
+
+#### `widgets.font`
+
+Optional path (`~` expanded) to a TTF/OTF file used for all widget text.
+When omitted, or when the file cannot be loaded, the embedded Go Mono
+family is used, so widgets render the same on every machine. A custom
+font is used for both regular and bold text.
 
 #### `widgets.project`
 
