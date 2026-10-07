@@ -16,7 +16,7 @@ func TestLoadAppliesMargins(t *testing.T) {
 	path := filepath.Join(dir, "icon.png")
 	writeSolidPNG(t, path, color.RGBA{0xff, 0x20, 0x20, 0xff})
 
-	data, err := Load(path, Insets{Top: 20, Right: 30, Bottom: 40, Left: 50})
+	data, err := LoadForButton(path, Insets{Top: 20, Right: 30, Bottom: 40, Left: 50}, [2]int{0, 0}, "")
 	if err != nil {
 		t.Fatalf("load icon: %v", err)
 	}

@@ -8,15 +8,17 @@ import (
 	stddraw "image/draw"
 	"image/jpeg"
 	_ "image/png"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/srwiley/oksvg"
 	"github.com/srwiley/rasterx"
 	"golang.org/x/image/draw"
+
+	"github.com/alexbabintsev/ulanzi-deck-go/assets"
 )
 
 const (
@@ -41,12 +43,6 @@ func SlotDimensions(col, row int) (width, height int) {
 		return WideWidth, IconHeight
 	}
 	return IconWidth, IconHeight
-}
-
-// Load reads an image file from path (~ expanded), resizes it to 196×196
-// using bilinear interpolation, and returns JPEG-encoded bytes.
-func Load(path string, margins Insets) ([]byte, error) {
-	return loadSized(path, margins, IconWidth, IconHeight, "")
 }
 
 // LoadForButton reads an image file and resizes it to the physical pixel
@@ -211,14 +207,6 @@ func loadLucideSized(name string, _ Insets, width, height int, iconColor string)
 	return buf.Bytes(), nil
 }
 
-func lucideAssetDir() string {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		return filepath.Join("assets", "lucide", "icons")
-	}
-	return filepath.Join(filepath.Dir(file), "..", "..", "assets", "lucide", "icons")
-}
-
 func drawLucideIcon(dst stddraw.Image, name string, target image.Rectangle, clr color.Color) error {
 	scale := lucideStrokeScale(target)
 	icon, err := readLucideIcon(name, clr, scale)
@@ -256,8 +244,13 @@ func parseIconColor(s string) color.Color {
 }
 
 func readLucideIcon(name string, clr color.Color, strokeScale float64) (*oksvg.SvgIcon, error) {
-	iconPath := filepath.Join(lucideAssetDir(), name+".svg")
-	data, err := os.ReadFile(iconPath)
+	// fs.ValidPath rejects "..", absolute and empty segments, so a config
+	// value cannot reach outside the embedded icon set.
+	iconPath := "lucide/icons/" + name + ".svg"
+	if !fs.ValidPath(iconPath) || strings.Contains(name, "/") {
+		return nil, fmt.Errorf("invalid lucide icon name %q", name)
+	}
+	data, err := assets.Lucide.ReadFile(iconPath)
 	if err != nil {
 		return nil, fmt.Errorf("read lucide icon %q: %w", name, err)
 	}
