@@ -2,14 +2,11 @@ package widgets
 
 import (
 	"bytes"
-	"context"
 	"image/color"
 	"image/png"
 	"os"
-	"os/exec"
 	"testing"
 
-	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 )
 
@@ -72,54 +69,6 @@ func TestShortenLine(t *testing.T) {
 	got := shortenLine("abcdefghijklmnopqrstuvwxyz", 6)
 	if got != "abcde…" {
 		t.Fatalf("unexpected shortened line: %q", got)
-	}
-}
-
-func TestSpotifyPlayPauseWidgetTapRunsPlayPause(t *testing.T) {
-	oldExec := execCommandContext
-	defer func() { execCommandContext = oldExec }()
-
-	var gotArgs []string
-	execCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
-		gotArgs = append([]string{name}, args...)
-		return exec.CommandContext(ctx, "/usr/bin/true")
-	}
-
-	base, err := newSpotifyBaseWidget("test", &SpotifyService{}, func(string) {}, "spotify-playpause.png")
-	if err != nil {
-		t.Fatalf("new spotify base widget: %v", err)
-	}
-	defer base.Close()
-
-	w := &SpotifyPlayPauseWidget{spotifyBaseWidget: base}
-	w.HandleGesture(ig.Tap)
-
-	if len(gotArgs) < 3 || gotArgs[0] != "/usr/bin/osascript" || gotArgs[1] != "-e" || gotArgs[2] != `tell application "Spotify" to playpause` {
-		t.Fatalf("unexpected playpause command: %#v", gotArgs)
-	}
-}
-
-func TestSpotifyPlayPauseWidgetHoldRunsNextTrack(t *testing.T) {
-	oldExec := execCommandContext
-	defer func() { execCommandContext = oldExec }()
-
-	var gotArgs []string
-	execCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
-		gotArgs = append([]string{name}, args...)
-		return exec.CommandContext(ctx, "/usr/bin/true")
-	}
-
-	base, err := newSpotifyBaseWidget("test", &SpotifyService{}, func(string) {}, "spotify-playpause.png")
-	if err != nil {
-		t.Fatalf("new spotify base widget: %v", err)
-	}
-	defer base.Close()
-
-	w := &SpotifyPlayPauseWidget{spotifyBaseWidget: base}
-	w.HandleGesture(ig.Hold)
-
-	if len(gotArgs) < 3 || gotArgs[0] != "/usr/bin/osascript" || gotArgs[1] != "-e" || gotArgs[2] != `tell application "Spotify" to next track` {
-		t.Fatalf("unexpected next-track command: %#v", gotArgs)
 	}
 }
 

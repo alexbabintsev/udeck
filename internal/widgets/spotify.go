@@ -29,6 +29,9 @@ const (
 	spotifyFallbackName     = "Spotify"
 	spotifyNotifierDebounce = 250 * time.Millisecond
 	spotifyCommandTimeout   = 4 * time.Second
+	// spotifyOptimisticHold is how long a tapped play/pause state wins
+	// over stale state read back from Spotify.
+	spotifyOptimisticHold = 2 * time.Second
 )
 
 var (
@@ -62,7 +65,14 @@ type SpotifyService struct {
 	subscribers []spotifySubscriber
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
+	bg          sync.WaitGroup // background AppleScript commands
 	requestCh   chan struct{}
+
+	// After PlayPause the UI flips immediately; Spotify keeps reporting
+	// the old state for a moment, so contradicting reads are ignored
+	// until expectUntil.
+	expectPlaying *bool
+	expectUntil   time.Time
 }
 
 func NewSpotifyService(pollMS int) (*SpotifyService, error) {
@@ -85,6 +95,7 @@ func NewSpotifyService(pollMS int) (*SpotifyService, error) {
 func (s *SpotifyService) Close() error {
 	s.cancel()
 	s.wg.Wait()
+	s.bg.Wait()
 	return nil
 }
 
@@ -114,16 +125,73 @@ func (s *SpotifyService) requestRefresh() {
 	}
 }
 
+// PlayPause toggles playback. Subscribers see the new state at once
+// (optimistically); the AppleScript call runs in the background so the
+// event loop is not blocked, and later reads confirm or correct it.
 func (s *SpotifyService) PlayPause() {
-	if err := spotifyOSA(`tell application "Spotify" to playpause`); err == nil {
-		s.requestRefresh()
+	s.mu.Lock()
+	next := s.snapshot
+	next.Playing = !next.Playing
+	next.State = spotifyStateName(next.Playing)
+	playing := next.Playing
+	s.expectPlaying = &playing
+	s.expectUntil = time.Now().Add(spotifyOptimisticHold)
+	s.snapshot = next
+	subs := append([]spotifySubscriber(nil), s.subscribers...)
+	s.mu.Unlock()
+	for _, sub := range subs {
+		sub.spotifyUpdate(next)
 	}
+
+	s.bg.Add(1)
+	go func() {
+		defer s.bg.Done()
+		if err := spotifyOSA(`tell application "Spotify" to playpause`); err != nil {
+			debug.Logf("spotify playpause: %v", err)
+			s.mu.Lock()
+			s.expectPlaying = nil
+			s.mu.Unlock()
+		}
+		s.requestRefresh()
+		// Confirm once the optimistic window is over, in case Spotify
+		// ignored the command and no poll is running.
+		time.AfterFunc(spotifyOptimisticHold+100*time.Millisecond, s.requestRefresh)
+	}()
 }
 
+// NextTrack skips to the next track in the background.
 func (s *SpotifyService) NextTrack() {
-	if err := spotifyOSA(`tell application "Spotify" to next track`); err == nil {
+	s.bg.Add(1)
+	go func() {
+		defer s.bg.Done()
+		if err := spotifyOSA(`tell application "Spotify" to next track`); err != nil {
+			debug.Logf("spotify next: %v", err)
+			return
+		}
 		s.requestRefresh()
+	}()
+}
+
+func spotifyStateName(playing bool) string {
+	if playing {
+		return "playing"
 	}
+	return "paused"
+}
+
+// applyExpectedLocked keeps a just-tapped play/pause state while Spotify
+// still reports the old one. Called with s.mu held.
+func (s *SpotifyService) applyExpectedLocked(next *spotifySnapshot) {
+	if s.expectPlaying == nil {
+		return
+	}
+	want := *s.expectPlaying
+	if next.Playing == want || !time.Now().Before(s.expectUntil) {
+		s.expectPlaying = nil
+		return
+	}
+	next.Playing = want
+	next.State = spotifyStateName(want)
 }
 
 func (s *SpotifyService) refreshLoop(ctx context.Context, poll time.Duration) {
@@ -196,6 +264,7 @@ func (s *SpotifyService) refresh() {
 	}
 
 	s.mu.Lock()
+	s.applyExpectedLocked(&next)
 	prev = s.snapshot
 	changed := spotifyChanged(prev, next)
 	if !changed {

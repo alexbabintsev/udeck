@@ -107,7 +107,7 @@ func TestSpotifyServiceLoopsAndControls(t *testing.T) {
 	waitFor(t, "polls", func() bool { return calls.Load() > 2 })
 	s.PlayPause()
 	s.NextTrack()
-	if err := s.Close(); err != nil {
+	if err := s.Close(); err != nil { // waits for both commands
 		t.Fatal(err)
 	}
 }
@@ -163,6 +163,7 @@ func TestSpotifyWidgetsRender(t *testing.T) {
 	calls := fakeOSA(t, &state)
 	next.HandleGesture(ig.Tap)
 	next.HandleGesture(ig.Hold)
+	svc.bg.Wait()
 	if calls.Load() != 1 {
 		t.Fatalf("next tap must run one osascript, got %d", calls.Load())
 	}
