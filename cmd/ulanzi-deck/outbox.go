@@ -17,15 +17,6 @@ import (
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
 )
 
-// Pacing between transfers. The D200 unpacks every page ZIP on its own
-// MCU; while it is busy it stops accepting HID writes for seconds
-// (IOHIDDeviceSetReport 0xE00002BC). Leaving it time proportional to the
-// transfer size keeps bursts from piling up.
-var (
-	transferGapPerPacket = 15 * time.Millisecond
-	transferGapMax       = 400 * time.Millisecond
-)
-
 // sendJob is one page (full) or set of keys (partial) to upload.
 type sendJob struct {
 	page    bool
@@ -39,8 +30,8 @@ type sendFailure struct {
 }
 
 // outbox owns all writes to the device. The event loop queues work and
-// keeps reading button events while a transfer is in flight, so a
-// device that stalls on writes no longer delays key presses.
+// keeps reading button events while a transfer is in flight, so a slow
+// write never delays key presses.
 //
 // Queued work is coalesced: a newer page replaces an older one, a newer
 // image of a key replaces the queued one, and a key whose content is
@@ -218,15 +209,6 @@ func (o *outbox) loop() {
 			}
 			if err != nil {
 				o.report(j, err)
-				continue
-			}
-			gap := min(time.Duration(packets)*transferGapPerPacket, transferGapMax)
-			if gap > 0 {
-				select {
-				case <-o.done:
-					return
-				case <-time.After(gap):
-				}
 			}
 		}
 	}

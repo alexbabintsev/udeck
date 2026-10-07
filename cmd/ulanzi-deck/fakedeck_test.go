@@ -221,14 +221,6 @@ func writeConfig(t *testing.T, yaml string) (string, *config.Config) {
 	return path, cfg
 }
 
-// noTransferGap removes the pacing between uploads for the test.
-func noTransferGap(t *testing.T) {
-	t.Helper()
-	old := transferGapPerPacket
-	transferGapPerPacket = 0
-	t.Cleanup(func() { transferGapPerPacket = old })
-}
-
 // noPause makes recovery/back-off sleeps instant for the test.
 func noPause(t *testing.T) {
 	t.Helper()

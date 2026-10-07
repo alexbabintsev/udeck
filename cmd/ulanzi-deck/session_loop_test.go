@@ -65,7 +65,6 @@ const (
 func newTestSession(t *testing.T, yaml string) (*session, *fakeDeck) {
 	t.Helper()
 	noPause(t)
-	noTransferGap(t)
 	path, cfg := writeConfig(t, yaml)
 	dev := &fakeDeck{}
 	s, err := newRunSession(path, cfg, dev)

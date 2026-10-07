@@ -18,7 +18,6 @@ import (
 
 func newTestOutbox(t *testing.T, dev *fakeDeck) *outbox {
 	t.Helper()
-	noTransferGap(t)
 	o := newOutbox(dev)
 	t.Cleanup(o.close)
 	return o
@@ -161,23 +160,6 @@ func TestOutboxKeepaliveSkippedDuringTransferAndDiscard(t *testing.T) {
 	}
 	if o.sinceWrite() > time.Second {
 		t.Fatal("write time not tracked")
-	}
-}
-
-func TestOutboxPacesTransfers(t *testing.T) {
-	old, oldMax := transferGapPerPacket, transferGapMax
-	transferGapPerPacket, transferGapMax = 80*time.Millisecond, time.Second
-	defer func() { transferGapPerPacket, transferGapMax = old, oldMax }()
-	dev := &fakeDeck{}
-	o := newOutbox(dev)
-	defer o.close()
-	start := time.Now()
-	o.queueButtons([]config.Button{key(0, "a")})
-	time.Sleep(5 * time.Millisecond)
-	o.queueButtons([]config.Button{key(1, "b")})
-	o.drain()
-	if time.Since(start) < 80*time.Millisecond {
-		t.Fatal("expected a pause between uploads")
 	}
 }
 
