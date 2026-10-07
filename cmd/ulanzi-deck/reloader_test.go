@@ -7,73 +7,90 @@ import (
 	"time"
 )
 
-func TestConfigReloaderDetectsIconChanges(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "config.yaml")
-	iconPath := filepath.Join(dir, "icon.png")
+func fastReloader(t *testing.T) {
+	t.Helper()
+	old := configReloadPollInterval
+	configReloadPollInterval = 10 * time.Millisecond
+	t.Cleanup(func() { configReloadPollInterval = old })
+}
 
-	if err := os.WriteFile(cfgPath, []byte("buttons: []\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	if err := os.WriteFile(iconPath, []byte("icon-a"), 0o644); err != nil {
-		t.Fatalf("write icon: %v", err)
-	}
-
-	r := newConfigReloader(cfgPath, []string{iconPath})
-	defer r.Close()
-
-	time.Sleep(1100 * time.Millisecond)
-
-	if err := os.WriteFile(iconPath, []byte("icon-b"), 0o644); err != nil {
-		t.Fatalf("rewrite icon: %v", err)
-	}
-
-	select {
-	case <-r.Changes():
-	case <-time.After(3 * time.Second):
-		t.Fatal("expected reloader to detect icon change")
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 
+func expectChange(t *testing.T, r *configReloader, want bool) {
+	t.Helper()
+	select {
+	case <-r.Changes():
+		if !want {
+			t.Fatal("unexpected change event")
+		}
+	case <-time.After(200 * time.Millisecond):
+		if want {
+			t.Fatal("expected change event")
+		}
+	}
+}
+
+// Content sizes differ on every rewrite so detection does not depend on
+// filesystem mtime granularity.
+func TestConfigReloaderDetectsIconChanges(t *testing.T) {
+	fastReloader(t)
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	iconPath := filepath.Join(dir, "icon.png")
+	writeFile(t, cfgPath, "buttons: []\n")
+	writeFile(t, iconPath, "icon-a")
+
+	r := newConfigReloader(cfgPath, []string{iconPath})
+	defer r.Close()
+	expectChange(t, r, false)
+
+	writeFile(t, iconPath, "icon-bb")
+	expectChange(t, r, true)
+
+	if err := os.Remove(iconPath); err != nil {
+		t.Fatal(err)
+	}
+	expectChange(t, r, true)
+}
+
+func TestConfigReloaderDetectsConfigChanges(t *testing.T) {
+	fastReloader(t)
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	writeFile(t, cfgPath, "buttons: []\n")
+	r := newConfigReloader(cfgPath, nil)
+	defer r.Close()
+	writeFile(t, cfgPath, "buttons: [ ]\n")
+	expectChange(t, r, true)
+}
+
 func TestConfigReloaderUpdatePathsSwapsWatchedIcons(t *testing.T) {
+	fastReloader(t)
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	iconA := filepath.Join(dir, "a.png")
 	iconB := filepath.Join(dir, "b.png")
-
-	if err := os.WriteFile(cfgPath, []byte("buttons: []\n"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	if err := os.WriteFile(iconA, []byte("a1"), 0o644); err != nil {
-		t.Fatalf("write iconA: %v", err)
-	}
-	if err := os.WriteFile(iconB, []byte("b1"), 0o644); err != nil {
-		t.Fatalf("write iconB: %v", err)
-	}
+	writeFile(t, cfgPath, "buttons: []\n")
+	writeFile(t, iconA, "a1")
+	writeFile(t, iconB, "b1")
 
 	r := newConfigReloader(cfgPath, []string{iconA})
 	defer r.Close()
+	r.UpdatePaths(cfgPath, []string{iconB, iconB, ""})
 
-	r.UpdatePaths(cfgPath, []string{iconB})
-	time.Sleep(1100 * time.Millisecond)
+	writeFile(t, iconA, "a22")
+	expectChange(t, r, false)
 
-	if err := os.WriteFile(iconA, []byte("a2"), 0o644); err != nil {
-		t.Fatalf("rewrite iconA: %v", err)
-	}
+	writeFile(t, iconB, "b22")
+	expectChange(t, r, true)
+}
 
-	select {
-	case <-r.Changes():
-		t.Fatal("unexpected change event for removed icon")
-	case <-time.After(1500 * time.Millisecond):
-	}
-
-	if err := os.WriteFile(iconB, []byte("b2"), 0o644); err != nil {
-		t.Fatalf("rewrite iconB: %v", err)
-	}
-
-	select {
-	case <-r.Changes():
-	case <-time.After(3 * time.Second):
-		t.Fatal("expected reloader to detect new icon change")
+func TestStatFileMissing(t *testing.T) {
+	if st := statFile(filepath.Join(t.TempDir(), "missing")); st.exists {
+		t.Fatal("missing file must not exist")
 	}
 }

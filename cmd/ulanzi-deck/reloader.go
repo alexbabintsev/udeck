@@ -6,7 +6,8 @@ import (
 	"time"
 )
 
-const configReloadPollInterval = 1 * time.Second
+// configReloadPollInterval is a var so tests can poll faster.
+var configReloadPollInterval = 1 * time.Second
 
 type configReloader struct {
 	mu      sync.RWMutex

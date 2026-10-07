@@ -3,11 +3,9 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"os"
 	"os/exec"
-	"strings"
 )
 
 const powerWatcherSwift = `import AppKit
@@ -38,18 +36,6 @@ center.addObserver(observer, selector: #selector(Observer.onShutdown(_:)), name:
 RunLoop.main.run()
 `
 
-type powerEvent string
-
-const (
-	powerEventSleep    powerEvent = "sleep"
-	powerEventWake     powerEvent = "wake"
-	powerEventShutdown powerEvent = "shutdown"
-)
-
-type powerWatcher struct {
-	events <-chan powerEvent
-}
-
 func newPowerWatcher(ctx context.Context) (*powerWatcher, error) {
 	if _, err := os.Stat("/usr/bin/swift"); err != nil {
 		return nil, err
@@ -74,40 +60,16 @@ func newPowerWatcher(ctx context.Context) (*powerWatcher, error) {
 		_ = os.Remove(script.Name())
 		return nil, err
 	}
-	cmd.Stderr = ioDiscard{}
+	// Stderr stays nil: swift compiler chatter goes to /dev/null.
 	if err := cmd.Start(); err != nil {
 		_ = os.Remove(script.Name())
 		return nil, err
 	}
 
-	ch := make(chan powerEvent, 8)
-	go func() {
-		defer close(ch)
-		defer cmd.Wait()
-		defer os.Remove(script.Name())
-
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			switch evt := powerEvent(strings.TrimSpace(scanner.Text())); evt {
-			case powerEventSleep, powerEventWake, powerEventShutdown:
-				select {
-				case ch <- evt:
-				default:
-				}
-			}
-		}
-	}()
+	ch := scanPowerEvents(stdout, func() {
+		_ = cmd.Wait()
+		_ = os.Remove(script.Name())
+	})
 
 	return &powerWatcher{events: ch}, nil
 }
-
-func (w *powerWatcher) Events() <-chan powerEvent {
-	if w == nil {
-		return nil
-	}
-	return w.events
-}
-
-type ioDiscard struct{}
-
-func (ioDiscard) Write(p []byte) (int, error) { return len(p), nil }

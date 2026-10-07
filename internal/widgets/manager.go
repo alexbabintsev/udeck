@@ -28,10 +28,14 @@ type widgetDef struct {
 var newSpotifyService = NewSpotifyService
 
 type Manager struct {
-	mu       sync.RWMutex
-	defs     map[string]widgetDef
-	items    map[string]Widget
-	updates  chan string
+	mu    sync.RWMutex
+	defs  map[string]widgetDef
+	items map[string]Widget
+	// updates is a level-triggered wake-up signal; the IDs themselves are
+	// accumulated in dirty so a burst of notifications is never dropped.
+	updates  chan struct{}
+	dirtyMu  sync.Mutex
+	dirty    map[string]struct{}
 	spotify  *SpotifyService
 	settings config.WidgetSettings
 	engine   *ig.Engine
@@ -47,7 +51,8 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 	m := &Manager{
 		defs:     map[string]widgetDef{},
 		items:    map[string]Widget{},
-		updates:  make(chan string, 32),
+		updates:  make(chan struct{}, 1),
+		dirty:    map[string]struct{}{},
 		settings: cfg.Widgets,
 		engine:   ig.New(),
 		pageNav:  nav,
@@ -83,8 +88,26 @@ func (m *Manager) Close() error {
 	return nil
 }
 
-func (m *Manager) Updates() <-chan string {
+// Updates fires when at least one widget has re-rendered its icon since
+// the last TakeDirty call.
+func (m *Manager) Updates() <-chan struct{} {
 	return m.updates
+}
+
+// TakeDirty returns the IDs of widgets whose icons changed since the
+// previous call and clears the set.
+func (m *Manager) TakeDirty() []string {
+	m.dirtyMu.Lock()
+	defer m.dirtyMu.Unlock()
+	if len(m.dirty) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(m.dirty))
+	for id := range m.dirty {
+		ids = append(ids, id)
+	}
+	clear(m.dirty)
+	return ids
 }
 
 func (m *Manager) SetContext(ctx Context) {
@@ -323,8 +346,11 @@ func (m *Manager) spotifyPollMS() (int, bool) {
 }
 
 func (m *Manager) notify(id string) {
+	m.dirtyMu.Lock()
+	m.dirty[id] = struct{}{}
+	m.dirtyMu.Unlock()
 	select {
-	case m.updates <- id:
+	case m.updates <- struct{}{}:
 	default:
 	}
 }
