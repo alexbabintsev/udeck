@@ -36,6 +36,7 @@ func cmdProbe(args []string, stdout, stderr io.Writer) error {
 	concurrentRead := fs.Bool("read", false, "poll for input reports concurrently, like the daemon")
 	keyIndex := fs.Int("key", 0, "HID index of the key to upload to (13 = wide key)")
 	playPause := fs.Int("playpause", 0, "instead of the timing sweep, alternate N Spotify play/pause icons (300ms apart)")
+	recovery := fs.Bool("recovery", false, "instead of the timing sweep, test how the device recovers from interrupted transfers")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -83,6 +84,9 @@ func cmdProbe(args []string, stdout, stderr io.Writer) error {
 	}
 	defer os.RemoveAll(dir)
 
+	if *recovery {
+		return probeRecovery(dev, dir, stdout)
+	}
 	if *playPause > 0 {
 		return probePlayPause(dev, dir, *playPause, hidSlot(*keyIndex), stdout)
 	}
@@ -240,5 +244,116 @@ func probePlayPause(dev deck, dir string, n int, at [2]int, stdout io.Writer) er
 		pause(300 * time.Millisecond)
 	}
 	fmt.Fprintf(stdout, "%d play/pause uploads, %d stalls\n", n, stalls)
+	return nil
+}
+
+// probeRecovery interrupts transfers in different ways and checks
+// whether the next normal upload is accepted promptly. Restarting from
+// the header (at once, after 1s or 3s) stalled every time; completing
+// the interrupted upload with filler packets first never did - which is
+// what device.SendPackets does.
+func probeRecovery(dev deck, dir string, stdout io.Writer) error {
+	small, _, err := probeVariants(dir, 5)
+	if err != nil {
+		return err
+	}
+	medium, _, err := probeVariants(dir, 9)
+	if err != nil {
+		return err
+	}
+	build := func(path string, at [2]int) [][protocol.PacketSize]byte {
+		pkts, err := protocol.PartiallyUpdateButtonsFromConfig([]config.Button{{At: at, Icon: path}})
+		if err != nil {
+			panic(err)
+		}
+		return pkts
+	}
+	sendRaw := func(pkts [][protocol.PacketSize]byte) {
+		for _, p := range pkts {
+			if err := dev.SendPacket(p); err != nil {
+				fmt.Fprintf(stdout, "    raw send error: %v\n", err)
+				return
+			}
+		}
+	}
+	var zero [protocol.PacketSize]byte
+	zeros := func(n int) [][protocol.PacketSize]byte {
+		out := make([][protocol.PacketSize]byte, n)
+		for i := range out {
+			out[i] = zero
+		}
+		return out
+	}
+	checkN := 0
+	check := func(label string) {
+		checkN++
+		pkts := build(small[checkN%len(small)], [2]int{1, 0})
+		start := time.Now()
+		err := dev.SendPackets(pkts)
+		took := time.Since(start)
+		mark := "ok"
+		if err != nil || took > probeStallThreshold {
+			mark = "STALL"
+		}
+		fmt.Fprintf(stdout, "%-48s next upload: %-6s %s err=%v\n", label, mark, took.Round(time.Millisecond), err)
+		if mark == "STALL" {
+			pause(8 * time.Second)
+		} else {
+			pause(500 * time.Millisecond)
+		}
+	}
+	m := build(medium[0], [2]int{0, 0})
+	n := len(m)
+
+	for rep := 1; rep <= 3; rep++ {
+		sendRaw(m[:5])
+		sendRaw(m)
+		check(fmt.Sprintf("H%d restart from header immediately", rep))
+		sendRaw(m[:5])
+		pause(time.Second)
+		sendRaw(m)
+		check(fmt.Sprintf("K%d abort 5/%d, wait 1s, resend", rep, n))
+		sendRaw(m[:5])
+		pause(3 * time.Second)
+		sendRaw(m)
+		check(fmt.Sprintf("L%d abort 5/%d, wait 3s, resend", rep, n))
+		sendRaw(m[:5])
+		sendRaw(zeros(n - 5))
+		sendRaw(m)
+		check(fmt.Sprintf("I%d abort 5/%d, zero-fill, resend", rep, n))
+		sendRaw(m[:5])
+		pause(3 * time.Second)
+		check(fmt.Sprintf("M%d abort 5/%d, wait 3s, other upload", rep, n))
+	}
+	// A big multi-key upload (like 13 weather widgets) followed quickly
+	// by a full page.
+	var keys []config.Button
+	for i := 0; i < 13; i++ {
+		keys = append(keys, config.Button{At: hidSlot(i), Icon: medium[i%len(medium)]})
+	}
+	big, err := protocol.PartiallyUpdateButtonsFromConfig(keys)
+	if err != nil {
+		return err
+	}
+	page, err := protocol.SetButtonsFromConfig(keys[:11])
+	if err != nil {
+		return err
+	}
+	for _, gap := range []time.Duration{2 * time.Second, time.Second, 500 * time.Millisecond, 0} {
+		start := time.Now()
+		err := dev.SendPackets(big)
+		tookBig := time.Since(start)
+		pause(gap)
+		start = time.Now()
+		err2 := dev.SendPackets(page)
+		tookPage := time.Since(start)
+		mark := "ok"
+		if err2 != nil || tookPage > probeStallThreshold {
+			mark = "STALL"
+		}
+		fmt.Fprintf(stdout, "J big %d-packet upload (%s, err=%v), gap %s, full page %d packets: %-6s %s err=%v\n",
+			len(big), tookBig.Round(time.Millisecond), err, gap, len(page), mark, tookPage.Round(time.Millisecond), err2)
+		pause(8 * time.Second)
+	}
 	return nil
 }

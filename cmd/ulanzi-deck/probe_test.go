@@ -26,6 +26,10 @@ func TestProbeSweepAndPlayPause(t *testing.T) {
 	if code != 0 || !strings.Contains(stdout, "4 play/pause uploads, 0 stalls") {
 		t.Fatalf("code=%d stdout=%q", code, stdout)
 	}
+	dev.reset()
+	if code, stdout, _ := cli("probe", "--recovery"); code != 0 || !strings.Contains(stdout, "I3 abort") || !strings.Contains(stdout, "J big") {
+		t.Fatalf("recovery probe: code=%d out=%q", code, stdout)
+	}
 	if code, _, _ := cli("probe", "--sizes", "x"); code != 1 {
 		t.Fatal("bad --sizes must fail")
 	}

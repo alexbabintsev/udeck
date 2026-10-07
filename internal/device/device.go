@@ -44,19 +44,27 @@ var ErrDeviceReset = errors.New("device was reset")
 
 // Device wraps a HID handle for the Ulanzi D200.
 type Device struct {
-	mu  sync.Mutex
-	dev hidHandle
+	mu   sync.Mutex
+	dev  hidHandle
+	path string // device path of the open handle, "" if unknown
 }
 
 // Seams for tests: the real hidapi calls and sleeping.
 var (
-	hidInit   = hid.Init
-	openFirst = func() (hidHandle, error) {
+	hidInit = hid.Init
+	// openFirst also returns the platform device path. On macOS it is
+	// "DevSrvsID:<IORegistry entry ID>", which changes whenever the
+	// device re-enumerates (reboot, replug).
+	openFirst = func() (hidHandle, string, error) {
 		dev, err := hid.OpenFirst(VendorID, ProductID)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		return dev, nil
+		path := ""
+		if info, err := dev.GetDeviceInfo(); err == nil {
+			path = info.Path
+		}
+		return dev, path, nil
 	}
 	sleep = time.Sleep
 	now   = time.Now
@@ -75,27 +83,27 @@ func Open() (*Device, error) {
 	if err := hidInit(); err != nil {
 		return nil, fmt.Errorf("hid init: %w", err)
 	}
-	dev, _, err := openWithRetry(openRetries)
+	dev, path, _, err := openWithRetry(openRetries)
 	if err != nil {
 		return nil, err
 	}
-	return &Device{dev: dev}, nil
+	return &Device{dev: dev, path: path}, nil
 }
 
 // openWithRetry opens the first D200. missing reports that the device
 // was absent from the bus for at least deviceResetThreshold, which means
 // it was re-enumerated and lost its screen state.
-func openWithRetry(attempts int) (dev hidHandle, missing bool, err error) {
+func openWithRetry(attempts int) (dev hidHandle, path string, missing bool, err error) {
 	var lastErr error
 	var firstMissing time.Time
 	for attempt := 0; attempt < attempts; attempt++ {
-		dev, err := openFirst()
+		dev, path, err := openFirst()
 		if err == nil {
 			missing = !firstMissing.IsZero() && now().Sub(firstMissing) >= deviceResetThreshold
 			if attempt > 0 {
 				debug.Logf("hid open succeeded after %d attempts (device reset=%v)", attempt+1, missing)
 			}
-			return dev, missing, nil
+			return dev, path, missing, nil
 		}
 		lastErr = err
 		if isNotFoundErr(err) && firstMissing.IsZero() {
@@ -107,7 +115,7 @@ func openWithRetry(attempts int) (dev hidHandle, missing bool, err error) {
 		}
 		sleep(openRetryBackoff(attempt))
 	}
-	return nil, !firstMissing.IsZero(), fmt.Errorf("hid open %04x:%04x: %w", VendorID, ProductID, lastErr)
+	return nil, "", !firstMissing.IsZero(), fmt.Errorf("hid open %04x:%04x: %w", VendorID, ProductID, lastErr)
 }
 
 func (d *Device) Close() error {
@@ -174,15 +182,21 @@ func (d *Device) reopenWith(attempts int) (missing bool, err error) {
 			debug.Logf("hid close before reopen: %v", cerr)
 		}
 	}
-	fresh, missing, err := openWithRetry(attempts)
+	fresh, path, missing, err := openWithRetry(attempts)
 	if err != nil {
 		debug.Logf("hid reopen failed: %v", err)
 		return missing, err
 	}
 	d.mu.Lock()
+	// A new IORegistry path means the device re-enumerated: it rebooted
+	// and lost its page even if it was back within milliseconds.
+	if d.path != "" && path != "" && path != d.path {
+		missing = true
+	}
 	d.dev = fresh
+	d.path = path
 	d.mu.Unlock()
-	debug.Logf("hid handle reopened (device was missing=%v)", missing)
+	debug.Logf("hid handle reopened (path %s, device reset=%v)", path, missing)
 	return missing, nil
 }
 
@@ -252,20 +266,43 @@ func (d *Device) SendPackets(pkts [][protocol.PacketSize]byte) error {
 			return nil
 		}
 		lastErr = err
-		debug.Logf("transfer attempt %d/%d failed at packet %d/%d: %v; restarting from header",
+		debug.Logf("transfer attempt %d/%d failed at packet %d/%d: %v",
 			attempt+1, transferRetries, i+1, len(pkts), err)
 		if isStaleHandleErr(err) && !reopenUsed {
 			reopenUsed = true
 			if err := d.reopenAfter(err); err != nil {
 				return err
 			}
-			continue
-		}
-		if !shouldRetryWrite(err) {
+		} else if !shouldRetryWrite(err) {
 			break
+		}
+		if i > 0 {
+			d.completeInterrupted(len(pkts) - i)
 		}
 	}
 	return fmt.Errorf("hid write: %w", lastErr)
+}
+
+// completeInterrupted feeds the device the n packets it still expects
+// from an interrupted transfer. The D200 does not resynchronise on a new
+// header mid-transfer: it keeps counting bytes, so a resend would be
+// swallowed as the tail of the broken upload and the device then crawls
+// at ~1 packet/s (measured with `ulanzi-deck probe --recovery`: resend
+// right away or after 1-3s stalled 9/9 times; filler first, 0/3). The
+// failed packet is assumed lost; if it did arrive, one filler packet
+// lands while the device is idle, which it ignores.
+func (d *Device) completeInterrupted(n int) {
+	if n <= 0 {
+		return
+	}
+	var filler [protocol.PacketSize]byte
+	for k := 0; k < n; k++ {
+		if err := d.writeFrame(filler); err != nil {
+			debug.Logf("filler packet %d/%d: %v", k+1, n, err)
+			sleep(writeRetryDelay)
+		}
+	}
+	debug.Logf("sent %d filler packets to finish the interrupted transfer", n)
 }
 
 func (d *Device) writeTransfer(pkts [][protocol.PacketSize]byte) (int, error) {

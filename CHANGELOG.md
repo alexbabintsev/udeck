@@ -31,6 +31,14 @@ actual development milestones rather than formal releases.
 - Lucide icons are embedded into the binary.
 - Widget HTTP responses are size-limited and remote artwork dimensions
   are checked before decoding.
+- Fixed the device hanging for up to a minute (and finally rebooting)
+  after a write error: an interrupted upload is now completed with
+  filler packets before it is resent. Restarting from the header made
+  the D200 swallow the resend as the tail of the broken upload.
+- A device reboot is detected by its new IORegistry path, even when it
+  is back within milliseconds, and the full page is uploaded again
+  (previously only changed widgets were sent and the rest of the keys
+  stayed on the firmware's default icons).
 - Fixed delayed and missing key images: when a page ZIP ended exactly on
   a 1024-byte packet boundary, the D200 firmware treated the next
   upload as the tail of that one, accepting it at ~1 packet/s (0.7-3.4s

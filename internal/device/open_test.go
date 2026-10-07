@@ -10,7 +10,7 @@ import (
 
 func TestOpenRetriesTransientErrors(t *testing.T) {
 	h := &fakeHandle{}
-	env := &fakeEnv{opens: []func() (hidHandle, error){
+	env := &fakeEnv{opens: []func() (hidHandle, string, error){
 		fail("privilege violation"), fail("resource busy"), ok(h),
 	}}
 	installFakeEnv(t, env)
@@ -27,7 +27,7 @@ func TestOpenRetriesTransientErrors(t *testing.T) {
 }
 
 func TestOpenStopsOnFatalError(t *testing.T) {
-	env := &fakeEnv{opens: []func() (hidHandle, error){fail("permission denied"), ok(&fakeHandle{})}}
+	env := &fakeEnv{opens: []func() (hidHandle, string, error){fail("permission denied"), ok(&fakeHandle{})}}
 	installFakeEnv(t, env)
 	if _, err := Open(); err == nil {
 		t.Fatal("expected error")
@@ -58,7 +58,7 @@ func TestOpenReportsInitError(t *testing.T) {
 func TestReconnectShortAbsenceIsNotReset(t *testing.T) {
 	old := &fakeHandle{}
 	fresh := &fakeHandle{}
-	installFakeEnv(t, &fakeEnv{opens: []func() (hidHandle, error){fail(errNotFound), ok(fresh)}})
+	installFakeEnv(t, &fakeEnv{opens: []func() (hidHandle, string, error){fail(errNotFound), ok(fresh)}})
 	d := &Device{dev: old}
 	reset, err := d.Reconnect()
 	if err != nil || reset {
@@ -70,7 +70,7 @@ func TestReconnectShortAbsenceIsNotReset(t *testing.T) {
 }
 
 func TestReconnectLongAbsenceIsReset(t *testing.T) {
-	opens := []func() (hidHandle, error){}
+	opens := []func() (hidHandle, string, error){}
 	for i := 0; i < 8; i++ {
 		opens = append(opens, fail(errNotFound))
 	}
@@ -137,7 +137,7 @@ func TestReadPacket(t *testing.T) {
 
 func TestReadPacketReopensStaleHandle(t *testing.T) {
 	fresh := &fakeHandle{}
-	installFakeEnv(t, &fakeEnv{opens: []func() (hidHandle, error){ok(fresh)}})
+	installFakeEnv(t, &fakeEnv{opens: []func() (hidHandle, string, error){ok(fresh)}})
 	d := &Device{dev: &fakeHandle{reads: []readResult{{err: errDisconnected}}}}
 	raw, err := d.ReadPacket(time.Millisecond)
 	if raw != nil || err != nil {
@@ -149,7 +149,7 @@ func TestReadPacketReopensStaleHandle(t *testing.T) {
 }
 
 func TestReadPacketStaleHandleWithResetOrFailure(t *testing.T) {
-	opens := []func() (hidHandle, error){}
+	opens := []func() (hidHandle, string, error){}
 	for i := 0; i < 8; i++ {
 		opens = append(opens, fail(errNotFound))
 	}
@@ -160,7 +160,7 @@ func TestReadPacketStaleHandleWithResetOrFailure(t *testing.T) {
 		t.Fatalf("expected ErrDeviceReset, got %v", err)
 	}
 
-	installFakeEnv(t, &fakeEnv{opens: []func() (hidHandle, error){fail("permission denied")}})
+	installFakeEnv(t, &fakeEnv{opens: []func() (hidHandle, string, error){fail("permission denied")}})
 	d = &Device{dev: &fakeHandle{reads: []readResult{{err: errDisconnected}}}}
 	if _, err := d.ReadPacket(time.Millisecond); err == nil {
 		t.Fatal("expected reopen failure")
@@ -204,5 +204,41 @@ func TestErrorClassifiers(t *testing.T) {
 		if !shouldRetryWrite(errors.New(msg)) {
 			t.Fatalf("expected %q to be retried", msg)
 		}
+	}
+}
+
+func TestReconnectDetectsReEnumerationByPath(t *testing.T) {
+	// Back within milliseconds, but under a new IORegistry entry: the
+	// device rebooted and must get its page again.
+	installFakeEnv(t, &fakeEnv{opens: []func() (hidHandle, string, error){okAt(&fakeHandle{}, "DevSrvsID:2")}})
+	d := &Device{dev: &fakeHandle{}, path: "DevSrvsID:1"}
+	reset, err := d.Reconnect()
+	if err != nil || !reset {
+		t.Fatalf("reset=%v err=%v", reset, err)
+	}
+	if d.path != "DevSrvsID:2" {
+		t.Fatal("path not updated")
+	}
+
+	// Same entry: only the handle was stale.
+	installFakeEnv(t, &fakeEnv{opens: []func() (hidHandle, string, error){okAt(&fakeHandle{}, "DevSrvsID:2")}})
+	if reset, err := d.Reconnect(); err != nil || reset {
+		t.Fatalf("same path must not count as reset: reset=%v err=%v", reset, err)
+	}
+}
+
+func TestStaleReadAfterRebootReportsReset(t *testing.T) {
+	installFakeEnv(t, &fakeEnv{opens: []func() (hidHandle, string, error){okAt(&fakeHandle{}, "DevSrvsID:9")}})
+	d := &Device{dev: &fakeHandle{reads: []readResult{{err: errDisconnected}}}, path: "DevSrvsID:8"}
+	if _, err := d.ReadPacket(time.Millisecond); !errors.Is(err, ErrDeviceReset) {
+		t.Fatalf("expected ErrDeviceReset after re-enumeration, got %v", err)
+	}
+}
+
+func TestOpenRecordsPath(t *testing.T) {
+	installFakeEnv(t, &fakeEnv{opens: []func() (hidHandle, string, error){okAt(&fakeHandle{}, "DevSrvsID:5")}})
+	d, err := Open()
+	if err != nil || d.path != "DevSrvsID:5" {
+		t.Fatalf("path=%q err=%v", d.path, err)
 	}
 }

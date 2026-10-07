@@ -59,7 +59,7 @@ func (f *fakeHandle) Close() error {
 // fakeEnv replaces the hidapi seams with a scripted opener and a fake
 // clock that advances on every sleep.
 type fakeEnv struct {
-	opens   []func() (hidHandle, error)
+	opens   []func() (hidHandle, string, error)
 	opened  int
 	clock   time.Time
 	slept   time.Duration
@@ -72,10 +72,10 @@ func installFakeEnv(t *testing.T, env *fakeEnv) {
 	oldInit, oldOpen, oldSleep, oldNow := hidInit, openFirst, sleep, now
 	env.clock = time.Unix(1_700_000_000, 0)
 	hidInit = func() error { env.inited++; return env.initErr }
-	openFirst = func() (hidHandle, error) {
+	openFirst = func() (hidHandle, string, error) {
 		env.opened++
 		if env.opened > len(env.opens) {
-			return nil, errors.New(errNotFound)
+			return nil, "", errors.New(errNotFound)
 		}
 		return env.opens[env.opened-1]()
 	}
@@ -84,9 +84,12 @@ func installFakeEnv(t *testing.T, env *fakeEnv) {
 	t.Cleanup(func() { hidInit, openFirst, sleep, now = oldInit, oldOpen, oldSleep, oldNow })
 }
 
-func ok(h hidHandle) func() (hidHandle, error) { return func() (hidHandle, error) { return h, nil } }
-func fail(msg string) func() (hidHandle, error) {
-	return func() (hidHandle, error) { return nil, errors.New(msg) }
+func ok(h hidHandle) func() (hidHandle, string, error) { return okAt(h, "") }
+func okAt(h hidHandle, path string) func() (hidHandle, string, error) {
+	return func() (hidHandle, string, error) { return h, path, nil }
+}
+func fail(msg string) func() (hidHandle, string, error) {
+	return func() (hidHandle, string, error) { return nil, "", errors.New(msg) }
 }
 
 var (
@@ -110,9 +113,11 @@ func TestSendPacketsRestartsFromHeaderOnMidTransferError(t *testing.T) {
 	if err := d.SendPackets(testPackets(4)); err != nil {
 		t.Fatalf("SendPackets: %v", err)
 	}
-	// Frames 1,2 went out, frame 3 failed, then the whole transfer was
-	// resent. The failed frame must not be retried in place.
-	want := []byte{1, 2, 1, 2, 3, 4}
+	// Frames 1,2 went out and frame 3 failed. The device still expects
+	// two packets, so two filler packets complete the broken upload
+	// before the whole transfer is resent from its header. The failed
+	// frame is never retried in place.
+	want := []byte{1, 2, 0, 0, 1, 2, 3, 4}
 	if string(fake.frames) != string(want) {
 		t.Fatalf("frames = %v, want %v", fake.frames, want)
 	}
@@ -160,7 +165,7 @@ func TestSendPacketsSinglePacketUsesSendPacket(t *testing.T) {
 
 func TestSendPacketsReopensStaleHandleAndRestarts(t *testing.T) {
 	fresh := &fakeHandle{}
-	installFakeEnv(t, &fakeEnv{opens: []func() (hidHandle, error){ok(fresh)}})
+	installFakeEnv(t, &fakeEnv{opens: []func() (hidHandle, string, error){ok(fresh)}})
 	stale := &fakeHandle{failOn: map[int]error{2: errDisconnected}}
 	d := &Device{dev: stale}
 	if err := d.SendPackets(testPackets(3)); err != nil {
@@ -169,14 +174,16 @@ func TestSendPacketsReopensStaleHandleAndRestarts(t *testing.T) {
 	if !stale.closed {
 		t.Fatal("stale handle must be closed before reopening")
 	}
-	if string(fresh.frames) != string([]byte{1, 2, 3}) {
+	// The device (same path, so not rebooted) still expects the rest of
+	// the broken upload: filler first, then the full resend.
+	if string(fresh.frames) != string([]byte{0, 0, 1, 2, 3}) {
 		t.Fatalf("fresh handle frames = %v", fresh.frames)
 	}
 }
 
 func TestSendPacketsReportsDeviceReset(t *testing.T) {
 	env := &fakeEnv{}
-	opens := []func() (hidHandle, error){}
+	opens := []func() (hidHandle, string, error){}
 	for i := 0; i < 10; i++ {
 		opens = append(opens, fail(errNotFound))
 	}
@@ -218,7 +225,7 @@ func TestSendPacketFailsOnShortWrite(t *testing.T) {
 }
 
 func TestSendPacketReopenFailure(t *testing.T) {
-	installFakeEnv(t, &fakeEnv{opens: []func() (hidHandle, error){fail("permission denied")}})
+	installFakeEnv(t, &fakeEnv{opens: []func() (hidHandle, string, error){fail("permission denied")}})
 	d := &Device{dev: &fakeHandle{failOn: map[int]error{1: errDisconnected}}}
 	var pkt [protocol.PacketSize]byte
 	if err := d.SendPacket(pkt); err == nil {
@@ -228,7 +235,7 @@ func TestSendPacketReopenFailure(t *testing.T) {
 
 func TestSendPacketStaleHandleReopensOnce(t *testing.T) {
 	fresh := &fakeHandle{}
-	installFakeEnv(t, &fakeEnv{opens: []func() (hidHandle, error){ok(fresh)}})
+	installFakeEnv(t, &fakeEnv{opens: []func() (hidHandle, string, error){ok(fresh)}})
 	d := &Device{dev: &fakeHandle{failOn: map[int]error{1: errDisconnected}}}
 	var pkt [protocol.PacketSize]byte
 	if err := d.SendPacket(pkt); err != nil {

@@ -34,6 +34,7 @@ Usage:
   ulanzi-deck run [--config <path.yaml>] [--debug] [--log-file <path>]
   ulanzi-deck probe [--key N] [--sizes 3,8,14] [--gaps 2000,...,0] [--reps 3] [--read]
   ulanzi-deck probe --playpause N [--key N]
+  ulanzi-deck probe --recovery
 
 --debug (or ULANZI_DEBUG=1) logs every HID error, retry, reconnect and
 page upload, plus widget fetch failures, for diagnosing device drop-outs.

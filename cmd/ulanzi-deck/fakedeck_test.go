@@ -73,6 +73,9 @@ func (f *fakeDeck) SendPacket(pkt [protocol.PacketSize]byte) error {
 		return err
 	}
 	cmd, n, _ := protocol.DecodeHeader(pkt[:])
+	// Raw packets (probe) may be header frames of multi-packet uploads
+	// or bare continuation chunks.
+	n = min(n, protocol.FirstChunkSize)
 	f.sent = append(f.sent, sent{cmd: cmd, data: append([]byte(nil), pkt[protocol.HeaderSize:protocol.HeaderSize+int(n)]...)})
 	return nil
 }
