@@ -3,3 +3,7 @@
 *.test
 *.out
 .DS_Store
+
+# Local runtime config may contain API tokens — never commit it.
+/config.yaml
+.idea/
