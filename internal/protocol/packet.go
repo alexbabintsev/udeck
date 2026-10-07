@@ -17,15 +17,15 @@ var Header = [2]byte{0x7C, 0x7C}
 type Cmd uint16
 
 const (
-	CmdSetButtons              Cmd = 0x0001
-	CmdSetSmallWindowData      Cmd = 0x0006
-	CmdSetBrightness           Cmd = 0x000A
-	CmdSetLabelStyle           Cmd = 0x000B
-	CmdPartiallyUpdateButtons  Cmd = 0x000D
-	CmdInButton                Cmd = 0x0101
-	CmdInButton2               Cmd = 0x0102
-	CmdInLabelStyleAck         Cmd = 0x010B
-	CmdInDeviceInfo            Cmd = 0x0303
+	CmdSetButtons             Cmd = 0x0001
+	CmdSetSmallWindowData     Cmd = 0x0006
+	CmdSetBrightness          Cmd = 0x000A
+	CmdSetLabelStyle          Cmd = 0x000B
+	CmdPartiallyUpdateButtons Cmd = 0x000D
+	CmdInButton               Cmd = 0x0101
+	CmdInButton2              Cmd = 0x0102
+	CmdInLabelStyleAck        Cmd = 0x010B
+	CmdInDeviceInfo           Cmd = 0x0303
 )
 
 // EncodePacket builds a single 1024-byte HID frame for cmd with the given

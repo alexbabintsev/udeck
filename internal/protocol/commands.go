@@ -20,12 +20,6 @@ func SetBrightnessPacket(level int) ([PacketSize]byte, error) {
 	return EncodePacket(CmdSetBrightness, payload), nil
 }
 
-// EmptyPageZIP builds a minimal ZIP with all physical button slots.
-// Switches the device out of firmware UI mode so IN_BUTTON frames flow.
-func EmptyPageZIP() ([]byte, error) {
-	return PageZIP(nil)
-}
-
 // SetButtonsPackets encodes a ZIP payload as the multi-packet
 // OUT_SET_BUTTONS sequence. The first packet carries the 8-byte header
 // and up to 1016 bytes of payload; subsequent packets are raw 1024-byte
