@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"bytes"
+	"context"
 	"image/color"
 	"image/png"
 	"os"
@@ -75,13 +76,13 @@ func TestShortenLine(t *testing.T) {
 }
 
 func TestSpotifyPlayPauseWidgetTapRunsPlayPause(t *testing.T) {
-	oldExec := spotifyExecCommand
-	defer func() { spotifyExecCommand = oldExec }()
+	oldExec := execCommandContext
+	defer func() { execCommandContext = oldExec }()
 
 	var gotArgs []string
-	spotifyExecCommand = func(name string, args ...string) *exec.Cmd {
+	execCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 		gotArgs = append([]string{name}, args...)
-		return exec.Command("/usr/bin/true")
+		return exec.CommandContext(ctx, "/usr/bin/true")
 	}
 
 	base, err := newSpotifyBaseWidget("test", &SpotifyService{}, func(string) {}, "spotify-playpause.png")
@@ -99,13 +100,13 @@ func TestSpotifyPlayPauseWidgetTapRunsPlayPause(t *testing.T) {
 }
 
 func TestSpotifyPlayPauseWidgetHoldRunsNextTrack(t *testing.T) {
-	oldExec := spotifyExecCommand
-	defer func() { spotifyExecCommand = oldExec }()
+	oldExec := execCommandContext
+	defer func() { execCommandContext = oldExec }()
 
 	var gotArgs []string
-	spotifyExecCommand = func(name string, args ...string) *exec.Cmd {
+	execCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 		gotArgs = append([]string{name}, args...)
-		return exec.Command("/usr/bin/true")
+		return exec.CommandContext(ctx, "/usr/bin/true")
 	}
 
 	base, err := newSpotifyBaseWidget("test", &SpotifyService{}, func(string) {}, "spotify-playpause.png")

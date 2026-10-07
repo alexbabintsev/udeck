@@ -2,14 +2,11 @@ package widgets
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -18,9 +15,7 @@ import (
 	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"golang.org/x/image/font"
-	"golang.org/x/image/font/basicfont"
-	"golang.org/x/image/font/opentype"
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
 )
 
 const (
@@ -36,10 +31,7 @@ const (
 
 var freqtradeHTTPClient = &http.Client{Timeout: freqtradeHTTPTimeout}
 
-var (
-	freqtradeFontOnce sync.Once
-	freqtradeFontTTF  *opentype.Font
-)
+var ()
 
 type freqtradeAPI struct {
 	User string
@@ -61,88 +53,55 @@ type freqtradeSummary struct {
 }
 
 type FreqtradeWidget struct {
-	id       string
-	title    string
-	apis     []freqtradeAPI
-	pollMS   time.Duration
-	iconPath string
-	notify   func(string)
+	*widgetBase
+	title  string
+	apis   []freqtradeAPI
+	pollMS time.Duration
 
 	mu      sync.RWMutex
 	mode    int
 	trades  []freqtradeTrade
 	summary *freqtradeSummary
-	closed  bool
 }
 
 func NewFreqtradeWidget(id string, cfg *config.Widget, notify func(string)) (*FreqtradeWidget, error) {
-	dir, err := os.MkdirTemp("", "ulanzi-freqtrade-widget-")
-	if err != nil {
-		return nil, fmt.Errorf("create freqtrade widget temp dir: %w", err)
-	}
 	apis := parseFreqtradeDSNs(cfg.DSNs)
 	if len(apis) == 0 {
 		return nil, fmt.Errorf("freqtrade widget has no valid dsns")
 	}
-
-	w := &FreqtradeWidget{
-		id:       id,
-		title:    strings.TrimSpace(cfg.Title),
-		apis:     apis,
-		pollMS:   pollDurationOrDefault(cfg.PollMS, defaultFreqtradePollMS),
-		iconPath: filepath.Join(dir, "freqtrade.png"),
-		notify:   notify,
-		mode:     freqtradeModeSummary,
-	}
-	if _, err := w.render(); err != nil {
+	base, err := newWidgetBase(id, "freqtrade-widget", "freqtrade.png", notify)
+	if err != nil {
 		return nil, err
 	}
-	go w.loop()
+	w := &FreqtradeWidget{
+		widgetBase: base,
+		title:      strings.TrimSpace(cfg.Title),
+		apis:       apis,
+		pollMS:     pollDurationOrDefault(cfg.PollMS, defaultFreqtradePollMS),
+		mode:       freqtradeModeSummary,
+	}
+	if _, err := w.writeIcon(w.renderImage()); err != nil {
+		_ = w.Close()
+		return nil, fmt.Errorf("write freqtrade widget icon: %w", err)
+	}
+	w.every(w.pollMS, func(time.Time) { w.refresh() })
 	go w.refresh()
 	return w, nil
 }
 
-func (w *FreqtradeWidget) IconPath() string { return w.iconPath }
-
+// HandleGesture toggles between the summary and the trade log on tap.
 func (w *FreqtradeWidget) HandleGesture(kind ig.Kind) {
-	if kind != ig.Tap {
+	if kind != ig.Tap || w.isClosed() {
 		return
 	}
 	w.mu.Lock()
-	if w.closed {
-		w.mu.Unlock()
-		return
-	}
 	if w.mode == freqtradeModeSummary {
 		w.mode = freqtradeModeLog
 	} else {
 		w.mode = freqtradeModeSummary
 	}
 	w.mu.Unlock()
-	if changed, err := w.render(); err == nil && changed {
-		w.notify(w.id)
-	}
-}
-
-func (w *FreqtradeWidget) Close() error {
-	w.mu.Lock()
-	w.closed = true
-	w.mu.Unlock()
-	return os.RemoveAll(filepath.Dir(w.iconPath))
-}
-
-func (w *FreqtradeWidget) loop() {
-	ticker := time.NewTicker(w.pollMS)
-	defer ticker.Stop()
-	for range ticker.C {
-		w.mu.RLock()
-		closed := w.closed
-		w.mu.RUnlock()
-		if closed {
-			return
-		}
-		w.refresh()
-	}
+	_, _ = w.render()
 }
 
 func (w *FreqtradeWidget) refresh() {
@@ -151,12 +110,18 @@ func (w *FreqtradeWidget) refresh() {
 	w.trades = trades
 	w.summary = summary
 	w.mu.Unlock()
-	if changed, err := w.render(); err == nil && changed {
-		w.notify(w.id)
-	}
+	_, _ = w.render()
 }
 
 func (w *FreqtradeWidget) render() (bool, error) {
+	changed, err := w.publish(w.renderImage())
+	if err != nil {
+		return false, fmt.Errorf("write freqtrade widget icon: %w", err)
+	}
+	return changed, nil
+}
+
+func (w *FreqtradeWidget) renderImage() *image.RGBA {
 	w.mu.RLock()
 	title := w.title
 	mode := w.mode
@@ -170,18 +135,12 @@ func (w *FreqtradeWidget) render() (bool, error) {
 
 	img := image.NewRGBA(image.Rect(0, 0, freqtradeWidgetW, freqtradeWidgetH))
 	draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{0x00, 0x00, 0x00, 0xff}}, image.Point{}, draw.Src)
-
 	if mode == freqtradeModeLog {
 		renderFreqtradeLog(img, trades, title)
 	} else {
 		renderFreqtradeSummary(img, summary, title)
 	}
-
-	changed, err := writePNGAtomicIfChanged(w.iconPath, img)
-	if err != nil {
-		return false, fmt.Errorf("write freqtrade widget icon: %w", err)
-	}
-	return changed, nil
+	return img
 }
 
 func renderFreqtradeLog(img *image.RGBA, trades []freqtradeTrade, title string) {
@@ -300,9 +259,13 @@ func fetchAllFreqtradeData(apis []freqtradeAPI) ([]freqtradeTrade, *freqtradeSum
 			defer wg.Done()
 			if trades, err := fetchFreqtradeClosedTrades(api); err == nil {
 				tradesCh <- trades
+			} else {
+				debug.Logf("freqtrade %s: trades: %v", api.Name, err)
 			}
 			if summary, err := fetchFreqtradeSummary(api); err == nil {
 				summaryCh <- summary
+			} else {
+				debug.Logf("freqtrade %s: summary: %v", api.Name, err)
 			}
 		}()
 	}
@@ -454,22 +417,10 @@ func fetchFreqtradeSummary(api freqtradeAPI) (*freqtradeSummary, error) {
 }
 
 func freqtradeFetchJSON(api freqtradeAPI, path string, out any) error {
-	req, err := http.NewRequest(http.MethodGet, api.URL+path, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(api.User+":"+api.Pass)))
-
-	resp, err := freqtradeHTTPClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("status %s", resp.Status)
-	}
-	return json.NewDecoder(resp.Body).Decode(out)
+	return getJSON(freqtradeHTTPClient, api.URL+path, map[string]string{
+		"Accept":        "application/json",
+		"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(api.User+":"+api.Pass)),
+	}, out)
 }
 
 func formatFreqtradeValue(v float64) string {
@@ -553,72 +504,10 @@ func fillCircle(img *image.RGBA, cx, cy, radius int, clr color.Color) {
 }
 
 func drawFreqtradeText(dst *image.RGBA, text string, target image.Rectangle, clr color.Color, startSize float64) {
-	if text == "" {
-		return
-	}
-	face := freqtradeFaceForText(text, target.Dx(), startSize)
+	face, display := fitFace(text, target.Dx(), startSize, 14, 2, false)
 	if face == nil {
-		drawScaledCenteredText(dst, text, target, clr)
 		return
 	}
-	drawCenteredFace(dst, text, target.Min.X+target.Dx()/2, target.Min.Y+target.Dy()/2+face.Metrics().Ascent.Ceil()/2-2, clr, face)
-}
-
-func freqtradeFaceForText(text string, maxWidth int, startSize float64) font.Face {
-	ft := loadFreqtradeFont()
-	if ft == nil {
-		return basicfont.Face7x13
-	}
-	size := startSize
-	for size >= 14 {
-		face, err := opentype.NewFace(ft, &opentype.FaceOptions{
-			Size:    size,
-			DPI:     72,
-			Hinting: font.HintingFull,
-		})
-		if err != nil {
-			break
-		}
-		if font.MeasureString(face, text).Round() <= maxWidth {
-			return face
-		}
-		size -= 2
-	}
-	face, err := opentype.NewFace(ft, &opentype.FaceOptions{
-		Size:    14,
-		DPI:     72,
-		Hinting: font.HintingFull,
-	})
-	if err != nil {
-		return basicfont.Face7x13
-	}
-	return face
-}
-
-func loadFreqtradeFont() *opentype.Font {
-	freqtradeFontOnce.Do(func() {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return
-		}
-		candidates := []string{
-			filepath.Join(home, "Library/Fonts/PragmataProR_0829.ttf"),
-			filepath.Join(home, "Library/Fonts/PragmataPro_Mono_R_0829.ttf"),
-			filepath.Join(home, "Library/Fonts/PragmataProMonoLigaNerdFont-Regular.ttf"),
-			filepath.Join(home, "Library/Fonts/PragmataProMonoNerdFont-Regular.ttf"),
-		}
-		for _, path := range candidates {
-			data, err := os.ReadFile(path)
-			if err != nil {
-				continue
-			}
-			ft, err := opentype.Parse(data)
-			if err != nil {
-				continue
-			}
-			freqtradeFontTTF = ft
-			return
-		}
-	})
-	return freqtradeFontTTF
+	defer face.Close()
+	drawCenteredFace(dst, display, target.Min.X+target.Dx()/2, target.Min.Y+target.Dy()/2+face.Metrics().Ascent.Ceil()/2-2, clr, face)
 }

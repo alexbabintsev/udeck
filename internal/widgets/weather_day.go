@@ -1,21 +1,18 @@
 package widgets
 
 import (
-	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"math"
-	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
 	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 )
@@ -38,14 +35,16 @@ type weatherDayData struct {
 	Code        int
 }
 
+type weatherForecast = [weatherDayMaxForecast]*weatherDayData
+
 type weatherCityCache struct {
 	mu        sync.Mutex
 	coords    *dashboardWeatherCoords
-	days      [weatherDayMaxForecast]*weatherDayData
+	days      weatherForecast
 	lastFetch time.Time
 	fetching  bool
-	// subscribers notified after fetch
-	subs []func([weatherDayMaxForecast]*weatherDayData)
+	nextSub   int
+	subs      map[int]func(weatherForecast)
 }
 
 var (
@@ -59,32 +58,29 @@ func weatherCacheForCity(city string) *weatherCityCache {
 	if c, ok := weatherCaches[city]; ok {
 		return c
 	}
-	c := &weatherCityCache{}
+	c := &weatherCityCache{subs: map[int]func(weatherForecast){}}
 	weatherCaches[city] = c
 	return c
 }
 
-// subscribe registers a callback invoked whenever new data arrives.
-// Returns current data immediately (may be nil entries).
-func (c *weatherCityCache) subscribe(fn func([weatherDayMaxForecast]*weatherDayData)) [weatherDayMaxForecast]*weatherDayData {
+// subscribe registers fn for future data and returns a token for
+// unsubscribe plus the data cached so far (entries may be nil).
+func (c *weatherCityCache) subscribe(fn func(weatherForecast)) (int, weatherForecast) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.subs = append(c.subs, fn)
-	return c.days
+	c.nextSub++
+	c.subs[c.nextSub] = fn
+	return c.nextSub, c.days
 }
 
-func (c *weatherCityCache) unsubscribe(fn func([weatherDayMaxForecast]*weatherDayData)) {
+func (c *weatherCityCache) unsubscribe(token int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for i, s := range c.subs {
-		if &s == &fn {
-			c.subs = append(c.subs[:i], c.subs[i+1:]...)
-			return
-		}
-	}
+	delete(c.subs, token)
 }
 
-// refresh fetches if stale. Only one fetch runs at a time; others return immediately.
+// refresh fetches if stale. Only one fetch runs at a time; others return
+// immediately.
 func (c *weatherCityCache) refresh(city string, poll time.Duration) {
 	c.mu.Lock()
 	if c.fetching || (!c.lastFetch.IsZero() && time.Since(c.lastFetch) < poll) {
@@ -95,10 +91,10 @@ func (c *weatherCityCache) refresh(city string, poll time.Duration) {
 	coords := c.coords
 	c.mu.Unlock()
 
-	// geocode if needed
 	if coords == nil {
 		resolved, err := fetchDashboardCoords(city)
 		if err != nil {
+			debug.Logf("weather %q: geocode: %v", city, err)
 			c.mu.Lock()
 			c.fetching = false
 			c.lastFetch = time.Now()
@@ -112,6 +108,9 @@ func (c *weatherCityCache) refresh(city string, poll time.Duration) {
 	}
 
 	days, err := fetchWeatherDayAll(*coords)
+	if err != nil {
+		debug.Logf("weather %q: forecast: %v", city, err)
+	}
 
 	c.mu.Lock()
 	c.fetching = false
@@ -119,8 +118,10 @@ func (c *weatherCityCache) refresh(city string, poll time.Duration) {
 	if err == nil {
 		c.days = days
 	}
-	subs := make([]func([weatherDayMaxForecast]*weatherDayData), len(c.subs))
-	copy(subs, c.subs)
+	subs := make([]func(weatherForecast), 0, len(c.subs))
+	for _, fn := range c.subs {
+		subs = append(subs, fn)
+	}
 	current := c.days
 	c.mu.Unlock()
 
@@ -132,146 +133,93 @@ func (c *weatherCityCache) refresh(city string, poll time.Duration) {
 // ── Widget ───────────────────────────────────────────────────────────────────
 
 type WeatherDayWidget struct {
-	id       string
+	*widgetBase
 	city     string
 	dayIndex int
 	pollMS   time.Duration
-	iconPath string
-	notify   func(string)
 	cache    *weatherCityCache
-	onData   func([weatherDayMaxForecast]*weatherDayData)
+	subToken int
 
 	mu           sync.Mutex
-	closed       bool
 	forecast     *weatherDayData
 	lastFrameKey string
 }
 
 func NewWeatherDayWidget(id string, cfg *config.Widget, notify func(string)) (*WeatherDayWidget, error) {
-	dir, err := os.MkdirTemp("", "ulanzi-weather-day-")
+	base, err := newWidgetBase(id, "weather-day", "weather_day.png", notify)
 	if err != nil {
-		return nil, fmt.Errorf("create weather day widget temp dir: %w", err)
+		return nil, err
 	}
-	dayIndex := cfg.DayIndex
-	if dayIndex < 0 {
-		dayIndex = 0
-	} else if dayIndex >= weatherDayMaxForecast {
-		dayIndex = weatherDayMaxForecast - 1
-	}
-
+	dayIndex := min(max(cfg.DayIndex, 0), weatherDayMaxForecast-1)
+	city := strings.TrimSpace(cfg.City)
 	w := &WeatherDayWidget{
-		id:       id,
-		city:     strings.TrimSpace(cfg.City),
-		dayIndex: dayIndex,
-		pollMS:   weatherDayPoll(cfg.PollMS),
-		iconPath: filepath.Join(dir, "weather_day.png"),
-		notify:   notify,
-		cache:    weatherCacheForCity(strings.TrimSpace(cfg.City)),
+		widgetBase: base,
+		city:       city,
+		dayIndex:   dayIndex,
+		pollMS:     weatherDayPoll(cfg.PollMS),
+		cache:      weatherCacheForCity(city),
 	}
 
-	w.onData = func(days [weatherDayMaxForecast]*weatherDayData) {
-		w.mu.Lock()
-		if w.closed {
-			w.mu.Unlock()
-			return
-		}
-		w.forecast = days[w.dayIndex]
-		w.mu.Unlock()
-		_ = w.render()
+	// Subscribe first so no fetch result is missed; cached data, if any,
+	// is drawn right away instead of the loading card.
+	token, existing := w.cache.subscribe(w.onData)
+	w.subToken = token
+	w.forecast = existing[dayIndex]
+	if _, err := w.writeIcon(w.renderImage()); err != nil {
+		_ = w.Close()
+		return nil, fmt.Errorf("write weather day icon: %w", err)
 	}
+	w.lastFrameKey = weatherDayFrameKey(w.city, w.dayIndex, w.forecast)
 
-	// Render placeholder immediately so icon file exists (not black)
-	_ = w.renderPlaceholder()
-
-	// Subscribe — get any already-cached data
-	existing := w.cache.subscribe(w.onData)
-	if existing[dayIndex] != nil {
-		w.mu.Lock()
-		w.forecast = existing[dayIndex]
-		w.mu.Unlock()
-		_ = w.render()
-	}
-
-	go w.loop()
-	// Trigger initial fetch (shared — only one HTTP call for all widgets same city)
+	// The cache is shared per city: only one HTTP call for all widgets.
 	go w.cache.refresh(w.city, w.pollMS)
-
+	w.every(time.Minute, func(time.Time) { w.cache.refresh(w.city, w.pollMS) })
 	return w, nil
 }
 
-func (w *WeatherDayWidget) IconPath() string { return w.iconPath }
+func (w *WeatherDayWidget) onData(days weatherForecast) {
+	if w.isClosed() {
+		return
+	}
+	w.mu.Lock()
+	w.forecast = days[w.dayIndex]
+	w.mu.Unlock()
+	if err := w.render(); err != nil {
+		debug.Logf("widget %s: %v", w.id, err)
+	}
+}
 
 func (w *WeatherDayWidget) HandleGesture(_ ig.Kind) {}
 
-func (w *WeatherDayWidget) SetContext(_ Context) {
-	_ = w.render()
-}
-
 func (w *WeatherDayWidget) Close() error {
-	w.mu.Lock()
-	w.closed = true
-	w.mu.Unlock()
-	w.cache.mu.Lock()
-	for i, s := range w.cache.subs {
-		_ = s
-		if fmt.Sprintf("%p", w.cache.subs[i]) == fmt.Sprintf("%p", w.onData) {
-			w.cache.subs = append(w.cache.subs[:i], w.cache.subs[i+1:]...)
-			break
-		}
-	}
-	w.cache.mu.Unlock()
-	return os.RemoveAll(filepath.Dir(w.iconPath))
-}
-
-func (w *WeatherDayWidget) loop() {
-	ticker := time.NewTicker(time.Minute)
-	defer ticker.Stop()
-	for range ticker.C {
-		w.mu.Lock()
-		closed := w.closed
-		w.mu.Unlock()
-		if closed {
-			return
-		}
-		go w.cache.refresh(w.city, w.pollMS)
-	}
-}
-
-// renderPlaceholder writes a non-black loading card so the icon is visible immediately.
-func (w *WeatherDayWidget) renderPlaceholder() error {
-	img := image.NewRGBA(image.Rect(0, 0, icons.IconWidth, icons.IconHeight))
-	renderWeatherDayCard(img, w.dayIndex, nil, w.city)
-	_, err := writePNGAtomicIfChanged(w.iconPath, img)
-	return err
+	w.cache.unsubscribe(w.subToken)
+	return w.widgetBase.Close()
 }
 
 func (w *WeatherDayWidget) render() error {
 	w.mu.Lock()
-	forecast := w.forecast
-	w.mu.Unlock()
-
-	frameKey := weatherDayFrameKey(w.city, w.dayIndex, forecast)
-	w.mu.Lock()
-	same := w.lastFrameKey == frameKey
+	key := weatherDayFrameKey(w.city, w.dayIndex, w.forecast)
+	same := w.lastFrameKey == key
 	w.mu.Unlock()
 	if same {
 		return nil
 	}
-
-	img := image.NewRGBA(image.Rect(0, 0, icons.IconWidth, icons.IconHeight))
-	renderWeatherDayCard(img, w.dayIndex, forecast, w.city)
-
-	changed, err := writePNGAtomicIfChanged(w.iconPath, img)
-	if err != nil {
+	if _, err := w.publish(w.renderImage()); err != nil {
 		return fmt.Errorf("write weather day icon: %w", err)
 	}
-	if changed {
-		w.mu.Lock()
-		w.lastFrameKey = frameKey
-		w.mu.Unlock()
-		w.notify(w.id)
-	}
+	w.mu.Lock()
+	w.lastFrameKey = key
+	w.mu.Unlock()
 	return nil
+}
+
+func (w *WeatherDayWidget) renderImage() *image.RGBA {
+	w.mu.Lock()
+	forecast := w.forecast
+	w.mu.Unlock()
+	img := image.NewRGBA(image.Rect(0, 0, icons.IconWidth, icons.IconHeight))
+	renderWeatherDayCard(img, w.dayIndex, forecast, w.city)
+	return img
 }
 
 func weatherDayFrameKey(city string, dayIndex int, fc *weatherDayData) string {
@@ -401,35 +349,24 @@ func weatherDayIconColor(code int) color.RGBA {
 
 // ── API fetch ────────────────────────────────────────────────────────────────
 
-func fetchWeatherDayAll(coords dashboardWeatherCoords) ([weatherDayMaxForecast]*weatherDayData, error) {
+func fetchWeatherDayAll(coords dashboardWeatherCoords) (weatherForecast, error) {
 	u, err := url.Parse(dashboardForecastURL)
 	if err != nil {
-		return [weatherDayMaxForecast]*weatherDayData{}, err
+		return weatherForecast{}, err
 	}
 	q := u.Query()
 	q.Set("latitude", fmt.Sprintf("%.4f", coords.Latitude))
 	q.Set("longitude", fmt.Sprintf("%.4f", coords.Longitude))
 	q.Set("daily", "weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_mean,relative_humidity_2m_mean,wind_speed_10m_max")
 	q.Set("forecast_days", fmt.Sprintf("%d", weatherDayMaxForecast))
+	// Match the field name: Open-Meteo defaults to km/h.
+	q.Set("wind_speed_unit", "ms")
 	if coords.Timezone != "" {
 		q.Set("timezone", coords.Timezone)
 	} else {
 		q.Set("timezone", "auto")
 	}
 	u.RawQuery = q.Encode()
-
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
-	if err != nil {
-		return [weatherDayMaxForecast]*weatherDayData{}, err
-	}
-	resp, err := dashboardHTTPClient.Do(req)
-	if err != nil {
-		return [weatherDayMaxForecast]*weatherDayData{}, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return [weatherDayMaxForecast]*weatherDayData{}, fmt.Errorf("forecast status: %s", resp.Status)
-	}
 
 	var payload struct {
 		Daily struct {
@@ -442,12 +379,12 @@ func fetchWeatherDayAll(coords dashboardWeatherCoords) ([weatherDayMaxForecast]*
 			WindSpeed    []float64 `json:"wind_speed_10m_max"`
 		} `json:"daily"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return [weatherDayMaxForecast]*weatherDayData{}, err
+	if err := getJSON(dashboardHTTPClient, u.String(), nil, &payload); err != nil {
+		return weatherForecast{}, fmt.Errorf("forecast: %w", err)
 	}
 
 	d := payload.Daily
-	var result [weatherDayMaxForecast]*weatherDayData
+	var result weatherForecast
 	n := len(d.Time)
 	if n > weatherDayMaxForecast {
 		n = weatherDayMaxForecast

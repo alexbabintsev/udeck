@@ -8,16 +8,14 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"os/exec"
-	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
 	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
 	xdraw "golang.org/x/image/draw"
 	"golang.org/x/image/font/basicfont"
@@ -30,11 +28,12 @@ const (
 	defaultSpotifyHTTPTO    = 8 * time.Second
 	spotifyFallbackName     = "Spotify"
 	spotifyNotifierDebounce = 250 * time.Millisecond
+	spotifyCommandTimeout   = 4 * time.Second
 )
 
 var (
-	spotifyExecCommand = exec.Command
-	spotifyHTTPClient  = &http.Client{Timeout: defaultSpotifyHTTPTO}
+	spotifyHTTPClient = &http.Client{Timeout: defaultSpotifyHTTPTO}
+	spotifyOEmbedURL  = "https://open.spotify.com/oembed"
 )
 
 type spotifySnapshot struct {
@@ -161,19 +160,27 @@ func (s *SpotifyService) notifierLoop(ctx context.Context) {
 func (s *SpotifyService) refresh() {
 	next, err := fetchSpotifySnapshot()
 	if err != nil {
+		debug.Logf("spotify: %v", err)
 		return
 	}
 
-	s.mu.Lock()
+	// Artwork is fetched without holding the lock: it is up to two HTTP
+	// round trips, and Subscribe (called from the event loop when a page
+	// with a Spotify widget is shown) must not wait for them.
+	s.mu.RLock()
 	prev := s.snapshot
-	trackChanged := next.TrackID != prev.TrackID
-	if trackChanged && next.TrackID != "" {
-		next.Artwork = fetchSpotifyArtwork(next.TrackID)
-	} else if next.TrackID == "" {
+	s.mu.RUnlock()
+	switch {
+	case next.TrackID == "":
 		next.Artwork = nil
-	} else {
+	case next.TrackID != prev.TrackID:
+		next.Artwork = fetchSpotifyArtwork(next.TrackID)
+	default:
 		next.Artwork = prev.Artwork
 	}
+
+	s.mu.Lock()
+	prev = s.snapshot
 	changed := spotifyChanged(prev, next)
 	if !changed {
 		s.mu.Unlock()
@@ -196,7 +203,7 @@ func spotifyChanged(a, b spotifySnapshot) bool {
 }
 
 func fetchSpotifySnapshot() (spotifySnapshot, error) {
-	out, err := spotifyExecOut("/usr/bin/osascript", []string{"-e", spotifyStateScript()}, 4*time.Second)
+	out, err := execOut("/usr/bin/osascript", []string{"-e", spotifyStateScript()}, spotifyCommandTimeout)
 	if err != nil {
 		return spotifySnapshot{}, err
 	}
@@ -242,10 +249,14 @@ func parseSpotifyState(out string) spotifySnapshot {
 	}
 }
 
+// parseSpotifyFloat accepts both decimal separators: AppleScript formats
+// reals with the system locale (e.g. "12,5" in Russian or Ukrainian).
 func parseSpotifyFloat(s string) float64 {
-	var out float64
-	fmt.Sscanf(strings.TrimSpace(s), "%f", &out)
-	return out
+	v, err := strconv.ParseFloat(strings.ReplaceAll(strings.TrimSpace(s), ",", "."), 64)
+	if err != nil {
+		return 0
+	}
+	return v
 }
 
 func parseSpotifyInt(s string) int {
@@ -259,20 +270,14 @@ func fetchSpotifyArtwork(trackID string) image.Image {
 	if err != nil || artworkURL == "" {
 		return nil
 	}
-	req, err := http.NewRequest(http.MethodGet, artworkURL, nil)
+	body, err := httpGet(spotifyHTTPClient, artworkURL, nil)
 	if err != nil {
 		return nil
 	}
-	resp, err := spotifyHTTPClient.Do(req)
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+	// Check the header first: a small compressed file can declare huge
+	// dimensions and make Decode allocate gigabytes.
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(body))
+	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width*cfg.Height > maxArtworkPixels {
 		return nil
 	}
 	img, _, err := image.Decode(bytes.NewReader(body))
@@ -287,22 +292,10 @@ func fetchSpotifyArtworkURL(trackID string) (string, error) {
 	if trimmed == "" {
 		return "", nil
 	}
-	u := "https://open.spotify.com/oembed?url=" + url.QueryEscape("spotify:track:"+trimmed)
-	req, err := http.NewRequest(http.MethodGet, u, nil)
+	u := spotifyOEmbedURL + "?url=" + url.QueryEscape("spotify:track:"+trimmed)
+	body, err := httpGet(spotifyHTTPClient, u, nil)
 	if err != nil {
-		return "", err
-	}
-	resp, err := spotifyHTTPClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("oembed status: %s", resp.Status)
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+		return "", fmt.Errorf("oembed: %w", err)
 	}
 	return parseSpotifyArtworkURL(body)
 }
@@ -318,42 +311,16 @@ func parseSpotifyArtworkURL(body []byte) (string, error) {
 }
 
 type spotifyBaseWidget struct {
-	id       string
-	service  *SpotifyService
-	notify   func(string)
-	iconPath string
-	mu       sync.Mutex
-	closed   bool
+	*widgetBase
+	service *SpotifyService
 }
 
 func newSpotifyBaseWidget(id string, service *SpotifyService, notify func(string), filename string) (*spotifyBaseWidget, error) {
-	dir, err := os.MkdirTemp("", "ulanzi-spotify-widget-")
+	base, err := newWidgetBase(id, "spotify-widget", filename, notify)
 	if err != nil {
-		return nil, fmt.Errorf("create spotify widget temp dir: %w", err)
+		return nil, err
 	}
-	return &spotifyBaseWidget{
-		id:       id,
-		service:  service,
-		notify:   notify,
-		iconPath: filepath.Join(dir, filename),
-	}, nil
-}
-
-func (w *spotifyBaseWidget) IconPath() string { return w.iconPath }
-
-func (w *spotifyBaseWidget) Close() error {
-	w.mu.Lock()
-	w.closed = true
-	w.mu.Unlock()
-	return os.RemoveAll(filepath.Dir(w.iconPath))
-}
-
-func (w *spotifyBaseWidget) writeImage(img image.Image) (bool, error) {
-	changed, err := writePNGAtomicIfChanged(w.iconPath, img)
-	if err != nil {
-		return false, fmt.Errorf("write spotify widget icon: %w", err)
-	}
-	return changed, nil
+	return &spotifyBaseWidget{widgetBase: base, service: service}, nil
 }
 
 type SpotifyPlayPauseWidget struct {
@@ -366,8 +333,9 @@ func NewSpotifyPlayPauseWidget(id string, service *SpotifyService, notify func(s
 		return nil, err
 	}
 	w := &SpotifyPlayPauseWidget{spotifyBaseWidget: base}
-	if _, err := w.writeImage(renderSpotifyPlayPauseImage(spotifySnapshot{})); err != nil {
-		return nil, err
+	if _, err := w.writeIcon(renderSpotifyPlayPauseImage(spotifySnapshot{})); err != nil {
+		_ = w.Close()
+		return nil, fmt.Errorf("write spotify widget icon: %w", err)
 	}
 	service.Subscribe(w)
 	return w, nil
@@ -383,10 +351,7 @@ func (w *SpotifyPlayPauseWidget) HandleGesture(kind ig.Kind) {
 }
 
 func (w *SpotifyPlayPauseWidget) spotifyUpdate(s spotifySnapshot) {
-	img := renderSpotifyPlayPauseImage(s)
-	if changed, err := w.writeImage(img); err == nil && changed {
-		w.notify(w.id)
-	}
+	_, _ = w.publish(renderSpotifyPlayPauseImage(s))
 }
 
 func renderSpotifyPlayPauseImage(s spotifySnapshot) *image.RGBA {
@@ -430,9 +395,7 @@ func (w *SpotifyNextWidget) spotifyUpdate(s spotifySnapshot) {
 	drawScaledCenteredText(img, "NEXT", image.Rect(18, 28, icons.IconWidth-18, 78), accent)
 	drawNextGlyph(img, accent)
 	drawCenteredFace(img, shortenLine(trackLine(s), 15), icons.IconWidth/2, icons.IconHeight-18, color.RGBA{0xc0, 0xc0, 0xc0, 0xff}, basicfont.Face7x13)
-	if changed, err := w.writeImage(img); err == nil && changed {
-		w.notify(w.id)
-	}
+	_, _ = w.publish(img)
 }
 
 type SpotifyArtworkWidget struct {
@@ -465,19 +428,7 @@ func (w *SpotifyArtworkWidget) spotifyUpdate(s spotifySnapshot) {
 	}
 	drawCenteredFace(img, shortenLine(displayTrackTitle(s), 18), icons.IconWidth/2, icons.IconHeight-30, color.RGBA{0xff, 0xff, 0xff, 0xff}, basicfont.Face7x13)
 	drawCenteredFace(img, shortenLine(displayArtist(s), 18), icons.IconWidth/2, icons.IconHeight-14, color.RGBA{0xd0, 0xd0, 0xd0, 0xff}, basicfont.Face7x13)
-	if changed, err := w.writeImage(img); err == nil && changed {
-		w.notify(w.id)
-	}
-}
-
-func spotifyPlayPauseTitle(s spotifySnapshot) string {
-	if !s.Running {
-		return "OPEN"
-	}
-	if s.Playing {
-		return "PAUSE"
-	}
-	return "PLAY"
+	_, _ = w.publish(img)
 }
 
 func spotifyArtworkTitle(s spotifySnapshot) string {
@@ -574,19 +525,6 @@ func shortenLine(s string, max int) string {
 	return string(r[:max-1]) + "…"
 }
 
-func drawPlayPauseGlyph(img *image.RGBA, playing bool, clr color.Color) {
-	if playing {
-		draw.Draw(img, image.Rect(62, 88, 82, 138), &image.Uniform{clr}, image.Point{}, draw.Src)
-		draw.Draw(img, image.Rect(114, 88, 134, 138), &image.Uniform{clr}, image.Point{}, draw.Src)
-		return
-	}
-	for x := 0; x < 52; x++ {
-		top := 88 + x/2
-		bottom := 138 - x/2
-		draw.Draw(img, image.Rect(74+x, top, 76+x, bottom), &image.Uniform{clr}, image.Point{}, draw.Src)
-	}
-}
-
 func drawNextGlyph(img *image.RGBA, clr color.Color) {
 	for x := 0; x < 38; x++ {
 		top := 88 + x/2
@@ -644,19 +582,8 @@ func drawBottomScrim(img *image.RGBA) {
 	}
 }
 
-func spotifyExecOut(cmd string, args []string, timeout time.Duration) (string, error) {
-	c := spotifyExecCommand(cmd, args...)
-	c.Env = os.Environ()
-	_ = timeout
-	out, err := c.Output()
-	if err != nil {
-		return "", err
-	}
-	return string(out), nil
-}
-
 func spotifyOSA(script string) error {
-	_, err := spotifyExecCommand("/usr/bin/osascript", "-e", script).Output()
+	_, err := execOut("/usr/bin/osascript", []string{"-e", script}, spotifyCommandTimeout)
 	return err
 }
 

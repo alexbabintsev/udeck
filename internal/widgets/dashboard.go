@@ -1,7 +1,6 @@
 package widgets
 
 import (
-	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
@@ -9,19 +8,16 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
 	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 	xdraw "golang.org/x/image/draw"
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/basicfont"
-	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
 )
 
@@ -42,10 +38,6 @@ var (
 	dashboardHTTPClient  = &http.Client{Timeout: dashboardWeatherTimeout}
 	dashboardGeocodeURL  = "https://geocoding-api.open-meteo.com/v1/search"
 	dashboardForecastURL = "https://api.open-meteo.com/v1/forecast"
-	spaceMonoRegularOnce sync.Once
-	spaceMonoRegularTTF  *opentype.Font
-	spaceMonoBoldOnce    sync.Once
-	spaceMonoBoldTTF     *opentype.Font
 )
 
 type dashboardWeatherState struct {
@@ -64,66 +56,64 @@ type dashboardWeatherCoords struct {
 }
 
 type WideDashboardWidget struct {
-	id          string
+	*widgetBase
 	city        string
 	weatherPoll time.Duration
 	spotify     *SpotifyService
-	iconPath    string
-	notify      func(string)
 
 	mu           sync.RWMutex
 	mode         int
 	context      Context
-	closed       bool
 	weather      dashboardWeatherState
 	coords       *dashboardWeatherCoords
 	lastWeather  time.Time
+	fetching     bool
 	spotifyNow   spotifySnapshot
 	lastFrameKey string
 }
 
 func NewWideDashboardWidget(id string, cfg *config.Widget, spotify *SpotifyService, notify func(string)) (*WideDashboardWidget, error) {
-	dir, err := os.MkdirTemp("", "ulanzi-wide-dashboard-")
+	base, err := newWidgetBase(id, "wide-dashboard", "dashboard.png", notify)
 	if err != nil {
-		return nil, fmt.Errorf("create dashboard widget temp dir: %w", err)
+		return nil, err
 	}
 	w := &WideDashboardWidget{
-		id:          id,
+		widgetBase:  base,
 		city:        strings.TrimSpace(cfg.City),
 		weatherPoll: dashboardWeatherPoll(cfg.PollMS),
 		spotify:     spotify,
-		iconPath:    filepath.Join(dir, "dashboard.png"),
-		notify:      notify,
 	}
 	if spotify != nil {
 		spotify.Subscribe(w)
 	}
-	if _, err := w.render(time.Now()); err != nil {
+	if _, err := w.draw(time.Now(), false); err != nil {
+		_ = w.Close()
 		return nil, err
 	}
-	go w.loop()
+	w.every(dashboardTickInterval, w.tick)
 	go w.refreshWeather()
 	return w, nil
 }
 
-func (w *WideDashboardWidget) IconPath() string { return w.iconPath }
-
+// HandleGesture cycles clock / Spotify on tap (not while it acts as the
+// folder Back key).
 func (w *WideDashboardWidget) HandleGesture(kind ig.Kind) {
-	if kind != ig.Tap {
+	if kind != ig.Tap || w.isClosed() {
 		return
 	}
 	w.mu.Lock()
-	if w.closed || w.context.InFolder() {
+	if w.context.InFolder() {
 		w.mu.Unlock()
 		return
 	}
 	w.mode = (w.mode + 1) % dashboardModeCount
 	w.mu.Unlock()
-	if changed, err := w.render(time.Now()); err == nil && changed {
-		w.notify(w.id)
-	}
+	_, _ = w.render(time.Now())
 }
 
+// SetContext redraws for the new page/folder. It does not notify: the
+// event loop calls it right before uploading the page, which already
+// carries the fresh icon.
 func (w *WideDashboardWidget) SetContext(ctx Context) {
 	w.mu.Lock()
 	if w.context == ctx {
@@ -132,22 +122,14 @@ func (w *WideDashboardWidget) SetContext(ctx Context) {
 	}
 	w.context = ctx
 	w.mu.Unlock()
-	_, _ = w.render(time.Now())
-}
-
-func (w *WideDashboardWidget) Close() error {
-	w.mu.Lock()
-	w.closed = true
-	w.mu.Unlock()
-	return os.RemoveAll(filepath.Dir(w.iconPath))
+	_, _ = w.draw(time.Now(), false)
 }
 
 func (w *WideDashboardWidget) spotifyUpdate(s spotifySnapshot) {
-	w.mu.Lock()
-	if w.closed {
-		w.mu.Unlock()
+	if w.isClosed() {
 		return
 	}
+	w.mu.Lock()
 	w.spotifyNow = s
 	mode := w.mode
 	ctx := w.context
@@ -155,94 +137,76 @@ func (w *WideDashboardWidget) spotifyUpdate(s spotifySnapshot) {
 	if mode != dashboardModeSpotify || ctx.InFolder() {
 		return
 	}
-	if changed, err := w.render(time.Now()); err == nil && changed {
-		w.notify(w.id)
-	}
+	_, _ = w.render(time.Now())
 }
 
-func (w *WideDashboardWidget) loop() {
-	ticker := time.NewTicker(dashboardTickInterval)
-	defer ticker.Stop()
-	for now := range ticker.C {
-		w.mu.RLock()
-		closed := w.closed
-		city := w.city
-		lastWeather := w.lastWeather
-		poll := w.weatherPoll
-		w.mu.RUnlock()
-		if closed {
-			return
-		}
-		if city != "" && (lastWeather.IsZero() || now.Sub(lastWeather) >= poll) {
-			go w.refreshWeather()
-		}
-		if changed, err := w.render(now); err == nil && changed {
-			w.notify(w.id)
-		}
+func (w *WideDashboardWidget) tick(now time.Time) {
+	w.mu.RLock()
+	stale := w.city != "" && !w.fetching && (w.lastWeather.IsZero() || now.Sub(w.lastWeather) >= w.weatherPoll)
+	w.mu.RUnlock()
+	if stale {
+		go w.refreshWeather()
 	}
+	_, _ = w.render(now)
 }
 
 func (w *WideDashboardWidget) refreshWeather() {
-	w.mu.RLock()
-	if w.closed {
-		w.mu.RUnlock()
+	w.mu.Lock()
+	if w.fetching || w.isClosed() {
+		w.mu.Unlock()
 		return
 	}
+	w.fetching = true
 	city := w.city
 	coords := w.coords
-	w.mu.RUnlock()
+	w.mu.Unlock()
 
 	state := dashboardWeatherState{}
 	if city == "" {
 		state.Error = "Set city"
 	} else {
-		nextCoords := coords
-		if nextCoords == nil {
+		if coords == nil {
 			resolved, err := fetchDashboardCoords(city)
 			if err != nil {
+				debug.Logf("dashboard %q: %v", city, err)
 				state.Error = "Weather unavailable"
 			} else {
-				nextCoords = resolved
+				coords = resolved
 			}
 		}
-		if nextCoords != nil {
-			nextState, err := fetchDashboardWeather(*nextCoords)
+		if coords != nil {
+			nextState, err := fetchDashboardWeather(*coords)
 			if err != nil {
+				debug.Logf("dashboard %q: %v", city, err)
 				state.Error = "Weather unavailable"
 			} else {
 				state = nextState
-				state.CityName = nextCoords.Name
+				state.CityName = coords.Name
 			}
 		}
-		w.mu.Lock()
-		if !w.closed {
-			w.coords = nextCoords
-		}
-		w.mu.Unlock()
-	}
-
-	w.mu.Lock()
-	if w.closed {
-		w.mu.Unlock()
-		return
 	}
 	if state.CityName == "" {
-		if city != "" {
-			state.CityName = city
-		} else {
+		state.CityName = city
+		if city == "" {
 			state.CityName = "Weather"
 		}
 	}
+
+	w.mu.Lock()
+	w.fetching = false
+	w.coords = coords
 	w.weather = state
 	w.lastWeather = time.Now()
 	w.mu.Unlock()
-
-	if changed, err := w.render(time.Now()); err == nil && changed {
-		w.notify(w.id)
-	}
+	_, _ = w.render(time.Now())
 }
 
+// render redraws and notifies the Manager when the icon changed.
 func (w *WideDashboardWidget) render(now time.Time) (bool, error) {
+	return w.draw(now, true)
+}
+
+func (w *WideDashboardWidget) draw(now time.Time, notify bool) (bool, error) {
 	w.mu.Lock()
 	mode := w.mode
 	ctx := w.context
@@ -265,7 +229,11 @@ func (w *WideDashboardWidget) render(now time.Time) (bool, error) {
 		renderDashboardClock(img, now, weather)
 	}
 
-	changed, err := writePNGAtomicIfChanged(w.iconPath, img)
+	write := w.writeIcon
+	if notify {
+		write = w.publish
+	}
+	changed, err := write(img)
 	if err != nil {
 		return false, fmt.Errorf("write dashboard widget icon: %w", err)
 	}
@@ -306,7 +274,9 @@ func rectWH(x, y, w, h int) image.Rectangle {
 	return image.Rect(x, y, x+w, y+h)
 }
 
-func rgb(hex string, alpha ...int) color.RGBA {
+// rgb parses "RRGGBB" (optional "#") into an opaque color; invalid input
+// yields transparent black.
+func rgb(hex string) color.RGBA {
 	hex = strings.TrimPrefix(strings.TrimSpace(hex), "#")
 	if len(hex) != 6 {
 		return color.RGBA{}
@@ -315,21 +285,7 @@ func rgb(hex string, alpha ...int) color.RGBA {
 	if _, err := fmt.Sscanf(hex, "%06x", &out); err != nil {
 		return color.RGBA{}
 	}
-	a := 255
-	if len(alpha) > 0 {
-		a = alpha[0]
-		if a < 0 {
-			a = 0
-		} else if a > 255 {
-			a = 255
-		}
-	}
-	return color.RGBA{
-		R: uint8(out >> 16),
-		G: uint8((out >> 8) & 0xff),
-		B: uint8(out & 0xff),
-		A: uint8(a),
-	}
+	return color.RGBA{R: uint8(out >> 16), G: uint8(out >> 8), B: uint8(out), A: 0xff}
 }
 
 func renderDashboardClock(img *image.RGBA, now time.Time, weather dashboardWeatherState) {
@@ -337,7 +293,7 @@ func renderDashboardClock(img *image.RGBA, now time.Time, weather dashboardWeath
 	draw.Draw(img, rectWH(icons.WideWidth-4, 0, 4, icons.IconHeight), &image.Uniform{rgb("086fff")}, image.Point{}, draw.Src)
 
 	// big clock — left area
-	drawSpaceMonoClockText(img, now.Format("15:04"), rectWH(24, 8, 310, 118), color.White, rgb("7a7a7a"), 100, -4)
+	drawClockText(img, now.Format("15:04"), rectWH(24, 8, 310, 118), color.White, rgb("7a7a7a"), 100, -4)
 
 	// date — bottom left
 	drawText(img, strings.ToUpper(now.Format("02 Jan 2006")), FromLeft(24), FromBottom(30), 220, 44, AlignMiddleLeft, rgb("bbbbbb"), 35, true, -1)
@@ -376,7 +332,6 @@ func renderDashboardBack(img *image.RGBA) {
 	drawText(img, "BACK", CenterX(40), CenterY(0), 140, 48, AlignMiddleLeft, color.White, 48, true)
 }
 
-
 func drawDashboardArtwork(img *image.RGBA, rect image.Rectangle, s spotifySnapshot) {
 	fillRoundRect(img, rect, 18, rgb("181818"))
 	if s.Artwork == nil {
@@ -401,14 +356,14 @@ func drawDashboardArtwork(img *image.RGBA, rect image.Rectangle, s spotifySnapsh
 
 func drawSpotifySourceRow(img *image.RGBA, s spotifySnapshot) {
 	fillCircle(img, 222, 36, 4, spotifyAccent(s))
-	drawSpaceMonoLeftText(img, "SPOTIFY", image.Rect(234, 24, 356, 44), color.RGBA{0x99, 0x99, 0x99, 0xff}, 18, false)
+	drawFittedLeftText(img, "SPOTIFY", image.Rect(234, 24, 356, 44), color.RGBA{0x99, 0x99, 0x99, 0xff}, 18, false)
 }
 
 func drawSpotifyProgressBlock(img *image.RGBA, s spotifySnapshot) {
 	left := 218
 	right := 430
-	drawSpaceMonoLeftText(img, dashboardSpotifyLeftStamp(s), image.Rect(left, 140, left+64, 160), color.RGBA{0x77, 0x77, 0x77, 0xff}, 16, false)
-	drawSpaceMonoLeftText(img, dashboardSpotifyRightStamp(s), image.Rect(right-64, 140, right, 160), color.RGBA{0x77, 0x77, 0x77, 0xff}, 16, false)
+	drawFittedLeftText(img, dashboardSpotifyLeftStamp(s), image.Rect(left, 140, left+64, 160), color.RGBA{0x77, 0x77, 0x77, 0xff}, 16, false)
+	drawFittedLeftText(img, dashboardSpotifyRightStamp(s), image.Rect(right-64, 140, right, 160), color.RGBA{0x77, 0x77, 0x77, 0xff}, 16, false)
 	draw.Draw(img, image.Rect(left, 168, right, 172), &image.Uniform{color.RGBA{0x22, 0x22, 0x22, 0xff}}, image.Point{}, draw.Src)
 	fillW := int(float64(right-left) * dashboardSpotifyProgress(s))
 	if fillW < 8 {
@@ -514,47 +469,36 @@ func drawLeftFaceTracked(img *image.RGBA, text string, x, baselineY int, clr col
 	}
 }
 
-func drawSpaceMonoLeftText(img *image.RGBA, text string, rect image.Rectangle, clr color.Color, size float64, bold bool) {
-	face, display := spaceMonoFaceForText(text, rect.Dx(), size, bold)
+func drawFittedLeftText(img *image.RGBA, text string, rect image.Rectangle, clr color.Color, size float64, bold bool) {
+	face, display := fitFace(text, rect.Dx(), size, 10, 1, bold)
 	if face == nil {
-		drawDashboardLeftText(img, display, rect, clr, size)
 		return
 	}
+	defer face.Close()
 	baseline := rect.Min.Y + (rect.Dy()-face.Metrics().Height.Ceil())/2 + face.Metrics().Ascent.Ceil()
 	drawLeftFace(img, display, rect.Min.X, baseline, clr, face)
 }
 
-func drawSpaceMonoLeftTextTracked(img *image.RGBA, text string, rect image.Rectangle, clr color.Color, size float64, bold bool, tracking float64) {
-	face, display := spaceMonoFaceForText(text, rect.Dx(), size, bold)
+func drawFittedLeftTextTracked(img *image.RGBA, text string, rect image.Rectangle, clr color.Color, size float64, bold bool, tracking float64) {
+	face, display := fitFace(text, rect.Dx(), size, 10, 1, bold)
 	if face == nil {
-		drawSpaceMonoLeftText(img, display, rect, clr, size, bold)
 		return
 	}
+	defer face.Close()
 	baseline := rect.Min.Y + (rect.Dy()-face.Metrics().Height.Ceil())/2 + face.Metrics().Ascent.Ceil()
 	drawLeftFaceTracked(img, display, rect.Min.X, baseline, clr, face, tracking)
 }
 
-func drawSpaceMonoRightTextTracked(img *image.RGBA, text string, rect image.Rectangle, clr color.Color, size float64, bold bool, tracking float64) {
-	face, display := spaceMonoFaceForText(text, rect.Dx(), size, bold)
-	if face == nil {
-		drawSpaceMonoLeftTextTracked(img, display, rect, clr, size, bold, tracking)
-		return
-	}
-	baseline := rect.Min.Y + (rect.Dy()-face.Metrics().Height.Ceil())/2 + face.Metrics().Ascent.Ceil()
-	x := rect.Max.X - trackedTextWidth(face, display, tracking)
-	drawLeftFaceTracked(img, display, x, baseline, clr, face, tracking)
-}
-
-func drawSpaceMonoClockText(img *image.RGBA, text string, rect image.Rectangle, mainClr, colonClr color.Color, size float64, tracking float64) {
+func drawClockText(img *image.RGBA, text string, rect image.Rectangle, mainClr, colonClr color.Color, size float64, tracking float64) {
 	if len(text) != 5 || text[2] != ':' {
-		drawSpaceMonoLeftTextTracked(img, text, rect, mainClr, size, true, tracking)
+		drawFittedLeftTextTracked(img, text, rect, mainClr, size, true, tracking)
 		return
 	}
-	face, _ := spaceMonoFaceForText(text, rect.Dx(), size, true)
+	face, _ := fitFace(text, rect.Dx(), size, 10, 1, true)
 	if face == nil {
-		drawSpaceMonoLeftTextTracked(img, text, rect, mainClr, size, true, tracking)
 		return
 	}
+	defer face.Close()
 	baseline := rect.Min.Y + (rect.Dy()-face.Metrics().Height.Ceil())/2 + face.Metrics().Ascent.Ceil()
 	hours := text[:2]
 	colon := text[2:3]
@@ -579,152 +523,23 @@ func trackedTextWidth(face font.Face, text string, tracking float64) int {
 }
 
 func drawDashboardCenteredText(img *image.RGBA, text string, rect image.Rectangle, clr color.Color, startSize float64) {
-	face, display := dashboardFaceForText(text, rect.Dx(), startSize)
+	face, display := fitFace(text, rect.Dx(), startSize, 11, 1.5, false)
 	if face == nil {
-		drawScaledCenteredText(img, display, rect, clr)
 		return
 	}
+	defer face.Close()
 	baseline := rect.Min.Y + (rect.Dy()-face.Metrics().Height.Ceil())/2 + face.Metrics().Ascent.Ceil()
 	drawCenteredFace(img, display, rect.Min.X+rect.Dx()/2, baseline, clr, face)
 }
 
 func drawDashboardLeftText(img *image.RGBA, text string, rect image.Rectangle, clr color.Color, startSize float64) {
-	face, display := dashboardFaceForText(text, rect.Dx(), startSize)
+	face, display := fitFace(text, rect.Dx(), startSize, 11, 1.5, false)
 	if face == nil {
-		drawLeftFace(img, display, rect.Min.X, rect.Min.Y+basicfont.Face7x13.Metrics().Ascent.Ceil(), clr, basicfont.Face7x13)
 		return
 	}
+	defer face.Close()
 	baseline := rect.Min.Y + (rect.Dy()-face.Metrics().Height.Ceil())/2 + face.Metrics().Ascent.Ceil()
 	drawLeftFace(img, display, rect.Min.X, baseline, clr, face)
-}
-
-func dashboardFaceForText(text string, maxWidth int, startSize float64) (font.Face, string) {
-	ft := loadFreqtradeFont()
-	display := strings.TrimSpace(text)
-	if display == "" {
-		return nil, ""
-	}
-	if ft == nil {
-		return nil, shortenLine(display, max(1, maxWidth/7))
-	}
-	runes := []rune(display)
-	for len(runes) > 0 {
-		candidate := string(runes)
-		size := startSize
-		for size >= 11 {
-			face, err := opentype.NewFace(ft, &opentype.FaceOptions{
-				Size:    size,
-				DPI:     72,
-				Hinting: font.HintingFull,
-			})
-			if err != nil {
-				break
-			}
-			if font.MeasureString(face, candidate).Round() <= maxWidth {
-				return face, candidate
-			}
-			size -= 1.5
-		}
-		if len(runes) == 1 {
-			break
-		}
-		runes = runes[:len(runes)-1]
-		candidate = string(runes) + "…"
-		runes = []rune(candidate)
-	}
-	face, err := opentype.NewFace(ft, &opentype.FaceOptions{
-		Size:    11,
-		DPI:     72,
-		Hinting: font.HintingFull,
-	})
-	if err != nil {
-		return basicfont.Face7x13, shortenLine(display, max(1, maxWidth/7))
-	}
-	return face, shortenLine(display, max(1, maxWidth/7))
-}
-
-func spaceMonoFaceForText(text string, maxWidth int, startSize float64, bold bool) (font.Face, string) {
-	display := strings.TrimSpace(text)
-	if display == "" {
-		return nil, ""
-	}
-	ft := loadSpaceMonoFont(bold)
-	if ft == nil {
-		return nil, display
-	}
-	runes := []rune(display)
-	for len(runes) > 0 {
-		candidate := string(runes)
-		size := startSize
-		for size >= 10 {
-			face, err := opentype.NewFace(ft, &opentype.FaceOptions{
-				Size:    size,
-				DPI:     72,
-				Hinting: font.HintingFull,
-			})
-			if err != nil {
-				break
-			}
-			if font.MeasureString(face, candidate).Round() <= maxWidth {
-				return face, candidate
-			}
-			size -= 1
-		}
-		if len(runes) == 1 {
-			break
-		}
-		runes = runes[:len(runes)-1]
-		candidate = string(runes) + "…"
-		runes = []rune(candidate)
-	}
-	face, err := opentype.NewFace(ft, &opentype.FaceOptions{
-		Size:    10,
-		DPI:     72,
-		Hinting: font.HintingFull,
-	})
-	if err != nil {
-		return nil, shortenLine(display, max(1, maxWidth/7))
-	}
-	return face, shortenLine(display, max(1, maxWidth/7))
-}
-
-func loadSpaceMonoFont(bold bool) *opentype.Font {
-	if ft := loadFreqtradeFont(); ft != nil {
-		return ft
-	}
-	if bold {
-		spaceMonoBoldOnce.Do(func() {
-			spaceMonoBoldTTF = loadSpaceMonoFromPaths("SpaceMono-Bold.ttf")
-		})
-		return spaceMonoBoldTTF
-	}
-	spaceMonoRegularOnce.Do(func() {
-		spaceMonoRegularTTF = loadSpaceMonoFromPaths("SpaceMono-Regular.ttf")
-	})
-	return spaceMonoRegularTTF
-}
-
-func loadSpaceMonoFromPaths(name string) *opentype.Font {
-	candidates := []string{
-		filepath.Join("assets", "Space_Mono", name),
-	}
-	if exe, err := os.Executable(); err == nil {
-		base := filepath.Dir(exe)
-		candidates = append(candidates, filepath.Join(base, "assets", "Space_Mono", name))
-		candidates = append(candidates, filepath.Join(base, "..", "assets", "Space_Mono", name))
-	}
-	for _, path := range candidates {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		ft, err := opentype.Parse(data)
-		if err != nil {
-			continue
-		}
-		return ft
-	}
-	return nil
 }
 
 func dashboardWeekday(day time.Weekday) string {
@@ -744,12 +559,6 @@ func dashboardWeekday(day time.Weekday) string {
 	default:
 		return "Sunday"
 	}
-}
-
-func drawDashboardClockIcon(img *image.RGBA, cx, cy, radius int, clr color.Color) {
-	drawCircleStroke(img, cx, cy, radius, 4, clr)
-	drawStrokeLine(img, cx, cy, cx, cy-12, 4, clr)
-	drawStrokeLine(img, cx, cy, cx+10, cy+6, 4, clr)
 }
 
 func drawDashboardMusicIcon(img *image.RGBA, cx, cy, size int, clr color.Color) {
@@ -790,22 +599,6 @@ func drawCircleStroke(img *image.RGBA, cx, cy, radius, width int, clr color.Colo
 	}
 }
 
-func drawCircleArcStroke(img *image.RGBA, cx, cy, radius int, start, end float64, width int, clr color.Color) {
-	if end < start {
-		start, end = end, start
-	}
-	steps := max(12, int(float64(radius)*3))
-	for i := 0; i < steps; i++ {
-		t1 := start + (end-start)*float64(i)/float64(steps)
-		t2 := start + (end-start)*float64(i+1)/float64(steps)
-		x1 := cx + int(math.Round(math.Cos(t1)*float64(radius)))
-		y1 := cy + int(math.Round(math.Sin(t1)*float64(radius)))
-		x2 := cx + int(math.Round(math.Cos(t2)*float64(radius)))
-		y2 := cy + int(math.Round(math.Sin(t2)*float64(radius)))
-		drawStrokeLine(img, x1, y1, x2, y2, width, clr)
-	}
-}
-
 func fetchDashboardCoords(city string) (*dashboardWeatherCoords, error) {
 	u, err := url.Parse(dashboardGeocodeURL)
 	if err != nil {
@@ -818,18 +611,6 @@ func fetchDashboardCoords(city string) (*dashboardWeatherCoords, error) {
 	q.Set("format", "json")
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := dashboardHTTPClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("geocode status: %s", resp.Status)
-	}
 	var payload struct {
 		Results []struct {
 			Name      string  `json:"name"`
@@ -839,8 +620,8 @@ func fetchDashboardCoords(city string) (*dashboardWeatherCoords, error) {
 			Timezone  string  `json:"timezone"`
 		} `json:"results"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, err
+	if err := getJSON(dashboardHTTPClient, u.String(), nil, &payload); err != nil {
+		return nil, fmt.Errorf("geocode: %w", err)
 	}
 	if len(payload.Results) == 0 {
 		return nil, fmt.Errorf("city not found")
@@ -874,26 +655,14 @@ func fetchDashboardWeather(coords dashboardWeatherCoords) (dashboardWeatherState
 	}
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
-	if err != nil {
-		return dashboardWeatherState{}, err
-	}
-	resp, err := dashboardHTTPClient.Do(req)
-	if err != nil {
-		return dashboardWeatherState{}, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return dashboardWeatherState{}, fmt.Errorf("forecast status: %s", resp.Status)
-	}
 	var payload struct {
 		Current struct {
 			Temperature float64 `json:"temperature_2m"`
 			Code        int     `json:"weather_code"`
 		} `json:"current"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return dashboardWeatherState{}, err
+	if err := getJSON(dashboardHTTPClient, u.String(), nil, &payload); err != nil {
+		return dashboardWeatherState{}, fmt.Errorf("forecast: %w", err)
 	}
 	temp := payload.Current.Temperature
 	return dashboardWeatherState{
@@ -908,18 +677,4 @@ func abs(v int) int {
 		return -v
 	}
 	return v
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

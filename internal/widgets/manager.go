@@ -44,6 +44,7 @@ type Manager struct {
 }
 
 func NewManager(cfg *config.Config) (*Manager, error) {
+	SetFont(cfg.Widgets.Font)
 	nav, err := newPageNavOverlay()
 	if err != nil {
 		return nil, fmt.Errorf("page nav overlay: %w", err)

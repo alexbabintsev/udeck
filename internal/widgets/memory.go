@@ -1,14 +1,13 @@
 package widgets
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"math"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -29,45 +28,46 @@ const (
 	memoryWidgetW       = 196
 	memoryWidgetH       = 196
 	defaultMemoryPollMS = 2000
+	appCommandTimeout   = 10 * time.Second
 )
 
-var execFile = exec.Command
-var restartAppFunc = restartApp
+// execCommandContext runs helper binaries; tests replace it.
+var execCommandContext = exec.CommandContext
 
 type MemoryWidget struct {
-	id       string
-	apps     []string
-	pollMS   time.Duration
-	iconPath string
-	notify   func(string)
+	*widgetBase
+	apps   []string
+	pollMS time.Duration
+	// restart and readPercent are seams for tests.
+	restart     func(app string) error
+	readPercent func() (int, error)
 
 	mu      sync.RWMutex
 	percent int
 	busy    bool
-	closed  bool
 }
 
 func NewMemoryWidget(id string, cfg *config.Widget, notify func(string)) (*MemoryWidget, error) {
-	dir, err := os.MkdirTemp("", "ulanzi-memory-widget-")
+	base, err := newWidgetBase(id, "memory-widget", "memory.png", notify)
 	if err != nil {
-		return nil, fmt.Errorf("create widget temp dir: %w", err)
+		return nil, err
 	}
 	w := &MemoryWidget{
-		id:       id,
-		apps:     append([]string(nil), cfg.Apps...),
-		pollMS:   pollDuration(cfg.PollMS),
-		iconPath: filepath.Join(dir, "memory.png"),
-		notify:   notify,
+		widgetBase:  base,
+		apps:        append([]string(nil), cfg.Apps...),
+		pollMS:      pollDuration(cfg.PollMS),
+		restart:     restartApp,
+		readPercent: readMemoryPercent,
 	}
-	if _, err := w.updateMemory(); err != nil {
-		_, _ = w.render()
+	if percent, err := w.readPercent(); err == nil {
+		w.percent = percent
 	}
-	go w.loop()
+	if _, err := w.writeIcon(w.renderImage()); err != nil {
+		_ = w.Close()
+		return nil, fmt.Errorf("write memory widget icon: %w", err)
+	}
+	w.every(w.pollMS, func(time.Time) { _, _ = w.updateMemory() })
 	return w, nil
-}
-
-func (w *MemoryWidget) IconPath() string {
-	return w.iconPath
 }
 
 func (w *MemoryWidget) HandleGesture(kind ig.Kind) {
@@ -75,55 +75,30 @@ func (w *MemoryWidget) HandleGesture(kind ig.Kind) {
 		return
 	}
 	w.mu.Lock()
-	if w.busy || w.closed {
+	if w.busy || w.isClosed() {
 		w.mu.Unlock()
 		return
 	}
 	w.busy = true
 	w.mu.Unlock()
-	if changed, err := w.render(); err == nil && changed {
-		w.notify(w.id)
-	}
+	_, _ = w.render()
 
 	go func() {
 		for _, app := range w.apps {
-			_ = restartAppFunc(app)
+			_ = w.restart(app)
 		}
-		_, _ = w.updateMemory()
 		w.mu.Lock()
 		w.busy = false
 		w.mu.Unlock()
-		if changed, err := w.render(); err == nil && changed {
-			w.notify(w.id)
+		if _, err := w.updateMemory(); err != nil {
+			_, _ = w.render()
 		}
 	}()
 }
 
-func (w *MemoryWidget) Close() error {
-	w.mu.Lock()
-	w.closed = true
-	w.mu.Unlock()
-	return os.RemoveAll(filepath.Dir(w.iconPath))
-}
-
-func (w *MemoryWidget) loop() {
-	ticker := time.NewTicker(w.pollMS)
-	defer ticker.Stop()
-	for range ticker.C {
-		w.mu.RLock()
-		closed := w.closed
-		w.mu.RUnlock()
-		if closed {
-			return
-		}
-		if changed, err := w.updateMemory(); err == nil && changed {
-			w.notify(w.id)
-		}
-	}
-}
-
+// updateMemory re-reads usage and publishes a new icon when it changed.
 func (w *MemoryWidget) updateMemory() (bool, error) {
-	percent, err := readMemoryPercent()
+	percent, err := w.readPercent()
 	if err != nil {
 		return false, err
 	}
@@ -138,10 +113,17 @@ func (w *MemoryWidget) updateMemory() (bool, error) {
 }
 
 func (w *MemoryWidget) render() (bool, error) {
+	changed, err := w.publish(w.renderImage())
+	if err != nil {
+		return false, fmt.Errorf("write memory widget icon: %w", err)
+	}
+	return changed, nil
+}
+
+func (w *MemoryWidget) renderImage() *image.RGBA {
 	w.mu.RLock()
 	percent := w.percent
 	busy := w.busy
-	hasApps := len(w.apps) > 0
 	w.mu.RUnlock()
 
 	img := image.NewRGBA(image.Rect(0, 0, memoryWidgetW, memoryWidgetH))
@@ -154,15 +136,7 @@ func (w *MemoryWidget) render() (bool, error) {
 	} else {
 		drawDashboardCenteredText(img, fmt.Sprintf("%d", percent), image.Rect(28, 48, memoryWidgetW-28, 146), col, 60)
 	}
-	if hasApps && !busy {
-		// Keep app-enabled widgets visually identical; tap behavior is implicit.
-	}
-
-	changed, err := writePNGAtomicIfChanged(w.iconPath, img)
-	if err != nil {
-		return false, fmt.Errorf("write memory widget icon: %w", err)
-	}
-	return changed, nil
+	return img
 }
 
 func pollDuration(ms int) time.Duration {
@@ -322,10 +296,9 @@ func readMemoryPercent() (int, error) {
 }
 
 func execOut(cmd string, args []string, timeout time.Duration) (string, error) {
-	c := execFile(cmd, args...)
-	c.Env = os.Environ()
-	_ = timeout
-	out, err := c.Output()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	out, err := execCommandContext(ctx, cmd, args...).Output()
 	if err != nil {
 		return "", err
 	}
@@ -361,7 +334,7 @@ func restartApp(appName string) error {
 	if err := waitUntilQuit(appName, 15*time.Second); err != nil {
 		return err
 	}
-	_, err = execFile("/usr/bin/open", "-g", "-a", appName).Output()
+	_, err = execOut("/usr/bin/open", []string{"-g", "-a", appName}, appCommandTimeout)
 	return err
 }
 
@@ -381,15 +354,15 @@ func waitUntilQuit(appName string, timeout time.Duration) error {
 }
 
 func isAppRunning(appName string) (bool, error) {
-	out, err := execFile("/usr/bin/osascript", "-e", `application "`+escapeAS(appName)+`" is running`).Output()
+	out, err := execOut("/usr/bin/osascript", []string{"-e", `application "` + escapeAS(appName) + `" is running`}, appCommandTimeout)
 	if err != nil {
 		return false, err
 	}
-	return strings.TrimSpace(string(out)) == "true", nil
+	return strings.TrimSpace(out) == "true", nil
 }
 
 func osa(script string) error {
-	_, err := execFile("/usr/bin/osascript", "-e", script).Output()
+	_, err := execOut("/usr/bin/osascript", []string{"-e", script}, appCommandTimeout)
 	return err
 }
 

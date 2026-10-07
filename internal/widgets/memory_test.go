@@ -2,162 +2,306 @@ package widgets
 
 import (
 	"bytes"
+	"context"
+	"errors"
+	"image"
 	"image/color"
 	"image/png"
 	"os"
+	"os/exec"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
 )
 
-func TestMemoryWidgetRendersRingAndDigits(t *testing.T) {
-	dir := t.TempDir()
-	w := &MemoryWidget{
-		id:       "test",
-		iconPath: dir + "/memory.png",
-		percent:  72,
-	}
+// recorder collects notify calls.
+type recorder struct {
+	mu  sync.Mutex
+	ids []string
+}
 
-	changed, err := w.render()
-	if err != nil {
-		t.Fatalf("render memory widget: %v", err)
-	}
-	if !changed {
-		t.Fatal("expected first render to write image")
-	}
+func (r *recorder) notify(id string) {
+	r.mu.Lock()
+	r.ids = append(r.ids, id)
+	r.mu.Unlock()
+}
 
-	data, err := os.ReadFile(w.iconPath)
+func (r *recorder) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.ids)
+}
+
+func testBase(t *testing.T, notify func(string)) *widgetBase {
+	t.Helper()
+	b, err := newWidgetBase("test", "test", "icon.png", notify)
 	if err != nil {
-		t.Fatalf("read rendered image: %v", err)
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = b.Close() })
+	return b
+}
+
+func readPNG(t *testing.T, path string) image.Image {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read icon: %v", err)
 	}
 	img, err := png.Decode(bytes.NewReader(data))
 	if err != nil {
-		t.Fatalf("decode rendered image: %v", err)
+		t.Fatalf("decode icon: %v", err)
 	}
+	return img
+}
 
-	bg := color.RGBAModel.Convert(img.At(8, 8)).(color.RGBA)
-	if bg.R > 4 || bg.G > 4 || bg.B > 4 {
-		t.Fatalf("expected black background, got %#v", bg)
-	}
+func rgbaAt(img image.Image, x, y int) color.RGBA {
+	return color.RGBAModel.Convert(img.At(x, y)).(color.RGBA)
+}
 
-	ring := color.RGBAModel.Convert(img.At(memoryWidgetW/2, 30)).(color.RGBA)
-	if ring.R < 100 || ring.G < 100 {
-		t.Fatalf("expected colored ring pixel, got %#v", ring)
-	}
-
-	foundDigits := false
-	for y := 68; y < 128 && !foundDigits; y++ {
-		for x := 56; x < 140; x++ {
-			px := color.RGBAModel.Convert(img.At(x, y)).(color.RGBA)
-			if px.R > 100 || px.G > 100 || px.B > 100 {
-				foundDigits = true
-				break
+func anyPixel(img image.Image, r image.Rectangle, pred func(color.RGBA) bool) bool {
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		for x := r.Min.X; x < r.Max.X; x++ {
+			if pred(rgbaAt(img, x, y)) {
+				return true
 			}
 		}
 	}
-	if !foundDigits {
+	return false
+}
+
+func TestMemoryWidgetRendersRingAndDigits(t *testing.T) {
+	w := &MemoryWidget{widgetBase: testBase(t, nil), percent: 72}
+	changed, err := w.render()
+	if err != nil || !changed {
+		t.Fatalf("changed=%v err=%v", changed, err)
+	}
+	img := readPNG(t, w.iconPath)
+	if bg := rgbaAt(img, 8, 8); bg.R > 4 || bg.G > 4 || bg.B > 4 {
+		t.Fatalf("expected black background, got %#v", bg)
+	}
+	// Ring spans radii 55..65 around the center; sample its top.
+	if ring := rgbaAt(img, memoryWidgetW/2, memoryWidgetH/2-60); ring.R < 100 || ring.G < 100 {
+		t.Fatalf("expected colored ring pixel, got %#v", ring)
+	}
+	if !anyPixel(img, image.Rect(56, 68, 140, 128), func(c color.RGBA) bool { return c.R > 100 || c.G > 100 }) {
 		t.Fatal("expected colored center digits")
+	}
+	if changed, _ := w.render(); changed {
+		t.Fatal("identical render must not report a change")
 	}
 }
 
 func TestMemoryWidgetBusyRendersLucideIcon(t *testing.T) {
-	dir := t.TempDir()
-	w := &MemoryWidget{
-		id:       "test",
-		iconPath: dir + "/memory.png",
-		percent:  86,
-		busy:     true,
-	}
-
+	w := &MemoryWidget{widgetBase: testBase(t, nil), percent: 86, busy: true}
 	if _, err := w.render(); err != nil {
-		t.Fatalf("render busy memory widget: %v", err)
+		t.Fatal(err)
 	}
-
-	data, err := os.ReadFile(w.iconPath)
-	if err != nil {
-		t.Fatalf("read rendered image: %v", err)
-	}
-	img, err := png.Decode(bytes.NewReader(data))
-	if err != nil {
-		t.Fatalf("decode rendered image: %v", err)
-	}
-
-	foundAccent := false
-	for y := 58; y < 138 && !foundAccent; y++ {
-		for x := 58; x < 138; x++ {
-			px := color.RGBAModel.Convert(img.At(x, y)).(color.RGBA)
-			if px.R > 150 && px.G < 120 && px.B < 120 {
-				foundAccent = true
-				break
-			}
-		}
-	}
-	if !foundAccent {
+	img := readPNG(t, w.iconPath)
+	if !anyPixel(img, image.Rect(58, 58, 138, 138), func(c color.RGBA) bool { return c.R > 150 && c.G < 120 && c.B < 120 }) {
 		t.Fatal("expected lucide busy icon pixels")
 	}
 }
 
-func TestMemoryWidgetTapShowsBusyIconImmediately(t *testing.T) {
-	oldRestart := restartAppFunc
-	defer func() { restartAppFunc = oldRestart }()
-
+func TestMemoryWidgetTapShowsBusyThenRestartsApps(t *testing.T) {
+	rec := &recorder{}
 	block := make(chan struct{})
-	restartAppFunc = func(appName string) error {
-		<-block
-		return nil
-	}
-
-	dir := t.TempDir()
-	var (
-		mu      sync.Mutex
-		updates []string
-	)
+	restarted := make(chan string, 2)
 	w := &MemoryWidget{
-		id:       "test",
-		iconPath: dir + "/memory.png",
-		percent:  63,
-		apps:     []string{"Dummy"},
-		notify: func(id string) {
-			mu.Lock()
-			updates = append(updates, id)
-			mu.Unlock()
+		widgetBase:  testBase(t, rec.notify),
+		percent:     63,
+		apps:        []string{"A", "B"},
+		readPercent: func() (int, error) { return 40, nil },
+		restart: func(app string) error {
+			<-block
+			restarted <- app
+			return nil
 		},
 	}
 	if _, err := w.render(); err != nil {
-		t.Fatalf("initial render: %v", err)
+		t.Fatal(err)
 	}
+	before := rec.count()
 
 	w.HandleGesture(ig.Tap)
-
-	mu.Lock()
-	gotUpdates := len(updates)
-	mu.Unlock()
-	if gotUpdates == 0 {
+	if rec.count() != before+1 {
 		t.Fatal("expected immediate widget update on tap")
 	}
-
-	data, err := os.ReadFile(w.iconPath)
-	if err != nil {
-		t.Fatalf("read busy image: %v", err)
+	img := readPNG(t, w.iconPath)
+	if !anyPixel(img, image.Rect(58, 58, 138, 138), func(c color.RGBA) bool { return c.G > 120 && c.G > c.R }) {
+		t.Fatal("expected busy icon right after tap")
 	}
-	img, err := png.Decode(bytes.NewReader(data))
-	if err != nil {
-		t.Fatalf("decode busy image: %v", err)
-	}
-
-	foundAccent := false
-	for y := 58; y < 138 && !foundAccent; y++ {
-		for x := 58; x < 138; x++ {
-			px := color.RGBAModel.Convert(img.At(x, y)).(color.RGBA)
-			if px.G > 120 && px.G > px.R {
-				foundAccent = true
-				break
-			}
-		}
-	}
+	// A second tap while busy is ignored.
+	w.HandleGesture(ig.Tap)
+	w.HandleGesture(ig.Hold)
 	close(block)
-	if !foundAccent {
-		t.Fatal("expected busy icon to render immediately after tap")
+	if a, b := <-restarted, <-restarted; a != "A" || b != "B" {
+		t.Fatalf("restart order %s,%s", a, b)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		w.mu.RLock()
+		done := !w.busy && w.percent == 40
+		w.mu.RUnlock()
+		if done {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("widget did not leave busy state")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestMemoryWidgetUpdateMemory(t *testing.T) {
+	rec := &recorder{}
+	pct, failing := 50, false
+	w := &MemoryWidget{widgetBase: testBase(t, rec.notify), readPercent: func() (int, error) {
+		if failing {
+			return 0, errors.New("vm_stat failed")
+		}
+		return pct, nil
+	}}
+	if changed, err := w.updateMemory(); err != nil || !changed {
+		t.Fatalf("changed=%v err=%v", changed, err)
+	}
+	if changed, _ := w.updateMemory(); changed {
+		t.Fatal("same percentage must not re-render")
+	}
+	pct = 90
+	if changed, _ := w.updateMemory(); !changed || rec.count() != 2 {
+		t.Fatalf("changed=%v notifications=%d", changed, rec.count())
+	}
+	failing = true
+	if _, err := w.updateMemory(); err == nil {
+		t.Fatal("expected read error")
+	}
+}
+
+func TestNewMemoryWidgetPollsAndStopsOnClose(t *testing.T) {
+	w, err := NewMemoryWidget("m", &config.Widget{Type: "memory", PollMS: 1}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(w.IconPath()); err != nil {
+		t.Fatalf("initial icon missing: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(w.IconPath()); !os.IsNotExist(err) {
+		t.Fatal("Close must remove the icon directory")
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal("second Close must be safe")
+	}
+	w.HandleGesture(ig.Tap) // closed: ignored
+}
+
+func TestMemoryHelpers(t *testing.T) {
+	if pollDuration(0) != defaultMemoryPollMS*time.Millisecond || pollDuration(5) != 5*time.Millisecond {
+		t.Fatal("pollDuration")
+	}
+	if memoryColor(90) == memoryColor(75) || memoryColor(75) == memoryColor(10) {
+		t.Fatal("memoryColor must have three bands")
+	}
+	if clampPercent(-1) != 0 || clampPercent(150) != 100 || clampPercent(42) != 42 {
+		t.Fatal("clampPercent")
+	}
+	if escapeAS(`a"b\c`) != `a\"b\\c` {
+		t.Fatalf("escapeAS = %q", escapeAS(`a"b\c`))
+	}
+	if v, err := parseInt(" 12 "); err != nil || v != 12 {
+		t.Fatal("parseInt")
+	}
+	if regexpMustCompile(`a+`) != regexpMustCompile(`a+`) {
+		t.Fatal("regexp cache must return the same instance")
+	}
+	img := image.NewRGBA(image.Rect(0, 0, 100, 40))
+	drawScaledCenteredText(img, "42", img.Bounds(), color.White)
+	drawScaledCenteredText(img, "", img.Bounds(), color.White)
+	if !anyPixel(img, img.Bounds(), func(c color.RGBA) bool { return c.R > 0 }) {
+		t.Fatal("expected scaled text pixels")
+	}
+}
+
+// fakeExec routes helper commands to canned outputs keyed by argv[0].
+func fakeExec(t *testing.T, outputs map[string]string) *[]string {
+	t.Helper()
+	var calls []string
+	old := execCommandContext
+	execCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		calls = append(calls, name)
+		out, ok := outputs[name]
+		if !ok {
+			return exec.CommandContext(ctx, "false")
+		}
+		return exec.CommandContext(ctx, "printf", "%s", out)
+	}
+	t.Cleanup(func() { execCommandContext = old })
+	return &calls
+}
+
+func TestReadMemoryPercentParsesVMStat(t *testing.T) {
+	fakeExec(t, map[string]string{
+		"/usr/sbin/sysctl": "1638400\n",
+		"/usr/bin/vm_stat": "Mach Virtual Memory Statistics: (page size of 16384 bytes)\n" +
+			"Pages free:                               10.\n" +
+			"Pages inactive:                           20.\n" +
+			"Pages speculative:                        5.\n" +
+			"\"Pages purgeable\":                        15.\n",
+	})
+	// total 100 pages, 50 truly free -> 50% used.
+	got, err := readMemoryPercent()
+	if err != nil || got != 50 {
+		t.Fatalf("got %d err=%v", got, err)
+	}
+}
+
+func TestReadMemoryPercentErrors(t *testing.T) {
+	fakeExec(t, map[string]string{})
+	if _, err := readMemoryPercent(); err == nil {
+		t.Fatal("expected sysctl error")
+	}
+	fakeExec(t, map[string]string{"/usr/sbin/sysctl": "1"})
+	if _, err := readMemoryPercent(); err == nil {
+		t.Fatal("expected vm_stat error")
+	}
+	fakeExec(t, map[string]string{"/usr/sbin/sysctl": "abc", "/usr/bin/vm_stat": ""})
+	if _, err := readMemoryPercent(); err == nil {
+		t.Fatal("expected parse error")
+	}
+}
+
+func TestRestartApp(t *testing.T) {
+	if err := restartApp(""); err != nil {
+		t.Fatal(err)
+	}
+	// osascript reports "false": app not running, nothing to do.
+	calls := fakeExec(t, map[string]string{"/usr/bin/osascript": "false"})
+	if err := restartApp("Foo"); err != nil {
+		t.Fatal(err)
+	}
+	if len(*calls) != 1 {
+		t.Fatalf("calls = %v", *calls)
+	}
+	// osascript fails.
+	fakeExec(t, map[string]string{})
+	if err := restartApp("Foo"); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestWaitUntilQuitTimesOut(t *testing.T) {
+	fakeExec(t, map[string]string{"/usr/bin/osascript": "true"})
+	if err := waitUntilQuit("Foo", time.Millisecond); err == nil {
+		t.Fatal("expected timeout")
+	}
+	fakeExec(t, map[string]string{"/usr/bin/osascript": "false"})
+	if err := waitUntilQuit("Foo", time.Second); err != nil {
+		t.Fatal(err)
 	}
 }

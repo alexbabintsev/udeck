@@ -3,6 +3,8 @@ package widgets
 import (
 	"image"
 	"image/color"
+	"math"
+	"strings"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 	"golang.org/x/image/font"
@@ -29,10 +31,10 @@ type TextAnchor struct {
 }
 
 // Convenience constructors.
-func FromLeft(px int) TextAnchor   { return TextAnchor{AnchorLeft, px} }
-func FromRight(px int) TextAnchor  { return TextAnchor{AnchorRight, px} }
-func FromTop(px int) TextAnchor    { return TextAnchor{AnchorTop, px} }
-func FromBottom(px int) TextAnchor { return TextAnchor{AnchorBottom, px} }
+func FromLeft(px int) TextAnchor    { return TextAnchor{AnchorLeft, px} }
+func FromRight(px int) TextAnchor   { return TextAnchor{AnchorRight, px} }
+func FromTop(px int) TextAnchor     { return TextAnchor{AnchorTop, px} }
+func FromBottom(px int) TextAnchor  { return TextAnchor{AnchorBottom, px} }
 func CenterX(offset int) TextAnchor { return TextAnchor{AnchorCenterH, offset} }
 func CenterY(offset int) TextAnchor { return TextAnchor{AnchorCenterV, offset} }
 
@@ -40,7 +42,7 @@ func CenterY(offset int) TextAnchor { return TextAnchor{AnchorCenterV, offset} }
 type TextAlign int
 
 const (
-	AlignTopLeft      TextAlign = iota
+	AlignTopLeft TextAlign = iota
 	AlignTopCenter
 	AlignTopRight
 	AlignMiddleLeft
@@ -55,12 +57,12 @@ const textMinSize = 18.0
 
 // drawText renders text on img.
 //
-//   anchorX, anchorY — position the top-left corner of the text block
-//   blockW, blockH   — block dimensions; text shrinks to fit width
-//   align            — where text sits inside the block (9 positions)
-//   size             — starting font size; shrinks to fit, minimum 18
-//   bold             — use bold/regular face
-//   tracking         — optional letter-spacing in pixels (default 0)
+//	anchorX, anchorY — position the top-left corner of the text block
+//	blockW, blockH   — block dimensions; text shrinks to fit width
+//	align            — where text sits inside the block (9 positions)
+//	size             — starting font size; shrinks to fit, minimum 18
+//	bold             — use bold/regular face
+//	tracking         — optional letter-spacing in pixels (default 0)
 func drawText(
 	img *image.RGBA,
 	text string,
@@ -144,53 +146,51 @@ func resolveAnchorY(a TextAnchor, blockH, canvasH int) int {
 	}
 }
 
-// textFaceForBlock returns a face that fits text within maxWidth, min size 18.
-func textFaceForBlock(text string, maxWidth int, startSize float64, bold bool) (font.Face, string) {
-	ft := loadSpaceMonoFont(bold)
+// fitFace returns the largest face (startSize down to minSize in step
+// decrements) at which text fits maxWidth. If even minSize is too wide the
+// text is shortened with an ellipsis, one rune at a time. It returns nil
+// only for blank text.
+func fitFace(text string, maxWidth int, startSize, minSize, step float64, bold bool) (font.Face, string) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil, ""
+	}
+	ft := uiFont(bold)
 	if ft == nil {
-		return nil, text
+		return nil, ""
 	}
-	if startSize < textMinSize {
-		startSize = textMinSize
+	newFace := func(size float64) font.Face {
+		face, err := opentype.NewFace(ft, &opentype.FaceOptions{Size: size, DPI: 72, Hinting: font.HintingFull})
+		if err != nil {
+			return nil
+		}
+		return face
 	}
+	startSize = math.Max(startSize, minSize)
 
-	display := text
-	runes := []rune(display)
-	for len(runes) > 0 {
-		candidate := string(runes)
-		size := startSize
-		for size >= textMinSize {
-			face, err := opentype.NewFace(ft, &opentype.FaceOptions{
-				Size:    size,
-				DPI:     72,
-				Hinting: font.HintingFull,
-			})
-			if err != nil {
+	runes := []rune(text)
+	candidate := text
+	for keep := len(runes); keep >= 1; keep-- {
+		if keep < len(runes) {
+			candidate = string(runes[:keep]) + "…"
+		}
+		for size := startSize; size >= minSize; size -= step {
+			face := newFace(size)
+			if face == nil {
 				break
 			}
 			if font.MeasureString(face, candidate).Round() <= maxWidth {
 				return face, candidate
 			}
 			face.Close()
-			size -= 1
 		}
-		if len(runes) == 1 {
-			break
-		}
-		runes = runes[:len(runes)-1]
-		runes = []rune(string(runes) + "…")
 	}
+	return newFace(minSize), candidate
+}
 
-	// fallback at min size
-	face, err := opentype.NewFace(ft, &opentype.FaceOptions{
-		Size:    textMinSize,
-		DPI:     72,
-		Hinting: font.HintingFull,
-	})
-	if err != nil {
-		return nil, text
-	}
-	return face, string(runes)
+// textFaceForBlock fits text for drawText (minimum size textMinSize).
+func textFaceForBlock(text string, maxWidth int, startSize float64, bold bool) (font.Face, string) {
+	return fitFace(text, maxWidth, startSize, textMinSize, 1, bold)
 }
 
 // drawIcon draws a lucide icon by ID into a square inscribed in the block.
