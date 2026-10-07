@@ -3,6 +3,7 @@ package icons
 import (
 	"image"
 	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
@@ -59,5 +60,36 @@ func TestExpandTildeAndHelpers(t *testing.T) {
 	}
 	if w, h := SlotDimensions(3, 2); w != WideWidth || h != IconHeight {
 		t.Fatal("SlotDimensions")
+	}
+}
+
+func TestJPEGQualityAffectsSize(t *testing.T) {
+	defer SetJPEGQuality(0)
+	path := filepath.Join(t.TempDir(), "noise.png")
+	img := image.NewRGBA(image.Rect(0, 0, 196, 196))
+	for i := range img.Pix {
+		img.Pix[i] = byte(i * 7)
+	}
+	f, _ := os.Create(path)
+	_ = png.Encode(f, img)
+	f.Close()
+
+	SetJPEGQuality(95)
+	big, err := LoadForButton(path, Insets{}, [2]int{0, 0}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	SetJPEGQuality(40)
+	small, _ := LoadForButton(path, Insets{}, [2]int{0, 0}, "")
+	if len(small) >= len(big) {
+		t.Fatalf("q40 (%d bytes) must be smaller than q95 (%d)", len(small), len(big))
+	}
+	SetJPEGQuality(0)
+	if jpegQuality() != DefaultJPEGQuality {
+		t.Fatal("0 must restore the default")
+	}
+	SetJPEGQuality(500)
+	if jpegQuality() != DefaultJPEGQuality {
+		t.Fatal("out-of-range must fall back to the default")
 	}
 }

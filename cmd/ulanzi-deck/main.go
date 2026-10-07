@@ -18,6 +18,7 @@ import (
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/device"
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/preflight"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/widgets"
@@ -253,6 +254,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) error {
 // newRunSession builds the runtime state for cfg and uploads the initial
 // page. On error nothing is left running.
 func newRunSession(cfgPath string, cfg *config.Config, dev deck) (*session, error) {
+	icons.SetJPEGQuality(cfg.Device.JPEGQuality)
 	nav := newNavigator(cfg.PagesOrDefault())
 	toggles := newToggleManager(cfg)
 	widgetMgr, err := widgets.NewManager(cfg)

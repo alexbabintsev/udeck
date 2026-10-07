@@ -12,6 +12,7 @@ import (
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/device"
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/widgets"
 )
@@ -417,6 +418,7 @@ func (s *session) reloadConfig(reloader *configReloader) {
 		log.Printf("config reload failed: %v", err)
 		return
 	}
+	icons.SetJPEGQuality(nextCfg.Device.JPEGQuality)
 	nextNav := newNavigator(nextCfg.PagesOrDefault())
 	nextToggles := newToggleManager(nextCfg)
 	nextWidgetMgr, err := widgets.NewManager(nextCfg)

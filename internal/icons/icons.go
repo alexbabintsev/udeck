@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/srwiley/oksvg"
 	"github.com/srwiley/rasterx"
@@ -27,6 +28,29 @@ const (
 	WideWidth    = 458
 	PackIconSize = 128
 )
+
+// DefaultJPEGQuality balances size against looks on the 196px keys: the
+// D200 has limited throughput, and at 75 a typical widget image is ~30%
+// smaller than at 90 with no visible difference on the device.
+const DefaultJPEGQuality = 75
+
+var quality atomic.Int32
+
+// SetJPEGQuality sets the quality (1-100) of key images; 0 restores the
+// default.
+func SetJPEGQuality(q int) {
+	if q < 1 || q > 100 {
+		q = DefaultJPEGQuality
+	}
+	quality.Store(int32(q))
+}
+
+func jpegQuality() int {
+	if q := quality.Load(); q > 0 {
+		return int(q)
+	}
+	return DefaultJPEGQuality
+}
 
 type Insets struct {
 	Top    int
@@ -83,7 +107,7 @@ func loadSized(path string, margins Insets, width, height int, iconColor string)
 	draw.BiLinear.Scale(dst, target, src, src.Bounds(), draw.Over, nil)
 
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 90}); err != nil {
+	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: jpegQuality()}); err != nil {
 		return nil, fmt.Errorf("encode icon: %w", err)
 	}
 	return buf.Bytes(), nil
@@ -201,7 +225,7 @@ func loadLucideSized(name string, _ Insets, width, height int, iconColor string)
 	}
 
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 90}); err != nil {
+	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: jpegQuality()}); err != nil {
 		return nil, fmt.Errorf("encode icon: %w", err)
 	}
 	return buf.Bytes(), nil

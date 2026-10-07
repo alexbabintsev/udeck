@@ -31,6 +31,7 @@ func indent(s, prefix string) string {
 func TestValidateRejects(t *testing.T) {
 	cases := map[string]struct{ yaml, want string }{
 		"brightness":         {"device:\n  brightness: 101\nbuttons: []\n", "brightness out of range"},
+		"jpeg quality":       {"device:\n  jpeg_quality: 101\nbuttons: []\n", "jpeg_quality out of range"},
 		"device margins":     {"device:\n  icon_margins: {left: 100, right: 100}\nbuttons: []\n", "left+right"},
 		"negative margins":   {btnYAML("icon_margins: {top: -1}"), "negative"},
 		"tall margins":       {btnYAML("icon_margins: {top: 100, bottom: 100}"), "top+bottom"},

@@ -31,6 +31,10 @@ actual development milestones rather than formal releases.
 - Lucide icons are embedded into the binary.
 - Widget HTTP responses are size-limited and remote artwork dimensions
   are checked before decoding.
+- Key images are encoded at JPEG quality 75 by default (was 90), about
+  30% fewer bytes; configurable with `device.jpeg_quality`. Fast
+  navigation through several large pages exceeded what the D200 can
+  take in and made it reject writes.
 - Fixed the device hanging for up to a minute (and finally rebooting)
   after a write error: an interrupted upload is now completed with
   filler packets before it is resent. Restarting from the header made

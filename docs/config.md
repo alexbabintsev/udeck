@@ -87,6 +87,20 @@ brightness: 65
 brightness: 100
 ```
 
+#### `device.jpeg_quality`
+
+- Type: integer
+- Range: `1..100`
+- Default: `75`
+
+JPEG quality of key images sent to the device. The D200 has limited
+throughput: smaller images keep fast page switching smooth. Raise it
+only if you see compression artifacts.
+
+```yaml
+jpeg_quality: 85
+```
+
 #### `device.icon_margins`
 
 Global inset for static icons.

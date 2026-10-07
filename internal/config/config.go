@@ -39,7 +39,9 @@ type ProjectWidgetSettings struct {
 }
 
 type DeviceConfig struct {
-	Brightness  *int        `yaml:"brightness,omitempty"`
+	Brightness *int `yaml:"brightness,omitempty"`
+	// JPEGQuality (1-100) of uploaded key images; 0 means the default.
+	JPEGQuality int         `yaml:"jpeg_quality,omitempty"`
 	LabelStyle  *LabelStyle `yaml:"label_style,omitempty"`
 	IconMargins *Insets     `yaml:"icon_margins,omitempty"`
 }
@@ -233,6 +235,9 @@ func Load(path string) (*Config, error) {
 func (c *Config) Validate() error {
 	if len(c.Pages) > 0 && len(c.Buttons) > 0 {
 		return fmt.Errorf("config cannot define both pages and buttons")
+	}
+	if q := c.Device.JPEGQuality; q < 0 || q > 100 {
+		return fmt.Errorf("device.jpeg_quality out of range: %d (1-100)", q)
 	}
 	if c.Device.Brightness != nil {
 		b := *c.Device.Brightness
