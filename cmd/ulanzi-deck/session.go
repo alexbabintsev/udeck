@@ -72,9 +72,11 @@ type session struct {
 	power <-chan powerEvent
 	// out receives one line per device event (dump-events, --debug).
 	out io.Writer
+	// tx performs all device writes off the loop goroutine; nil in
+	// dump-events mode.
+	tx *outbox
 
-	lastWrite time.Time
-	sleeping  bool
+	sleeping bool
 	// offline is set when recovery gave up; the loop then polls for the
 	// device to come back instead of exiting.
 	offline     bool
@@ -82,9 +84,6 @@ type session struct {
 }
 
 func (s *session) run(ctx context.Context) error {
-	if s.lastWrite.IsZero() {
-		s.lastWrite = time.Now()
-	}
 	var reloader *configReloader
 	if s.cfgPath != "" {
 		reloader = newConfigReloader(s.cfgPath, s.cfg.IconPaths())
@@ -132,9 +131,19 @@ func (s *session) run(ctx context.Context) error {
 			}
 		}
 
-		if s.nav != nil && time.Since(s.lastWrite) >= deviceKeepaliveInterval {
-			if err := s.do("keepalive", s.keepalive); err != nil {
-				return err
+		if s.tx != nil {
+			select {
+			case f := <-s.tx.Failures():
+				if err := s.recover("update", f.err, func() error { return s.tx.resend(f.job) }); err != nil {
+					return err
+				}
+				continue
+			default:
+			}
+			if s.tx.sinceWrite() >= deviceKeepaliveInterval {
+				if err := s.do("keepalive", s.keepalive); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -205,7 +214,7 @@ func (s *session) handlePacket(raw []byte) error {
 		if s.gestures != nil {
 			s.gestures.Reset()
 		}
-		return s.do("update page", s.refreshPage)
+		return s.do("update page", s.queuePage)
 	}
 	if btn != nil && btn.SyntheticBack {
 		return nil
@@ -258,7 +267,7 @@ func (s *session) dispatch(binding *config.GestureBinding) error {
 		return nil
 	}
 	if changed {
-		return s.do("switch page", s.refreshPage)
+		return s.do("switch page", s.queuePage)
 	}
 	return nil
 }
@@ -269,7 +278,6 @@ func (s *session) dispatch(binding *config.GestureBinding) error {
 func (s *session) do(what string, op func() error) error {
 	err := op()
 	if err == nil {
-		s.lastWrite = time.Now()
 		return nil
 	}
 	if !isDeviceError(err) {
@@ -291,7 +299,7 @@ func (s *session) recover(what string, cause error, retry func() error) error {
 	needFull := errors.Is(cause, device.ErrDeviceReset)
 	lastErr := cause
 	for attempt := 1; attempt <= deviceRecoverRetries; attempt++ {
-		reset, err := s.dev.Reconnect()
+		reset, err := s.reconnect(s.dev.Reconnect)
 		if err != nil {
 			lastErr = err
 			debug.Logf("recover attempt %d/%d: reconnect failed: %v", attempt, deviceRecoverRetries, err)
@@ -308,7 +316,6 @@ func (s *session) recover(what string, cause error, retry func() error) error {
 		}
 		err = op()
 		if err == nil {
-			s.lastWrite = time.Now()
 			log.Printf("device recovered (full redraw=%v)", needFull)
 			return nil
 		}
@@ -335,7 +342,7 @@ func (s *session) pollOffline() {
 		return
 	}
 	s.lastOffline = time.Now()
-	if _, err := s.dev.TryReconnect(); err != nil {
+	if _, err := s.reconnect(s.dev.TryReconnect); err != nil {
 		debug.Logf("offline: %v", err)
 		return
 	}
@@ -344,7 +351,6 @@ func (s *session) pollOffline() {
 		return
 	}
 	s.offline = false
-	s.lastWrite = time.Now()
 	log.Println("device reconnected")
 }
 
@@ -353,7 +359,10 @@ func (s *session) handlePower(evt powerEvent) (stop bool) {
 	case powerEventSleep:
 		log.Println("system sleep detected; dimming and closing device")
 		s.sleeping = true
-		prepareDeviceForSleep(s.dev)
+		if s.tx != nil {
+			s.tx.discard()
+		}
+		s.withTx(func() { prepareDeviceForSleep(s.dev) })
 	case powerEventWake:
 		log.Println("system wake detected; restoring device")
 		s.sleeping = false
@@ -365,7 +374,7 @@ func (s *session) handlePower(evt powerEvent) (stop bool) {
 		}
 	case powerEventShutdown:
 		log.Println("system shutdown detected; dimming and closing device")
-		prepareDeviceForSleep(s.dev)
+		s.withTx(func() { prepareDeviceForSleep(s.dev) })
 		return true
 	}
 	return false
@@ -381,7 +390,7 @@ func (s *session) restoreAfterWake() error {
 	}
 	var lastErr error
 	for attempt := 1; attempt <= wakeRecoverRetries; attempt++ {
-		if _, err := s.dev.Reconnect(); err != nil {
+		if _, err := s.reconnect(s.dev.Reconnect); err != nil {
 			lastErr = err
 			pause(500 * time.Millisecond)
 			continue
@@ -394,7 +403,6 @@ func (s *session) restoreAfterWake() error {
 			pause(500 * time.Millisecond)
 			continue
 		}
-		s.lastWrite = time.Now()
 		log.Println("device restored after wake")
 		return nil
 	}
@@ -421,7 +429,7 @@ func (s *session) reloadConfig(reloader *configReloader) {
 		log.Printf("widget resolve failed: %v", err)
 		return
 	}
-	if err := applyDeviceState(s.dev, nextCfg, buttons); err != nil {
+	if err := s.sendPageSync(nextCfg, buttons); err != nil {
 		_ = nextWidgetMgr.Close()
 		log.Printf("config apply failed: %v", err)
 		if isDeviceError(err) {
@@ -439,16 +447,64 @@ func (s *session) reloadConfig(reloader *configReloader) {
 	s.toggles = nextToggles
 	s.widgets = nextWidgetMgr
 	reloader.UpdatePaths(s.cfgPath, nextCfg.IconPaths())
-	s.lastWrite = time.Now()
 	log.Println("config reloaded")
 }
 
+// refreshPage uploads the current page and waits for the result.
 func (s *session) refreshPage() error {
 	buttons, err := resolvedCurrentButtons(s.nav, s.toggles, s.widgets)
 	if err != nil {
 		return err
 	}
-	return applyDeviceState(s.dev, s.cfg, buttons)
+	return s.sendPageSync(s.cfg, buttons)
+}
+
+// queuePage schedules the current page for upload (navigation). Only
+// building the button list can fail here; transfer errors come back
+// through tx.Failures.
+func (s *session) queuePage() error {
+	if s.tx == nil {
+		return s.refreshPage()
+	}
+	buttons, err := resolvedCurrentButtons(s.nav, s.toggles, s.widgets)
+	if err != nil {
+		return err
+	}
+	s.tx.queuePage(s.cfg, buttons)
+	return nil
+}
+
+func (s *session) sendPageSync(cfg *config.Config, buttons []config.Button) error {
+	if s.tx != nil {
+		return s.tx.sendPage(cfg, buttons)
+	}
+	if err := sendPage(s.dev, buttons); err != nil {
+		return err
+	}
+	extra, err := styleAndBrightness(cfg)
+	if err != nil {
+		return err
+	}
+	for _, pkt := range extra {
+		if err := s.dev.SendPacket(pkt); err != nil {
+			return &deviceError{err}
+		}
+	}
+	return nil
+}
+
+// reconnect swaps the HID handle while no transfer is running.
+func (s *session) reconnect(fn func() (bool, error)) (reset bool, err error) {
+	s.withTx(func() { reset, err = fn() })
+	return reset, err
+}
+
+func (s *session) withTx(fn func()) {
+	if s.tx == nil {
+		fn()
+		return
+	}
+	s.tx.exclusive(fn)
 }
 
 func (s *session) updateButtonsFn(ids ...string) func() error {
@@ -479,11 +535,14 @@ func (s *session) updateButtons(ids []string) error {
 		debug.Logf("update for off-screen %v skipped", ids)
 		return nil
 	}
+	if s.tx != nil {
+		s.tx.queueButtons(changed)
+		return nil
+	}
 	pkts, err := protocol.PartiallyUpdateButtonsFromConfig(changed)
 	if err != nil {
 		return fmt.Errorf("build partial page zip: %w", err)
 	}
-	debug.Logf("partial update: %d buttons, %d packets", len(changed), len(pkts))
 	if err := s.dev.SendPackets(pkts); err != nil {
 		return &deviceError{fmt.Errorf("send partial page zip: %w", err)}
 	}
@@ -492,15 +551,21 @@ func (s *session) updateButtons(ids []string) error {
 
 // keepalive writes one packet that changes nothing on screen, so an idle
 // link still surfaces dead handles and the device sees host traffic.
+// keepalive writes one packet that changes nothing on screen, so an idle
+// link still surfaces dead handles and the device sees host traffic. It
+// is skipped while a transfer is running.
 func (s *session) keepalive() error {
 	pkt, err := keepalivePacket(s.cfg)
 	if err != nil {
 		return err
 	}
-	if err := s.dev.SendPacket(pkt); err != nil {
-		return &deviceError{fmt.Errorf("keepalive: %w", err)}
+	sent, err := s.tx.trySendPacket(pkt)
+	if err != nil {
+		return fmt.Errorf("keepalive: %w", err)
 	}
-	debug.Logf("keepalive sent")
+	if sent {
+		debug.Logf("keepalive sent")
+	}
 	return nil
 }
 
@@ -544,31 +609,6 @@ func sendPage(dev deck, buttons []config.Button) error {
 	return nil
 }
 
-// applyDeviceState uploads the page and re-applies label style and
-// brightness, which the device resets with every full page.
-func applyDeviceState(dev deck, cfg *config.Config, buttons []config.Button) error {
-	if err := sendPage(dev, buttons); err != nil {
-		return err
-	}
-	pkt, err := protocol.SetLabelStylePacket(cfg.Device.LabelStyle)
-	if err != nil {
-		return fmt.Errorf("set label style: %w", err)
-	}
-	if err := dev.SendPacket(pkt); err != nil {
-		return &deviceError{fmt.Errorf("set label style: %w", err)}
-	}
-	if cfg.Device.Brightness != nil {
-		pkt, err := protocol.SetBrightnessPacket(*cfg.Device.Brightness)
-		if err != nil {
-			return err
-		}
-		if err := dev.SendPacket(pkt); err != nil {
-			return &deviceError{fmt.Errorf("set brightness: %w", err)}
-		}
-	}
-	return nil
-}
-
 func resolvedCurrentButtons(nav *navigator, toggles *toggleManager, widgetMgr *widgets.Manager) ([]config.Button, error) {
 	buttons := nav.currentButtons()
 	if toggles != nil {
@@ -583,4 +623,19 @@ func resolvedCurrentButtons(nav *navigator, toggles *toggleManager, widgetMgr *w
 		buttons = resolved
 	}
 	return buttons, nil
+}
+
+// close stops the writer and the current widget manager (the session
+// swaps managers on config reload).
+func (s *session) close() {
+	if s.actions != nil {
+		s.actions.close()
+		s.actions = nil
+	}
+	if s.tx != nil {
+		s.tx.close()
+	}
+	if s.widgets != nil {
+		_ = s.widgets.Close()
+	}
 }

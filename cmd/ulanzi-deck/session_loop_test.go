@@ -65,6 +65,7 @@ const (
 func newTestSession(t *testing.T, yaml string) (*session, *fakeDeck) {
 	t.Helper()
 	noPause(t)
+	noTransferGap(t)
 	path, cfg := writeConfig(t, yaml)
 	dev := &fakeDeck{}
 	s, err := newRunSession(path, cfg, dev)
@@ -72,7 +73,7 @@ func newTestSession(t *testing.T, yaml string) (*session, *fakeDeck) {
 		t.Fatalf("newRunSession: %v", err)
 	}
 	s.out = &bytes.Buffer{}
-	t.Cleanup(func() { _ = s.widgets.Close() })
+	t.Cleanup(s.close)
 	dev.reset()
 	return s, dev
 }
@@ -94,6 +95,9 @@ func runReads(t *testing.T, s *session, dev *fakeDeck, reads ...readStep) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("loop did not stop")
+	}
+	if s.tx != nil {
+		s.tx.drain()
 	}
 }
 
@@ -121,7 +125,7 @@ func TestNewRunSessionUploadsInitialPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer s.widgets.Close()
+	defer s.close()
 	got := dev.cmds()
 	want := []protocol.Cmd{protocol.CmdSetButtons, protocol.CmdSetLabelStyle, protocol.CmdSetBrightness}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
@@ -415,7 +419,7 @@ func TestDumpModePrintsEvents(t *testing.T) {
 
 func TestKeepaliveSendsSinglePacket(t *testing.T) {
 	s, dev := newTestSession(t, loopConfig)
-	s.lastWrite = time.Now().Add(-time.Hour)
+	s.tx.setLastWrite(time.Now().Add(-time.Hour))
 	ctx, cancel := context.WithCancel(context.Background())
 	dev.onIdle = cancel
 	if err := s.run(ctx); err != nil {

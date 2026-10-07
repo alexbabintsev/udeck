@@ -220,9 +220,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	s.out = stdout
-	// The session swaps the manager on config reload; close whichever one
-	// is current at exit.
-	defer func() { _ = s.widgets.Close() }()
+	defer s.close()
 
 	if cfg.Device.Brightness != nil {
 		fmt.Fprintf(stdout, "applied brightness=%d\n", *cfg.Device.Brightness)
@@ -256,11 +254,11 @@ func newRunSession(cfgPath string, cfg *config.Config, dev deck) (*session, erro
 		toggles:  toggles,
 		widgets:  widgetMgr,
 		actions:  newActionRunner(),
+		tx:       newOutbox(dev),
 	}
 	if err := s.refreshPage(); err != nil {
-		_ = widgetMgr.Close()
+		s.close()
 		return nil, err
 	}
-	s.lastWrite = time.Now()
 	return s, nil
 }

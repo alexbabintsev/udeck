@@ -95,11 +95,13 @@ func bindingNeedsLoop(binding *config.GestureBinding) bool {
 // actionRunner executes actions in order on a single worker goroutine.
 type actionRunner struct {
 	jobs chan func() error
+	done chan struct{}
 }
 
 func newActionRunner() *actionRunner {
-	r := &actionRunner{jobs: make(chan func() error, 32)}
+	r := &actionRunner{jobs: make(chan func() error, 32), done: make(chan struct{})}
 	go func() {
+		defer close(r.done)
 		for job := range r.jobs {
 			if err := job(); err != nil {
 				log.Printf("action error: %v", err)
@@ -115,4 +117,11 @@ func (r *actionRunner) submit(job func() error) {
 	default:
 		log.Println("action queue full; dropping press")
 	}
+}
+
+// close lets queued actions finish and stops the worker. No submit may
+// follow.
+func (r *actionRunner) close() {
+	close(r.jobs)
+	<-r.done
 }

@@ -40,6 +40,9 @@ type fakeDeck struct {
 	// onIdle runs when the read queue is empty (typically to cancel
 	// the loop's context).
 	onIdle func()
+	// gate, when set, makes SendPackets wait for a value (a stalled
+	// device).
+	gate chan struct{}
 }
 
 type readStep struct {
@@ -75,6 +78,12 @@ func (f *fakeDeck) SendPacket(pkt [protocol.PacketSize]byte) error {
 }
 
 func (f *fakeDeck) SendPackets(pkts [][protocol.PacketSize]byte) error {
+	f.mu.Lock()
+	gate := f.gate
+	f.mu.Unlock()
+	if gate != nil {
+		<-gate
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.nextSendErr(); err != nil {
@@ -210,6 +219,14 @@ func writeConfig(t *testing.T, yaml string) (string, *config.Config) {
 		t.Fatalf("load config: %v", err)
 	}
 	return path, cfg
+}
+
+// noTransferGap removes the pacing between uploads for the test.
+func noTransferGap(t *testing.T) {
+	t.Helper()
+	old := transferGapPerPacket
+	transferGapPerPacket = 0
+	t.Cleanup(func() { transferGapPerPacket = old })
 }
 
 // noPause makes recovery/back-off sleeps instant for the test.

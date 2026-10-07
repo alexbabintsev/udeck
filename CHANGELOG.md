@@ -31,6 +31,12 @@ actual development milestones rather than formal releases.
 - Lucide icons are embedded into the binary.
 - Widget HTTP responses are size-limited and remote artwork dimensions
   are checked before decoding.
+- Device writes run on their own goroutine, so key presses are handled
+  even while the D200 refuses writes for seconds. Queued uploads are
+  coalesced (only the newest page / newest image of a key is sent),
+  keys already showing the same content are skipped, and uploads are
+  paced in proportion to their size so the device can unpack them.
+- The Spotify play/pause icon flips immediately on tap.
 - Widgets that are not on screen pause their polling and refresh as soon
   as their page is shown again (previously a page opened once, e.g.
   freqtrade, kept polling its API forever). The Spotify service stops
