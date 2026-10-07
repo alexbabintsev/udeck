@@ -9,6 +9,7 @@ import (
 
 	hid "github.com/sstallion/go-hid"
 
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
 )
 
@@ -21,41 +22,88 @@ const (
 	openRetryMax    = 2 * time.Second
 	writeRetries    = 8
 	writeRetryDelay = 60 * time.Millisecond
+
+	transferRetries    = 5
+	transferRetryDelay = 150 * time.Millisecond
+
+	// deviceResetThreshold separates a real USB re-enumeration (the D200
+	// is off the bus for seconds while it reboots) from the transient
+	// "no HID devices found" that macOS reports for a few hundred
+	// milliseconds while a torn-down IOHIDDevice client is replaced.
+	deviceResetThreshold = 2 * time.Second
 )
+
+// ErrDeviceReset reports that the D200 vanished from the bus and came
+// back (USB re-enumeration, replug, firmware reset). Its screen and host
+// mode state are gone, so the caller must upload the full page again.
+var ErrDeviceReset = errors.New("device was reset")
 
 // Device wraps a HID handle for the Ulanzi D200.
 type Device struct {
 	mu  sync.Mutex
-	dev *hid.Device
+	dev hidHandle
+}
+
+// Seams for tests: the real hidapi calls and sleeping.
+var (
+	hidInit   = hid.Init
+	openFirst = func() (hidHandle, error) {
+		dev, err := hid.OpenFirst(VendorID, ProductID)
+		if err != nil {
+			return nil, err
+		}
+		return dev, nil
+	}
+	sleep = time.Sleep
+	now   = time.Now
+)
+
+// hidHandle is the subset of *hid.Device used here; tests substitute it.
+type hidHandle interface {
+	Write(b []byte) (int, error)
+	ReadWithTimeout(b []byte, timeout time.Duration) (int, error)
+	Close() error
 }
 
 // Open initializes the hidapi runtime (idempotent) and opens the first
 // matching D200. The device must not be claimed by Ulanzi Studio.
 func Open() (*Device, error) {
-	if err := hid.Init(); err != nil {
+	if err := hidInit(); err != nil {
 		return nil, fmt.Errorf("hid init: %w", err)
 	}
-	dev, err := openWithRetry()
+	dev, _, err := openWithRetry(openRetries)
 	if err != nil {
 		return nil, err
 	}
 	return &Device{dev: dev}, nil
 }
 
-func openWithRetry() (*hid.Device, error) {
+// openWithRetry opens the first D200. missing reports that the device
+// was absent from the bus for at least deviceResetThreshold, which means
+// it was re-enumerated and lost its screen state.
+func openWithRetry(attempts int) (dev hidHandle, missing bool, err error) {
 	var lastErr error
-	for attempt := 0; attempt < openRetries; attempt++ {
-		dev, err := hid.OpenFirst(VendorID, ProductID)
+	var firstMissing time.Time
+	for attempt := 0; attempt < attempts; attempt++ {
+		dev, err := openFirst()
 		if err == nil {
-			return dev, nil
+			missing = !firstMissing.IsZero() && now().Sub(firstMissing) >= deviceResetThreshold
+			if attempt > 0 {
+				debug.Logf("hid open succeeded after %d attempts (device reset=%v)", attempt+1, missing)
+			}
+			return dev, missing, nil
 		}
 		lastErr = err
-		if !shouldRetryOpen(err) || attempt == openRetries-1 {
+		if isNotFoundErr(err) && firstMissing.IsZero() {
+			firstMissing = now()
+		}
+		debug.Logf("hid open attempt %d/%d failed: %v", attempt+1, attempts, err)
+		if !shouldRetryOpen(err) || attempt == attempts-1 {
 			break
 		}
-		time.Sleep(openRetryBackoff(attempt))
+		sleep(openRetryBackoff(attempt))
 	}
-	return nil, fmt.Errorf("hid open %04x:%04x: %w", VendorID, ProductID, lastErr)
+	return nil, !firstMissing.IsZero(), fmt.Errorf("hid open %04x:%04x: %w", VendorID, ProductID, lastErr)
 }
 
 func (d *Device) Close() error {
@@ -73,10 +121,9 @@ func (d *Device) Close() error {
 }
 
 // Detach marks the HID handle unusable without calling into hid_close.
-// This is a defensive escape hatch for cases where macOS power
-// transitions leave the underlying handle in a bad state and hid_close
-// itself may crash inside cgo. The OS will reclaim the descriptor when
-// the process exits.
+// It leaks the handle — and because macOS hidapi opens devices
+// exclusively, a leaked handle blocks every later open with a privilege
+// violation. Only use it when hid_close itself is unsafe to call.
 func (d *Device) Detach() {
 	if d == nil {
 		return
@@ -86,30 +133,53 @@ func (d *Device) Detach() {
 	d.mu.Unlock()
 }
 
-// reopen swaps the underlying hid handle for a freshly opened one to
-// the same VID/PID. macOS hidapi occasionally tears down an
-// IOHIDDevice client ("Device is disconnected") while the physical
-// device stays connected and in host mode — the screen contents
-// survive, only the kernel-side handle is dead. Reopening in place
-// lets writes resume without going through the full recoverDevice
-// path (which would re-upload the page ZIP and visibly flash all
-// keys).
-func (d *Device) reopen() error {
+// Reconnect closes the current handle and opens a fresh one to the same
+// VID/PID. reset reports that the device disappeared from the bus in the
+// meantime and must be re-initialized with a full page upload; when it is
+// false the device kept its screen and host mode, and only the request
+// that failed needs to be repeated.
+func (d *Device) Reconnect() (reset bool, err error) {
+	return d.reopenWith(openRetries)
+}
+
+// TryReconnect is Reconnect with a single open attempt, for polling a
+// device that is unplugged without blocking the caller for long.
+func (d *Device) TryReconnect() (reset bool, err error) {
+	return d.reopenWith(1)
+}
+
+// reopen swaps the underlying hid handle for a freshly opened one.
+// macOS hidapi occasionally tears down an IOHIDDevice client ("Device is
+// disconnected") while the physical device stays connected and in host
+// mode — the screen contents survive, only the kernel-side handle is
+// dead. Reopening in place lets I/O resume without re-uploading the page
+// ZIP, which would visibly flash all keys.
+func (d *Device) reopen() (missing bool, err error) {
+	return d.reopenWith(openRetries)
+}
+
+func (d *Device) reopenWith(attempts int) (missing bool, err error) {
 	d.mu.Lock()
 	old := d.dev
 	d.dev = nil
 	d.mu.Unlock()
 	if old != nil {
-		_ = old.Close()
+		// Close is required: the open is exclusive on macOS, so a leaked
+		// handle would make the reopen below fail with 0xE00002C1.
+		if cerr := old.Close(); cerr != nil {
+			debug.Logf("hid close before reopen: %v", cerr)
+		}
 	}
-	fresh, err := openWithRetry()
+	fresh, missing, err := openWithRetry(attempts)
 	if err != nil {
-		return err
+		debug.Logf("hid reopen failed: %v", err)
+		return missing, err
 	}
 	d.mu.Lock()
 	d.dev = fresh
 	d.mu.Unlock()
-	return nil
+	debug.Logf("hid handle reopened (device was missing=%v)", missing)
+	return missing, nil
 }
 
 func isStaleHandleErr(err error) bool {
@@ -121,53 +191,119 @@ func isStaleHandleErr(err error) bool {
 		strings.Contains(msg, "no such device")
 }
 
-// SendPacket writes a single 1024-byte HID frame to the device. macOS
-// hidapi requires a leading 0x00 report-ID byte for devices that don't
-// use numbered reports, so the wire write is 1025 bytes total.
+// SendPacket writes a single 1024-byte HID frame to the device, retrying
+// transient macOS write errors. Use it only for self-contained
+// single-packet commands: retrying a frame whose failed write may still
+// have reached the device is harmless there, but corrupts a multi-packet
+// transfer (see SendPackets).
 func (d *Device) SendPacket(pkt [protocol.PacketSize]byte) error {
-	buf := make([]byte, 1+protocol.PacketSize)
-	// buf[0] is left at 0x00 (report ID).
-	copy(buf[1:], pkt[:])
-
 	reopenUsed := false
 	var lastErr error
 	for attempt := 0; attempt < writeRetries; attempt++ {
-		d.mu.Lock()
-		dev := d.dev
-		d.mu.Unlock()
-		if dev == nil {
-			return errors.New("device detached")
-		}
-		n, err := dev.Write(buf)
+		err := d.writeFrame(pkt)
 		if err == nil {
-			if n != len(buf) {
-				return fmt.Errorf("short hid write: %d/%d", n, len(buf))
-			}
 			return nil
 		}
 		lastErr = err
+		debug.Logf("hid write attempt %d/%d failed: %v", attempt+1, writeRetries, err)
 		if isStaleHandleErr(err) && !reopenUsed {
 			reopenUsed = true
-			if rerr := d.reopen(); rerr != nil {
-				return fmt.Errorf("hid write: %w (reopen: %v)", err, rerr)
+			if err := d.reopenAfter(err); err != nil {
+				return err
 			}
 			continue
 		}
 		if !shouldRetryWrite(err) || attempt == writeRetries-1 {
 			break
 		}
-		time.Sleep(writeRetryDelay)
+		sleep(writeRetryDelay)
 	}
 	return fmt.Errorf("hid write: %w", lastErr)
 }
 
-// SendPackets writes a sequence of HID frames (used for multi-packet
-// transfers such as OUT_SET_BUTTONS).
+// SendPackets writes a multi-packet transfer (OUT_SET_BUTTONS and
+// friends). A failed write is never repeated in place: macOS can report
+// an error for a frame the device did receive, and a duplicated or
+// missing continuation chunk silently corrupts the ZIP, so the device
+// drops the whole page and keeps showing the old one. Instead the whole
+// transfer is restarted from its header frame, which resynchronises the
+// device-side parser.
 func (d *Device) SendPackets(pkts [][protocol.PacketSize]byte) error {
-	for _, pkt := range pkts {
-		if err := d.SendPacket(pkt); err != nil {
-			return err
+	if len(pkts) == 1 {
+		return d.SendPacket(pkts[0])
+	}
+	reopenUsed := false
+	var lastErr error
+	for attempt := 0; attempt < transferRetries; attempt++ {
+		if attempt > 0 {
+			// Give the device time to finish whatever made it reject the
+			// frame (typically still unpacking the previous page).
+			sleep(time.Duration(attempt) * transferRetryDelay)
 		}
+		i, err := d.writeTransfer(pkts)
+		if err == nil {
+			if attempt > 0 {
+				debug.Logf("%d-packet transfer succeeded on attempt %d", len(pkts), attempt+1)
+			}
+			return nil
+		}
+		lastErr = err
+		debug.Logf("transfer attempt %d/%d failed at packet %d/%d: %v; restarting from header",
+			attempt+1, transferRetries, i+1, len(pkts), err)
+		if isStaleHandleErr(err) && !reopenUsed {
+			reopenUsed = true
+			if err := d.reopenAfter(err); err != nil {
+				return err
+			}
+			continue
+		}
+		if !shouldRetryWrite(err) {
+			break
+		}
+	}
+	return fmt.Errorf("hid write: %w", lastErr)
+}
+
+func (d *Device) writeTransfer(pkts [][protocol.PacketSize]byte) (int, error) {
+	for i, pkt := range pkts {
+		if err := d.writeFrame(pkt); err != nil {
+			return i, err
+		}
+	}
+	return 0, nil
+}
+
+// writeFrame performs one HID write. macOS hidapi requires a leading 0x00
+// report-ID byte for devices without numbered reports, so the wire write
+// is 1025 bytes.
+func (d *Device) writeFrame(pkt [protocol.PacketSize]byte) error {
+	d.mu.Lock()
+	dev := d.dev
+	d.mu.Unlock()
+	if dev == nil {
+		return errors.New("device detached")
+	}
+	var buf [1 + protocol.PacketSize]byte
+	copy(buf[1:], pkt[:])
+	n, err := dev.Write(buf[:])
+	if err != nil {
+		return err
+	}
+	if n != len(buf) {
+		return fmt.Errorf("short hid write: %d/%d", n, len(buf))
+	}
+	return nil
+}
+
+// reopenAfter replaces a stale handle after cause. It returns nil when
+// the caller may retry, or the error to give up with.
+func (d *Device) reopenAfter(cause error) error {
+	missing, err := d.reopen()
+	if err != nil {
+		return fmt.Errorf("hid write: %w (reopen: %v)", cause, err)
+	}
+	if missing {
+		return fmt.Errorf("hid write: %w: %w", cause, ErrDeviceReset)
 	}
 	return nil
 }
@@ -201,8 +337,13 @@ func (d *Device) ReadPacket(timeout time.Duration) ([]byte, error) {
 		// mode. Reopen the handle in place and treat the read as a
 		// soft poll miss — the next loop iteration will read again.
 		if isStaleHandleErr(err) {
-			if rerr := d.reopen(); rerr != nil {
+			debug.Logf("hid read: stale handle: %v", err)
+			missing, rerr := d.reopen()
+			if rerr != nil {
 				return nil, fmt.Errorf("hid read: %w (reopen: %v)", err, rerr)
+			}
+			if missing {
+				return nil, fmt.Errorf("hid read: %w: %w", err, ErrDeviceReset)
 			}
 			return nil, nil
 		}
@@ -226,25 +367,11 @@ func (d *Device) Info(timeout time.Duration) (string, error) {
 		if len(raw) == 0 {
 			continue
 		}
-		cmd, length, err := protocol.DecodeHeader(raw)
-		if err != nil {
+		ev, err := protocol.ParseEvent(raw)
+		if err != nil || ev.Kind != protocol.EventDeviceInfo {
 			continue
 		}
-		if cmd != protocol.CmdInDeviceInfo {
-			continue
-		}
-		if int(length)+protocol.HeaderSize > len(raw) {
-			length = uint32(len(raw) - protocol.HeaderSize)
-		}
-		payload := raw[protocol.HeaderSize : protocol.HeaderSize+length]
-		// trim trailing zero bytes
-		for i := len(payload) - 1; i >= 0; i-- {
-			if payload[i] != 0 {
-				payload = payload[:i+1]
-				break
-			}
-		}
-		return string(payload), nil
+		return ev.Info, nil
 	}
 	return "", errors.New("no device info received within timeout")
 }
@@ -260,6 +387,11 @@ func shouldRetryOpen(err error) bool {
 		strings.Contains(msg, "no hid devices") ||
 		strings.Contains(msg, "not found") ||
 		strings.Contains(msg, "0xe00002c1")
+}
+
+func isNotFoundErr(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "no hid devices") || strings.Contains(msg, "not found")
 }
 
 func shouldRetryWrite(err error) bool {
