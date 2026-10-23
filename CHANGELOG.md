@@ -36,6 +36,9 @@ actual development milestones rather than formal releases.
   (`device.image_quality`). Together they cut uploads to about a third:
   the main page went from ~60 to 18 packets. libwebp is compiled in via
   cgo, no extra install is needed.
+- The memory widget reads system memory in-process (sysctl and
+  host_statistics64) instead of running `sysctl` and `vm_stat` on
+  every poll, i.e. two fewer processes spawned every two seconds.
 - Fixed the device hanging for up to a minute (and finally rebooting)
   after a write error: an interrupted upload is now completed with
   filler packets before it is resent. Restarting from the header made

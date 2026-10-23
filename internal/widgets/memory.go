@@ -8,8 +8,6 @@ import (
 	"image/draw"
 	"math"
 	"os/exec"
-	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -249,52 +247,31 @@ func drawScaledCenteredText(dst *image.RGBA, text string, target image.Rectangle
 	xdraw.NearestNeighbor.Scale(dst, rect, src, src.Bounds(), draw.Over, nil)
 }
 
+// vmStats is a snapshot of system memory: total bytes and page counts.
+type vmStats struct {
+	total, pageSize                        int64
+	free, inactive, speculative, purgeable int64
+}
+
+// readMemoryPercent reads memory counters in-process (readVMStats) rather
+// than by running sysctl and vm_stat every poll.
 func readMemoryPercent() (int, error) {
-	memsizeOut, err := execOut("/usr/sbin/sysctl", []string{"-n", "hw.memsize"}, 4*time.Second)
+	s, err := readVMStats()
 	if err != nil {
 		return 0, err
 	}
-	vmstatOut, err := execOut("/usr/bin/vm_stat", nil, 4*time.Second)
-	if err != nil {
-		return 0, err
-	}
+	return s.usedPercent()
+}
 
-	totalBytes, err := parseInt(strings.TrimSpace(memsizeOut))
-	if err != nil {
-		return 0, fmt.Errorf("parse memsize: %w", err)
+// usedPercent counts everything the system can reclaim without paging
+// (free, inactive, speculative, purgeable) as available.
+func (s vmStats) usedPercent() (int, error) {
+	if s.total <= 0 {
+		return 0, fmt.Errorf("invalid total memory %d", s.total)
 	}
-
-	pageSize := int64(16384)
-	if matches := regexpMustCompile(`page size of (\d+) bytes`).FindStringSubmatch(vmstatOut); len(matches) == 2 {
-		if v, err := parseInt(matches[1]); err == nil {
-			pageSize = v
-		}
-	}
-
-	stats := map[string]int64{}
-	lineRE := regexpMustCompile(`^"?([^"]+)"?:\s+(\d+)\.?$`)
-	for _, line := range strings.Split(vmstatOut, "\n") {
-		m := lineRE.FindStringSubmatch(line)
-		if len(m) != 3 {
-			continue
-		}
-		v, err := parseInt(m[2])
-		if err != nil {
-			continue
-		}
-		stats[strings.TrimSpace(m[1])] = v
-	}
-
-	free := stats["Pages free"] * pageSize
-	inactive := stats["Pages inactive"] * pageSize
-	speculative := stats["Pages speculative"] * pageSize
-	purgeable := stats["Pages purgeable"] * pageSize
-	trulyFree := free + inactive + speculative + purgeable
-	used := totalBytes - trulyFree
-	if used < 0 {
-		used = 0
-	}
-	return int((used*100 + totalBytes/2) / totalBytes), nil
+	trulyFree := (s.free + s.inactive + s.speculative + s.purgeable) * s.pageSize
+	used := max(s.total-trulyFree, 0)
+	return int((used*100 + s.total/2) / s.total), nil
 }
 
 func execOut(cmd string, args []string, timeout time.Duration) (string, error) {
@@ -305,21 +282,6 @@ func execOut(cmd string, args []string, timeout time.Duration) (string, error) {
 		return "", err
 	}
 	return string(out), nil
-}
-
-func parseInt(s string) (int64, error) {
-	return strconv.ParseInt(strings.TrimSpace(s), 10, 64)
-}
-
-var reCache sync.Map
-
-func regexpMustCompile(expr string) *regexp.Regexp {
-	if v, ok := reCache.Load(expr); ok {
-		return v.(*regexp.Regexp)
-	}
-	re := regexp.MustCompile(expr)
-	reCache.Store(expr, re)
-	return re
 }
 
 func restartApp(appName string) error {

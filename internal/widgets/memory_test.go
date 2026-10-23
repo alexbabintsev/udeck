@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"os"
 	"os/exec"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -214,12 +215,6 @@ func TestMemoryHelpers(t *testing.T) {
 	if escapeAS(`a"b\c`) != `a\"b\\c` {
 		t.Fatalf("escapeAS = %q", escapeAS(`a"b\c`))
 	}
-	if v, err := parseInt(" 12 "); err != nil || v != 12 {
-		t.Fatal("parseInt")
-	}
-	if regexpMustCompile(`a+`) != regexpMustCompile(`a+`) {
-		t.Fatal("regexp cache must return the same instance")
-	}
 	img := image.NewRGBA(image.Rect(0, 0, 100, 40))
 	drawScaledCenteredText(img, "42", img.Bounds(), color.White)
 	drawScaledCenteredText(img, "", img.Bounds(), color.White)
@@ -245,34 +240,37 @@ func fakeExec(t *testing.T, outputs map[string]string) *[]string {
 	return &calls
 }
 
-func TestReadMemoryPercentParsesVMStat(t *testing.T) {
-	fakeExec(t, map[string]string{
-		"/usr/sbin/sysctl": "1638400\n",
-		"/usr/bin/vm_stat": "Mach Virtual Memory Statistics: (page size of 16384 bytes)\n" +
-			"Pages free:                               10.\n" +
-			"Pages inactive:                           20.\n" +
-			"Pages speculative:                        5.\n" +
-			"\"Pages purgeable\":                        15.\n",
-	})
-	// total 100 pages, 50 truly free -> 50% used.
-	got, err := readMemoryPercent()
-	if err != nil || got != 50 {
+func TestVMStatsUsedPercent(t *testing.T) {
+	// total 100 pages, 50 reclaimable -> 50% used.
+	s := vmStats{total: 1638400, pageSize: 16384, free: 10, inactive: 20, speculative: 5, purgeable: 15}
+	if got, err := s.usedPercent(); err != nil || got != 50 {
 		t.Fatalf("got %d err=%v", got, err)
+	}
+	s.free = 1000 // more reclaimable than total clamps to 0
+	if got, err := s.usedPercent(); err != nil || got != 0 {
+		t.Fatalf("got %d err=%v", got, err)
+	}
+	if _, err := (vmStats{}).usedPercent(); err == nil {
+		t.Fatal("expected error for zero total")
 	}
 }
 
-func TestReadMemoryPercentErrors(t *testing.T) {
-	fakeExec(t, map[string]string{})
-	if _, err := readMemoryPercent(); err == nil {
-		t.Fatal("expected sysctl error")
+func TestReadMemoryPercentLive(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		if _, err := readMemoryPercent(); err == nil {
+			t.Fatal("expected unsupported error")
+		}
+		return
 	}
-	fakeExec(t, map[string]string{"/usr/sbin/sysctl": "1"})
-	if _, err := readMemoryPercent(); err == nil {
-		t.Fatal("expected vm_stat error")
+	s, err := readVMStats()
+	if err != nil {
+		t.Fatal(err)
 	}
-	fakeExec(t, map[string]string{"/usr/sbin/sysctl": "abc", "/usr/bin/vm_stat": ""})
-	if _, err := readMemoryPercent(); err == nil {
-		t.Fatal("expected parse error")
+	if s.total <= 0 || s.pageSize <= 0 {
+		t.Fatalf("implausible stats %+v", s)
+	}
+	if got, err := readMemoryPercent(); err != nil || got < 1 || got > 100 {
+		t.Fatalf("got %d err=%v", got, err)
 	}
 }
 
