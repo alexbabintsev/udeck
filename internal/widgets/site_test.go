@@ -27,11 +27,11 @@ func TestSiteAPIGetSendsTokenAndDecodes(t *testing.T) {
 			http.Error(w, "nope", http.StatusUnauthorized)
 			return
 		}
-		fmt.Fprint(w, `{"visitors": 7}`)
+		fmt.Fprint(w, `{"online": {"visitors": 7}}`)
 	})
 	api := newSiteAPI(&config.Widget{URL: srv.URL + "/ ", Token: " secret "})
-	var out siteOnlineStats
-	if err := api.get("/x", &out); err != nil || out.Visitors != 7 {
+	var out siteStats
+	if err := api.get("/x", &out); err != nil || out.Online.Visitors != 7 {
 		t.Fatalf("out=%+v err=%v", out, err)
 	}
 	if err := (siteAPI{baseURL: srv.URL}).get("/x", &out); err == nil || !strings.Contains(err.Error(), "401") {
@@ -47,9 +47,9 @@ func TestSiteAPIGetSendsTokenAndDecodes(t *testing.T) {
 
 func TestSiteAPIRejectsOversizedOrInvalidBody(t *testing.T) {
 	srv := siteServer(t, func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"visitors": `+strings.Repeat("1", maxHTTPBodyBytes+10)+`}`)
+		fmt.Fprint(w, `{"online": `+strings.Repeat("1", maxHTTPBodyBytes+10)+`}`)
 	})
-	var out siteOnlineStats
+	var out siteStats
 	if err := (siteAPI{baseURL: srv.URL}).get("/", &out); err == nil {
 		t.Fatal("expected error for a body larger than the limit")
 	}
@@ -61,29 +61,33 @@ func TestSitePoll(t *testing.T) {
 	}
 }
 
-func TestSiteOnlineWidgetFetchesAndRendersOnChange(t *testing.T) {
-	var visitors atomic.Int32
+func TestSiteWidgetFetchesOnceAndRendersOnChange(t *testing.T) {
+	var visitors, requests atomic.Int32
 	visitors.Store(12)
 	srv := siteServer(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != siteOnlinePath {
+		if r.URL.Path != sitePath {
 			http.NotFound(w, r)
 			return
 		}
-		fmt.Fprintf(w, `{"visitors": %d}`, visitors.Load())
+		requests.Add(1)
+		fmt.Fprintf(w, `{"online": {"visitors": %d, "views": 20}, "daily": {"views": 1234, "visitors": 300, "change": -12.4}}`, visitors.Load())
 	})
 	rec := &recorder{}
-	w, err := NewSiteOnlineWidget("online", &config.Widget{URL: srv.URL}, rec.notify)
+	w, err := NewSiteWidget("site", &config.Widget{URL: srv.URL}, rec.notify)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer w.Close()
-	waitFor(t, "first fetch", func() bool { return w.frameKey() == "12" })
+	waitFor(t, "first fetch", func() bool { return w.frameKey() == "12|1.2k|12" })
 	waitFor(t, "notification", func() bool { return rec.count() == 1 })
+	if requests.Load() != 1 {
+		t.Fatalf("one fetch must feed both rows, got %d requests", requests.Load())
+	}
 
-	// Same value: no new notification.
+	// Same values: no new notification.
 	w.refresh()
 	if rec.count() != 1 {
-		t.Fatal("unchanged value must not notify")
+		t.Fatal("unchanged values must not notify")
 	}
 	visitors.Store(3000)
 	w.HandleGesture(ig.Tap)
@@ -91,94 +95,78 @@ func TestSiteOnlineWidgetFetchesAndRendersOnChange(t *testing.T) {
 	w.HandleGesture(ig.Hold) // ignored
 }
 
-func TestSiteOnlineWidgetKeepsValueOnError(t *testing.T) {
+func TestSiteWidgetKeepsValuesOnError(t *testing.T) {
 	var fail atomic.Bool
 	srv := siteServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if fail.Load() {
 			http.Error(w, "down", http.StatusBadGateway)
 			return
 		}
-		fmt.Fprint(w, `{"visitors": 5}`)
+		fmt.Fprint(w, `{"online": {"visitors": 5}, "daily": {"views": 40, "change": null}}`)
 	})
-	w, err := NewSiteOnlineWidget("online", &config.Widget{URL: srv.URL}, nil)
+	w, err := NewSiteWidget("site", &config.Widget{URL: srv.URL}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer w.Close()
-	waitFor(t, "first fetch", func() bool { return w.frameKey() == "5" })
+	waitFor(t, "first fetch", func() bool { return w.frameKey() == "5|40|-" })
 	fail.Store(true)
 	w.refresh()
-	if w.frameKey() != "5" {
-		t.Fatal("failed fetch must keep the last value")
+	if w.frameKey() != "5|40|-" {
+		t.Fatal("failed fetch must keep the last values")
 	}
 }
 
-func TestSiteViewsWidgetFetchesBothWindows(t *testing.T) {
-	var failHourly atomic.Bool
-	srv := siteServer(t, func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/api/metrics/views/daily":
-			fmt.Fprint(w, `{"views": 12345, "visitors": 900, "change": -12.5}`)
-		case "/api/metrics/views/hourly":
-			if failHourly.Load() {
-				http.Error(w, "x", http.StatusInternalServerError)
-				return
-			}
-			fmt.Fprint(w, `{"views": 42, "visitors": 7, "change": 10}`)
-		default:
-			http.NotFound(w, r)
-		}
-	})
-	rec := &recorder{}
-	w, err := NewSiteViewsWidget("views", &config.Widget{URL: srv.URL, Title: " Site "}, rec.notify)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer w.Close()
-	waitFor(t, "both windows", func() bool {
-		w.mu.Lock()
-		defer w.mu.Unlock()
-		return w.data.Daily != nil && w.data.Hourly != nil
-	})
-	waitFor(t, "notification", func() bool { return rec.count() >= 1 })
-
-	failHourly.Store(true)
-	w.HandleGesture(ig.Tap)
-	time.Sleep(50 * time.Millisecond)
-	w.mu.Lock()
-	hourly := w.data.Hourly
-	w.mu.Unlock()
-	if hourly == nil || hourly.Views != 42 {
-		t.Fatal("a failed window must keep its previous value")
-	}
-	w.HandleGesture(ig.Hold)
-}
-
-func TestSiteViewsFormatting(t *testing.T) {
+func TestSiteFormatting(t *testing.T) {
 	for in, want := range map[int]string{5: "5", 1500: "1.5k", 15000: "15k", 2500000: "2.5M"} {
-		if got := formatSiteViewsCount(in); got != want {
-			t.Fatalf("formatSiteViewsCount(%d) = %q, want %q", in, got, want)
+		if got := formatSiteCount(in); got != want {
+			t.Fatalf("formatSiteCount(%d) = %q, want %q", in, got, want)
 		}
 	}
-	if formatSiteViewsChange(12.4) != "+12%" || formatSiteViewsChange(-3.6) != "-4%" {
-		t.Fatal("formatSiteViewsChange")
+	// The badge's color carries the sign: the number alone, no "%".
+	for in, want := range map[float64]string{12.4: "12", -3.6: "4", -0.2: "0", 140: "140"} {
+		if got := formatSiteChange(in); got != want {
+			t.Fatalf("formatSiteChange(%v) = %q, want %q", in, got, want)
+		}
 	}
-	if siteViewsChangeColor(-1) == siteViewsChangeColor(1) {
-		t.Fatal("change colors must differ by sign")
-	}
-	if siteViewsFrameKey("t", siteViewsData{}) == siteViewsFrameKey("t", siteViewsData{Daily: &siteViewsStats{Views: 1}}) {
+	if siteFrameKey(nil) == siteFrameKey(&siteStats{}) {
 		t.Fatal("frame key must reflect data")
 	}
 }
 
-func TestSiteCardsRenderPlaceholdersAndValues(t *testing.T) {
+func TestSiteCardRendersBadgeByColor(t *testing.T) {
+	stats := func(change *float64) *siteStats {
+		s := &siteStats{}
+		s.Online.Visitors = 7
+		s.Daily.Views = 1234
+		s.Daily.Change = change
+		return s
+	}
+	rise, fall := 12.0, -35.0
+	// A pixel inside the badge, at its right edge and vertical center.
+	badge := func(img *image.RGBA) (r, g, b uint8) {
+		innerH := img.Bounds().Dy() - siteMargin*2
+		topH := innerH * 11 / 20
+		y := siteMargin + topH + (innerH-topH)/2
+		c := rgbaAt(img, img.Bounds().Dx()-siteMargin-3, y)
+		return c.R, c.G, c.B
+	}
+
 	img := image.NewRGBA(image.Rect(0, 0, 196, 196))
-	renderSiteViewsCard(img, "", siteViewsData{})
-	renderSiteViewsCard(img, "", siteViewsData{
-		Daily:  &siteViewsStats{Views: 100, Visitors: 10, Change: 5},
-		Hourly: &siteViewsStats{Views: 3, Visitors: 1, Change: -5},
-	})
-	renderSiteOnlineCard(img, nil)
-	renderSiteOnlineCard(img, &siteOnlineStats{Visitors: 0})
-	renderSiteOnlineCard(img, &siteOnlineStats{Visitors: 123456})
+	renderSiteCard(img, stats(&rise))
+	if r, g, b := badge(img); [3]uint8{r, g, b} != [3]uint8{siteRise.R, siteRise.G, siteRise.B} {
+		t.Fatalf("rise badge = %d,%d,%d", r, g, b)
+	}
+	renderSiteCard(img, stats(&fall))
+	if r, g, b := badge(img); [3]uint8{r, g, b} != [3]uint8{siteFall.R, siteFall.G, siteFall.B} {
+		t.Fatalf("fall badge = %d,%d,%d", r, g, b)
+	}
+	renderSiteCard(img, stats(nil))
+	if r, g, b := badge(img); r+g+b != 0 {
+		t.Fatalf("no change must draw no badge, got %d,%d,%d", r, g, b)
+	}
+	renderSiteCard(img, nil)
+	big := stats(&rise)
+	big.Online.Visitors = 123456
+	renderSiteCard(img, big)
 }

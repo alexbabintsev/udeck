@@ -428,8 +428,7 @@ var widgetMinPollMS = map[string]int{
 	"spotify_artwork":    1000,
 	"wide_dashboard":     1000,
 	"freqtrade":          3000,
-	"site_views":         10000,
-	"site_online":        10000,
+	"site":               10000,
 	"weather_day":        1000,
 	"project":            1000,
 }
@@ -440,7 +439,7 @@ func validateWidget(w *Widget, at [2]int, path string) error {
 	}
 	minPoll, known := widgetMinPollMS[w.Type]
 	if !known {
-		return fmt.Errorf("%s.type %q unknown (memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|freqtrade|project|weather_day|site_views|site_online)", path, w.Type)
+		return fmt.Errorf("%s.type %q unknown (memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|freqtrade|project|weather_day|site)", path, w.Type)
 	}
 	switch w.Type {
 	case "wide_dashboard":
@@ -451,7 +450,7 @@ func validateWidget(w *Widget, at [2]int, path string) error {
 		if strings.TrimSpace(w.DSNs) == "" {
 			return fmt.Errorf("%s.dsns is empty", path)
 		}
-	case "site_views", "site_online":
+	case "site":
 		if strings.TrimSpace(w.URL) == "" {
 			return fmt.Errorf("%s.url is empty", path)
 		}
