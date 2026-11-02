@@ -68,8 +68,17 @@ func TestExplainHTTPErrorIncludesURLAndHint(t *testing.T) {
 	}
 }
 
-type roundTripFunc func(*http.Request) (*http.Response, error)
-
-func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
+func TestExplainHTTPErrorHidesQueryAndCredentials(t *testing.T) {
+	raw := "https://user:pw@hooks.example.com/hook?token=s3cret"
+	err := explainHTTPError(raw, &url.Error{Op: "Get", URL: raw, Err: errors.New("tls: bad certificate")})
+	msg := err.Error()
+	if strings.Contains(msg, "s3cret") || strings.Contains(msg, "pw") {
+		t.Fatalf("error leaks secrets: %v", msg)
+	}
+	if !strings.Contains(msg, "https://hooks.example.com/hook") {
+		t.Fatalf("error should name the endpoint: %v", msg)
+	}
+	if got := logSafeURL("::bad"); got != "(invalid url)" {
+		t.Fatalf("invalid url: %q", got)
+	}
 }

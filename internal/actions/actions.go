@@ -56,13 +56,26 @@ func runHTTP(url string) error {
 	return nil
 }
 
+// explainHTTPError describes a failed request without the URL's query
+// string or credentials, which may carry tokens and end up in log files.
 func explainHTTPError(rawURL string, err error) error {
+	target := logSafeURL(rawURL)
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {
 		msg := strings.ToLower(urlErr.Err.Error())
 		if strings.Contains(msg, "connection refused") || strings.Contains(msg, "timeout") {
-			return fmt.Errorf("http action request to %s failed: %v. Is the target local service running?", rawURL, urlErr.Err)
+			return fmt.Errorf("http action request to %s failed: %v. Is the target local service running?", target, urlErr.Err)
 		}
+		return fmt.Errorf("http action request to %s failed: %w", target, urlErr.Err)
 	}
-	return fmt.Errorf("http action request to %s failed: %w", rawURL, err)
+	return fmt.Errorf("http action request to %s failed: %w", target, err)
+}
+
+// logSafeURL returns scheme://host/path of rawURL.
+func logSafeURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return "(invalid url)"
+	}
+	return (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String()
 }

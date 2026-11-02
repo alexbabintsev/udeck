@@ -2,9 +2,14 @@ package widgets
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"net/netip"
+	"net/url"
+	"strings"
 )
 
 // maxHTTPBodyBytes caps every widget HTTP response body, so a misbehaving
@@ -26,6 +31,12 @@ func httpGet(client *http.Client, rawURL string, headers map[string]string) ([]b
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		// url.Error prints the full URL, query string included; logs
+		// only get the host and path.
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			return nil, fmt.Errorf("GET %s%s: %w", req.URL.Host, req.URL.Path, urlErr.Err)
+		}
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -52,4 +63,31 @@ func getJSON(client *http.Client, rawURL string, headers map[string]string, out 
 		return fmt.Errorf("decode %T: %w", out, err)
 	}
 	return nil
+}
+
+// sendsCredentialsInClear reports whether credentials sent to rawURL
+// cross the network unencrypted: plain http to a host that is neither
+// loopback nor a private (LAN/VPN) address.
+func sendsCredentialsInClear(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil || !strings.EqualFold(u.Scheme, "http") {
+		return false
+	}
+	host := u.Hostname()
+	if strings.EqualFold(host, "localhost") {
+		return false
+	}
+	if addr, err := netip.ParseAddr(host); err == nil {
+		return !addr.IsLoopback() && !addr.IsPrivate()
+	}
+	return true // a host name: assume it is reached over the internet
+}
+
+// warnClearCredentials logs once per widget creation when its credentials
+// would travel over plain HTTP.
+func warnClearCredentials(widget, rawURL string) {
+	if sendsCredentialsInClear(rawURL) {
+		u, _ := url.Parse(rawURL)
+		log.Printf("warning: %s widget sends credentials over plain http to %s; use https", widget, u.Host)
+	}
 }

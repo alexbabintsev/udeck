@@ -23,10 +23,14 @@ type siteAPI struct {
 }
 
 func newSiteAPI(cfg *config.Widget) siteAPI {
-	return siteAPI{
+	api := siteAPI{
 		baseURL: strings.TrimRight(strings.TrimSpace(cfg.URL), "/"),
 		token:   strings.TrimSpace(cfg.Token),
 	}
+	if api.token != "" {
+		warnClearCredentials("site", api.baseURL)
+	}
+	return api
 }
 
 // get fetches baseURL+path into out, sending the bearer token if set.

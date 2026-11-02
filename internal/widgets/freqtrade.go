@@ -69,6 +69,9 @@ func NewFreqtradeWidget(id string, cfg *config.Widget, notify func(string)) (*Fr
 	if len(apis) == 0 {
 		return nil, fmt.Errorf("freqtrade widget has no valid dsns")
 	}
+	for _, api := range apis {
+		warnClearCredentials("freqtrade", api.URL)
+	}
 	base, err := newWidgetBase(id, "freqtrade-widget", "freqtrade.png", notify)
 	if err != nil {
 		return nil, err

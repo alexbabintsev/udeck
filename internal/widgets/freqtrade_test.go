@@ -1,10 +1,12 @@
 package widgets
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
@@ -147,4 +149,38 @@ func TestFreqtradeWidgetTapCyclesMode(t *testing.T) {
 	if _, err := os.Stat(filepath.Dir(w.IconPath())); err != nil {
 		t.Fatalf("expected widget temp dir to exist before close: %v", err)
 	}
+}
+
+func TestSendsCredentialsInClear(t *testing.T) {
+	cases := map[string]bool{
+		"http://example.com/api":   true,
+		"http://203.0.113.5:8080":  true,
+		"https://example.com/api":  false,
+		"http://localhost:9910":    false,
+		"http://127.0.0.1:9910":    false,
+		"http://[::1]:9910":        false,
+		"http://10.8.0.1:9910":     false,
+		"http://192.168.1.20:8080": false,
+		"::bad":                    false,
+	}
+	for raw, want := range cases {
+		if got := sendsCredentialsInClear(raw); got != want {
+			t.Errorf("%s: got %v, want %v", raw, got, want)
+		}
+	}
+	warnClearCredentials("test", "http://example.com") // logs, must not panic
+}
+
+func TestHTTPGetErrorOmitsQuery(t *testing.T) {
+	client := &http.Client{Transport: failingTransport{}}
+	_, err := httpGet(client, "http://api.example.com/v1/data?token=s3cret", nil)
+	if err == nil || strings.Contains(err.Error(), "s3cret") || !strings.Contains(err.Error(), "api.example.com/v1/data") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+type failingTransport struct{}
+
+func (failingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("dial failed")
 }

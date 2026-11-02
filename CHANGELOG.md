@@ -19,6 +19,9 @@ actual development milestones rather than formal releases.
 - Freqtrade `dsns` accept passwords containing `@`.
 - Chains that combine `delay_ms` with `page_next`/`page_prev` run off the
   event loop, so their delays no longer stall key handling.
+- HTTP error messages and debug logs no longer include URL query strings
+  or credentials; widgets warn when credentials would go over plain HTTP
+  to a public host.
 - Generic `examples/project-demo` scripts and relative documentation links.
 - Stop the periodic full-page re-upload: the idle keepalive is now a
   single brightness (or label-style) packet, so the keys no longer
