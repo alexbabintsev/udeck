@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"bytes"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -76,10 +77,14 @@ func TestFetchAllFreqtradeData(t *testing.T) {
 	}))
 	defer srv2.Close()
 
-	trades, summary := fetchAllFreqtradeData([]freqtradeAPI{
+	trades, summary, reachable := fetchAllFreqtradeData([]freqtradeAPI{
 		{User: "a", Pass: "b", URL: srv1.URL, Name: "bot1"},
 		{User: "c", Pass: "d", URL: srv2.URL, Name: "bot2"},
+		{User: "e", Pass: "f", URL: "http://127.0.0.1:1", Name: "down"},
 	})
+	if reachable != 2 {
+		t.Fatalf("reachable = %d, want 2", reachable)
+	}
 	if len(trades) != 3 {
 		t.Fatalf("expected top 3 trades, got %d", len(trades))
 	}
@@ -95,6 +100,38 @@ func TestFetchAllFreqtradeData(t *testing.T) {
 	if *summary.ClosedProfit != 2.0834 {
 		t.Fatalf("unexpected closed profit: %v", *summary.ClosedProfit)
 	}
+}
+
+func TestFreqtradeWidgetShowsOfflineWhenNoBotAnswers(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "down", http.StatusBadGateway)
+	}))
+	defer srv.Close()
+	w, err := NewFreqtradeWidget("ft", &config.Widget{Type: "freqtrade", DSNs: "u:p@" + srv.URL, PollMS: 3000}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	w.refresh()
+	w.mu.RLock()
+	state := w.state
+	w.mu.RUnlock()
+	if state != freqtradeOffline {
+		t.Fatalf("state = %v, want offline", state)
+	}
+	offline := w.renderImage()
+	// The offline card differs from the loading dots and from "no trades".
+	w.mu.Lock()
+	w.state = freqtradeReady
+	w.mu.Unlock()
+	empty := w.renderImage()
+	if bytes.Equal(offline.Pix, empty.Pix) {
+		t.Fatal("offline must look different from an empty result")
+	}
+	w.mu.Lock()
+	w.mode = freqtradeModeLog
+	w.mu.Unlock()
+	_ = w.renderImage()
 }
 
 func TestFreqtradeWidgetTapCyclesMode(t *testing.T) {

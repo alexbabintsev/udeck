@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
@@ -58,9 +59,20 @@ type FreqtradeWidget struct {
 
 	mu      sync.RWMutex
 	mode    int
+	state   freqtradeState
 	trades  []freqtradeTrade
 	summary *freqtradeSummary
 }
+
+// freqtradeState tells "still loading" from "no bot answered", which
+// would otherwise both show the loading dots forever.
+type freqtradeState int
+
+const (
+	freqtradeLoading freqtradeState = iota
+	freqtradeReady
+	freqtradeOffline
+)
 
 func NewFreqtradeWidget(id string, cfg *config.Widget, notify func(string)) (*FreqtradeWidget, error) {
 	apis := parseFreqtradeDSNs(cfg.DSNs)
@@ -108,10 +120,15 @@ func (w *FreqtradeWidget) HandleGesture(kind ig.Kind) {
 func (w *FreqtradeWidget) resume() { w.refresh() }
 
 func (w *FreqtradeWidget) refresh() {
-	trades, summary := fetchAllFreqtradeData(w.apis)
+	trades, summary, reachable := fetchAllFreqtradeData(w.apis)
 	w.mu.Lock()
 	w.trades = trades
 	w.summary = summary
+	w.state = freqtradeReady
+	if reachable == 0 {
+		// Stale profits would be misleading: say the bots are down.
+		w.state = freqtradeOffline
+	}
 	w.mu.Unlock()
 	_, _ = w.render()
 }
@@ -128,6 +145,7 @@ func (w *FreqtradeWidget) renderImage() *image.RGBA {
 	w.mu.RLock()
 	title := w.title
 	mode := w.mode
+	state := w.state
 	trades := append([]freqtradeTrade(nil), w.trades...)
 	var summary *freqtradeSummary
 	if w.summary != nil {
@@ -138,23 +156,41 @@ func (w *FreqtradeWidget) renderImage() *image.RGBA {
 
 	img := image.NewRGBA(image.Rect(0, 0, freqtradeWidgetW, freqtradeWidgetH))
 	draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{0x00, 0x00, 0x00, 0xff}}, image.Point{}, draw.Src)
-	if mode == freqtradeModeLog {
+	switch {
+	case state == freqtradeOffline:
+		drawFreqtradeTitle(img, title)
+		drawFreqtradeMessage(img, "OFFLINE", color.RGBA{0xe7, 0x4c, 0x3c, 0xff})
+	case state == freqtradeLoading:
+		drawFreqtradeTitle(img, title)
+		drawFreqtradeLoading(img)
+	case mode == freqtradeModeLog:
 		renderFreqtradeLog(img, trades, title)
-	} else {
+	default:
 		renderFreqtradeSummary(img, summary, title)
 	}
 	return img
 }
 
-func renderFreqtradeLog(img *image.RGBA, trades []freqtradeTrade, title string) {
-	mt, mr, mb, ml := 25, 25, 25, 15
-	if title != "" {
-		drawFreqtradeText(img, title, image.Rect(ml, 5, freqtradeWidgetW-mr, 28), color.White, 24)
-		mt = 40
+// drawFreqtradeTitle draws the optional title and returns the top of the
+// content area below it.
+func drawFreqtradeTitle(img *image.RGBA, title string) int {
+	if title == "" {
+		return 25
 	}
+	drawFreqtradeText(img, title, image.Rect(15, 5, freqtradeWidgetW-25, 28), color.White, 24)
+	return 40
+}
+
+func drawFreqtradeMessage(img *image.RGBA, text string, clr color.Color) {
+	drawFreqtradeText(img, text, image.Rect(15, 70, freqtradeWidgetW-15, 126), clr, 34)
+}
+
+func renderFreqtradeLog(img *image.RGBA, trades []freqtradeTrade, title string) {
+	mr, mb, ml := 25, 25, 15
+	mt := drawFreqtradeTitle(img, title)
 
 	if len(trades) == 0 {
-		drawFreqtradeLoading(img)
+		drawFreqtradeMessage(img, "NO TRADES", color.RGBA{0x60, 0x60, 0x60, 0xff})
 		return
 	}
 
@@ -174,14 +210,11 @@ func renderFreqtradeLog(img *image.RGBA, trades []freqtradeTrade, title string) 
 }
 
 func renderFreqtradeSummary(img *image.RGBA, summary *freqtradeSummary, title string) {
-	mt, mr, mb, ml := 25, 25, 25, 15
-	if title != "" {
-		drawFreqtradeText(img, title, image.Rect(ml, 5, freqtradeWidgetW-mr, 28), color.White, 24)
-		mt = 40
-	}
+	mr, mb, ml := 25, 25, 15
+	mt := drawFreqtradeTitle(img, title)
 
 	if summary == nil {
-		drawFreqtradeLoading(img)
+		drawFreqtradeMessage(img, "NO TRADES", color.RGBA{0x60, 0x60, 0x60, 0xff})
 		return
 	}
 
@@ -252,24 +285,33 @@ func parseFreqtradeDSNs(raw string) []freqtradeAPI {
 	return apis
 }
 
-func fetchAllFreqtradeData(apis []freqtradeAPI) ([]freqtradeTrade, *freqtradeSummary) {
+// fetchAllFreqtradeData merges the bots' latest closed trades and
+// profit summaries; reachable counts the bots that answered at all.
+func fetchAllFreqtradeData(apis []freqtradeAPI) (trades []freqtradeTrade, summary *freqtradeSummary, reachable int) {
 	tradesCh := make(chan []freqtradeTrade, len(apis))
 	summaryCh := make(chan *freqtradeSummary, len(apis))
+	var answered atomic.Int32
 
 	var wg sync.WaitGroup
 	for _, api := range apis {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			ok := false
 			if trades, err := fetchFreqtradeClosedTrades(api); err == nil {
 				tradesCh <- trades
+				ok = true
 			} else {
 				debug.Logf("freqtrade %s: trades: %v", api.Name, err)
 			}
 			if summary, err := fetchFreqtradeSummary(api); err == nil {
 				summaryCh <- summary
+				ok = true
 			} else {
 				debug.Logf("freqtrade %s: summary: %v", api.Name, err)
+			}
+			if ok {
+				answered.Add(1)
 			}
 		}()
 	}
@@ -306,8 +348,9 @@ func fetchAllFreqtradeData(apis []freqtradeAPI) ([]freqtradeTrade, *freqtradeSum
 		}
 	}
 
+	reachable = int(answered.Load())
 	if !haveOpen && !haveClosed {
-		return allTrades, nil
+		return allTrades, nil, reachable
 	}
 	out := &freqtradeSummary{}
 	if haveOpen {
@@ -318,7 +361,7 @@ func fetchAllFreqtradeData(apis []freqtradeAPI) ([]freqtradeTrade, *freqtradeSum
 		v := round4(closedSum)
 		out.ClosedProfit = &v
 	}
-	return allTrades, out
+	return allTrades, out, reachable
 }
 
 func fetchFreqtradeClosedTrades(api freqtradeAPI) ([]freqtradeTrade, error) {

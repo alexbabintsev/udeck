@@ -34,6 +34,8 @@ actual development milestones rather than formal releases.
   terminal close and service stop); Ctrl-C still leaves the deck as is.
 - `weather_day` and `wide_dashboard` widgets for the same city share one
   forecast request, which now also carries the current conditions.
+- The freqtrade widget shows OFFLINE when no bot answers and NO TRADES
+  when there is nothing to show, instead of loading dots forever.
 - Stop the periodic full-page re-upload: the idle keepalive is now a
   single brightness (or label-style) packet, so the keys no longer
   flash every 30 seconds.
