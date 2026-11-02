@@ -72,6 +72,15 @@ func drawGaugeCard(img *image.RGBA, frac float64, clr color.Color, value string,
 	}
 }
 
+// drawGaugeCardText is drawGaugeCard with a short caption under the
+// value instead of an icon.
+func drawGaugeCardText(img *image.RGBA, frac float64, clr color.Color, value string, valueClr color.Color, caption string, captionClr color.Color) {
+	drawRing(img, frac, clr)
+	w := img.Bounds().Dx()
+	drawText(img, value, CenterX(0), FromTop(66), w-90, 48, AlignMiddleCenter, valueClr, styleValueSize, true)
+	drawText(img, strings.ToUpper(caption), CenterX(0), FromTop(116), w-100, 26, AlignMiddleCenter, captionClr, 20, true)
+}
+
 // drawIconCard draws a large icon, centred when there is no label.
 func drawIconCard(img *image.RGBA, iconID string, iconClr color.Color, label string, labelClr color.Color) {
 	if label == "" {

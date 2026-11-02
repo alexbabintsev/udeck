@@ -704,14 +704,16 @@ their own state.
 
 Supported widget types:
 
-- general purpose: `clock`, `volume`, `microphone`, `audio_output`,
-  `media`, `memory`, `weather_day`, `wide_dashboard`
+- general purpose: `clock`, `timer`, `stopwatch`, `pomodoro`, `volume`,
+  `microphone`, `audio_output`, `media`, `memory`, `weather_day`,
+  `wide_dashboard`
 - Spotify: `spotify_play_pause`, `spotify_next`, `spotify_artwork`
 - specialised: `freqtrade`, `site`, `project`
 
 Every widget is independent: it reads its own state and needs no other
 widget on the page. The general-purpose ones share one look: black
-background, a level ring with the value inside (`volume`, `memory`) or a
+background, a level ring with the value inside (`volume`, `memory`,
+the timers) or a
 large icon or value with an upper-case label (`clock`, `microphone`,
 `audio_output`, `media`). Color carries the state the same way everywhere: green is
 live, red is muted/off/failing, blue is neutral information, grey is "no
@@ -741,6 +743,39 @@ Fields:
   - optional, `true` for 12-hour time with AM/PM
 
 Tap does nothing. The key is redrawn once a minute.
+
+### `widget.type: timer`, `stopwatch`, `pomodoro`
+
+Tap starts and pauses, hold (600 ms) resets. The ring shows what is
+left (timer, pomodoro) or sweeps once a minute (stopwatch); the time is
+inside it. Running is blue (pomodoro: red for work, green for breaks),
+paused is amber, a set timer waiting for a tap has a dim full ring.
+
+```yaml
+- at: [0, 0]
+  widget: {type: timer, duration: 5m}
+- at: [0, 1]
+  widget: {type: stopwatch}
+- at: [0, 2]
+  widget: {type: pomodoro}       # 4 × (25m work, 5m break), last break 15m
+```
+
+When a timer runs out it turns red with a bell and plays a sound; tap
+resets it. When a pomodoro phase ends it plays the sound and loads the
+next phase, which starts on the next tap. The alarm fires even when the
+widget's page is not shown.
+
+Fields:
+
+- `duration` (timer)
+  - Go duration such as `90s`, `5m`, `1h30m`; `1s..24h`; default `5m`
+- `work`, `break`, `long_break` (pomodoro)
+  - durations, default `25m`, `5m`, `15m`
+- `rounds` (pomodoro)
+  - work phases before the long break, `1..12`, default `4`
+- `sound` (timer, pomodoro)
+  - a sound from `/System/Library/Sounds` by name (`Glass`, `Ping`,
+    `Hero`, ...), default `Glass`; `none` for silence
 
 ### `widget.type: volume`
 
@@ -1166,6 +1201,7 @@ The loader validates:
 - `poll_ms` minimums per widget type
 - `wide_dashboard` only at `at: [2, 3]`
 - `volume.action` and `volume.step`, `media.action`, `clock.timezone`
+- timer and pomodoro durations, `rounds` and `sound`
 - `weather_day` requires `city`; `site` requires an `http(s)` `url`
 - `freqtrade` requires `dsns`
 - `project` widgets require `project_dir`

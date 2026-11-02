@@ -15,6 +15,9 @@ actual development milestones rather than formal releases.
   device) and `media` (system play/pause, next, previous keys).
 - New `clock` widget: local time or a world clock for an IANA time
   zone, with the date (red on weekends) and the city name.
+- New `timer`, `stopwatch` and `pomodoro` widgets: tap to start/pause,
+  hold to reset; timers and pomodoro phases ring with a system sound,
+  even when their page is hidden.
 - General-purpose widgets share one look: level ring or large icon with
   an upper-case label, with the same state colors. The `memory` widget
   moved to it.

@@ -132,7 +132,45 @@ type Widget struct {
 	Timezone string `yaml:"timezone,omitempty"`
 	// Hour12 shows a clock in 12-hour format.
 	Hour12 bool `yaml:"hour12,omitempty"`
+	// Duration is a timer's length as a Go duration ("5m", "1h30m").
+	Duration string `yaml:"duration,omitempty"`
+	// Sound is the macOS system sound a timer or pomodoro plays when it
+	// runs out ("Glass", "Ping", ...), or "none".
+	Sound string `yaml:"sound,omitempty"`
+	// Work, Break and LongBreak are the pomodoro phases (Go durations);
+	// Rounds is the number of work phases before the long break.
+	Work      string `yaml:"work,omitempty"`
+	Break     string `yaml:"break,omitempty"`
+	LongBreak string `yaml:"long_break,omitempty"`
+	Rounds    int    `yaml:"rounds,omitempty"`
 }
+
+// TimerDuration parses a timer or pomodoro duration field; empty means
+// def. Durations run from one second to a day.
+func TimerDuration(s string, def time.Duration) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return def, nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, fmt.Errorf("%q is not a duration (use e.g. 90s, 5m, 1h30m)", s)
+	}
+	if d < time.Second || d > 24*time.Hour {
+		return 0, fmt.Errorf("%q must be between 1s and 24h", s)
+	}
+	return d, nil
+}
+
+// Timer and pomodoro defaults.
+const (
+	DefaultTimerDuration  = 5 * time.Minute
+	DefaultPomodoroWork   = 25 * time.Minute
+	DefaultPomodoroBreak  = 5 * time.Minute
+	DefaultPomodoroLong   = 15 * time.Minute
+	DefaultPomodoroRounds = 4
+	DefaultTimerSound     = "Glass"
+)
 
 type WidgetScripts struct {
 	Start string `yaml:"start,omitempty"`
@@ -463,6 +501,9 @@ var widgetMinPollMS = map[string]int{
 	"audio_output":       500,
 	"media":              1000,
 	"clock":              1000,
+	"timer":              1000,
+	"stopwatch":          1000,
+	"pomodoro":           1000,
 }
 
 func validateWidget(w *Widget, at [2]int, path string) error {
@@ -471,7 +512,7 @@ func validateWidget(w *Widget, at [2]int, path string) error {
 	}
 	minPoll, known := widgetMinPollMS[w.Type]
 	if !known {
-		return fmt.Errorf("%s.type %q unknown (clock|volume|microphone|audio_output|media|memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|weather_day|freqtrade|site|project)", path, w.Type)
+		return fmt.Errorf("%s.type %q unknown (clock|timer|stopwatch|pomodoro|volume|microphone|audio_output|media|memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|weather_day|freqtrade|site|project)", path, w.Type)
 	}
 	switch w.Type {
 	case "wide_dashboard":
@@ -511,6 +552,22 @@ func validateWidget(w *Widget, at [2]int, path string) error {
 				return fmt.Errorf("%s.timezone %q unknown (use an IANA name such as Europe/Kyiv)", path, tz)
 			}
 		}
+	case "timer", "pomodoro":
+		fields := map[string]string{"duration": w.Duration}
+		if w.Type == "pomodoro" {
+			fields = map[string]string{"work": w.Work, "break": w.Break, "long_break": w.LongBreak}
+			if w.Rounds < 0 || w.Rounds > 12 {
+				return fmt.Errorf("%s.rounds must be 1-12, got %d", path, w.Rounds)
+			}
+		}
+		for name, v := range fields {
+			if _, err := TimerDuration(v, time.Second); err != nil {
+				return fmt.Errorf("%s.%s: %w", path, name, err)
+			}
+		}
+		if !validSoundName(w.Sound) {
+			return fmt.Errorf("%s.sound %q must be a system sound name such as Glass, or none", path, w.Sound)
+		}
 	case "media":
 		switch w.Action {
 		case "play_pause", "next", "previous":
@@ -534,6 +591,17 @@ func validateWidget(w *Widget, at [2]int, path string) error {
 		return fmt.Errorf("%s.poll_ms too small: %d", path, w.PollMS)
 	}
 	return nil
+}
+
+// validSoundName accepts "", "none" and plain names of the sounds in
+// /System/Library/Sounds: letters only, so the name cannot form a path.
+func validSoundName(s string) bool {
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') {
+			return false
+		}
+	}
+	return len(s) <= 32
 }
 
 func buttonDimensions(at [2]int) (width, height int) {

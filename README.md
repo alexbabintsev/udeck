@@ -60,6 +60,8 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
   - `close_all_projects`
 - Widgets, each independent and in one shared style:
   - `clock`: local time or a world clock for any time zone
+  - `timer`, `stopwatch`, `pomodoro`: tap to start/pause, hold to reset,
+    with a sound when time is up
   - `volume`: level ring; mute, or volume up/down with hold-to-repeat
   - `microphone`: system-wide mic mute with a live/muted indicator
   - `audio_output`: current output device; tap switches to the next one
@@ -185,6 +187,9 @@ Current config surface:
       - `type: clock`
         - `timezone`: optional IANA zone such as `America/New_York`
         - `title`: optional label; `hour12`: optional 12-hour format
+      - `type: timer` | `stopwatch` | `pomodoro`
+        - `duration` (timer): e.g. `5m`; `work`, `break`, `long_break`,
+          `rounds` (pomodoro); `sound`: system sound name or `none`
       - `type: volume`
         - `action`: `mute` (default) | `up` | `down`
         - `step`: percent per press for `up`/`down`, default `5`

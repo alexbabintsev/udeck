@@ -332,6 +332,8 @@ func (m *Manager) newWidgetLocked(id string) (Widget, error) {
 		item, err = NewWideDashboardWidget(id, def.btn.Widget, m.notify)
 	case "clock":
 		item, err = NewClockWidget(id, def.btn.Widget, m.notify)
+	case "timer", "stopwatch", "pomodoro":
+		item, err = NewTimerWidget(id, def.btn.Widget, m.notify)
 	case "volume":
 		item, err = NewVolumeWidget(id, def.btn.Widget, m.notify)
 	case "microphone":
@@ -443,6 +445,8 @@ func (m *Manager) gestureOptions(id string) (ig.Options, bool) {
 		}, true
 	case "volume":
 		return volumeGestures(def.btn.Widget), true
+	case "timer", "stopwatch", "pomodoro":
+		return timerGestures(), true
 	case "memory", "freqtrade", "spotify_next", "spotify_artwork", "wide_dashboard", "weather_day", "site",
 		"microphone", "audio_output", "media", "clock":
 		return ig.Options{HasTap: true}, true

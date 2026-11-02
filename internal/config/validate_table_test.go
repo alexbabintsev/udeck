@@ -76,6 +76,11 @@ func TestValidateRejects(t *testing.T) {
 		"media bad action":   {btnYAML("widget: {type: media, action: stop}"), "action \"stop\" unknown"},
 		"mic poll":           {btnYAML("widget: {type: microphone, poll_ms: 10}"), "poll_ms too small"},
 		"clock zone":         {btnYAML("widget: {type: clock, timezone: Mars/Olympus}"), "timezone \"Mars/Olympus\" unknown"},
+		"timer duration":     {btnYAML("widget: {type: timer, duration: soon}"), "duration: \"soon\" is not a duration"},
+		"timer too long":     {btnYAML("widget: {type: timer, duration: 25h}"), "between 1s and 24h"},
+		"timer sound path":   {btnYAML("widget: {type: timer, sound: ../x}"), "system sound name"},
+		"pomodoro break":     {btnYAML("widget: {type: pomodoro, break: 0s}"), "break:"},
+		"pomodoro rounds":    {btnYAML("widget: {type: pomodoro, rounds: 13}"), "rounds must be"},
 		"toggle icon color":  {btnYAML("on: {tap: {toggle: [{icon_color: xyz, action: {type: shell, cmd: a}}, {action: {type: shell, cmd: b}}]}}"), "icon_color"},
 	}
 	for name, tc := range cases {
@@ -186,6 +191,12 @@ buttons:
     widget: {type: clock, timezone: America/New_York, hour12: true}
   - at: [1, 2]
     widget: {type: clock}
+  - at: [1, 3]
+    widget: {type: timer, duration: 90s, sound: Ping}
+  - at: [1, 4]
+    widget: {type: pomodoro, work: 50m, break: 10m, rounds: 3, sound: none}
+  - at: [2, 0]
+    widget: {type: stopwatch}
 `)
 	if err != nil {
 		t.Fatal(err)

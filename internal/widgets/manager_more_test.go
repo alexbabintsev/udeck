@@ -36,6 +36,7 @@ func TestManagerGestureOptionsPerWidgetType(t *testing.T) {
 		btn("mem", "memory", nil),
 		{RuntimeID: "vol-up", Widget: &config.Widget{Type: "volume", Action: "up"}},
 		btn("mic", "microphone", nil),
+		btn("pomo", "pomodoro", nil),
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -60,6 +61,9 @@ func TestManagerGestureOptionsPerWidgetType(t *testing.T) {
 	}
 	if o, ok := m.gestureOptions("mic"); !ok || !o.HasTap || o.HasHold {
 		t.Fatalf("microphone options %+v", o)
+	}
+	if o, _ := m.gestureOptions("pomo"); !o.HasTap || !o.HasHold || o.HoldDelay != timerHoldDelay {
+		t.Fatalf("pomodoro options %+v", o)
 	}
 	if _, ok := m.gestureOptions("missing"); ok {
 		t.Fatal("unknown id must have no options")
@@ -193,6 +197,9 @@ func TestManagerCreatesEveryWidgetType(t *testing.T) {
 		{RuntimeID: "l", Widget: &config.Widget{Type: "media", Action: "next"}},
 		{RuntimeID: "n", Widget: &config.Widget{Type: "memory"}},
 		{RuntimeID: "o", Widget: &config.Widget{Type: "clock", Timezone: "Europe/Kyiv"}},
+		{RuntimeID: "p", Widget: &config.Widget{Type: "timer"}},
+		{RuntimeID: "q", Widget: &config.Widget{Type: "stopwatch"}},
+		{RuntimeID: "r", Widget: &config.Widget{Type: "pomodoro"}},
 	}
 	m, err := NewManager(&config.Config{Buttons: buttons})
 	if err != nil {
