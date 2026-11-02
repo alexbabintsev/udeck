@@ -5,8 +5,8 @@ config format.
 
 When config functionality changes, update this document together with:
 
-- [README.md](/Volumes/Black/Projects/ulanzi-deck-go/README.md:1)
-- [CHANGELOG.md](/Volumes/Black/Projects/ulanzi-deck-go/CHANGELOG.md:1)
+- [README.md](../README.md)
+- [CHANGELOG.md](../CHANGELOG.md)
 
 ## Overview
 
@@ -937,18 +937,14 @@ Project scripts receive environment variables such as:
 - `PROJECT_EDITOR`
 - `PROJECT_EDITOR_SUBDIR`
 - `PROJECT_EDITOR_TARGET`
-- `PROJECT_CHROME_PROJECT`
 
 Current demo behavior:
 
 - `start`
-  - creates a tmux session if missing
-  - boots the default pane layout
-  - opens editor and Chrome project when configured
-  - then calls `focus`
+  - creates a tmux session with a two-pane layout if missing
+  - opens `PROJECT_EDITOR` on `PROJECT_EDITOR_TARGET` when configured
 - `stop`
   - kills the tmux session
-  - closes the Chrome project through Slate when available
 - `focus`
   - opens a new tab in `iTerm` or `Terminal`
   - runs `tmux attach-session -t <session>`
@@ -1137,6 +1133,6 @@ pages:
 
 The main living example is:
 
-- [examples/test-config.yaml](/Volumes/Black/Projects/ulanzi-deck-go/examples/test-config.yaml:1)
+- [examples/test-config.yaml](../examples/test-config.yaml)
 
 Use it as the fastest way to see supported combinations in practice.

@@ -105,7 +105,18 @@ device was actually reset. On macOS it also listens for system sleep, wake,
 and shutdown notifications so it can dim/close the device cleanly before
 sleep and restore the current page after wake.
 
-If `--config` is omitted, `run` uses `examples/test-config.yaml`.
+If `--config` is omitted, `run` reads
+`$XDG_CONFIG_HOME/ulanzi-deck/config.yaml` (by default
+`~/.config/ulanzi-deck/config.yaml`). To start from the demo profile:
+
+```sh
+mkdir -p ~/.config/ulanzi-deck
+cp examples/test-config.yaml ~/.config/ulanzi-deck/config.yaml
+```
+
+Relative icon and project paths are resolved against the config file's
+directory, so copy `examples/test-icons` (and `examples/project-demo`)
+next to it or adjust the paths.
 
 If something goes wrong on the device (frozen display, garbled output),
 **unplug the USB cable** to power-cycle. No persistent damage is
@@ -115,8 +126,8 @@ possible from bad packets.
 
 Use these two files together:
 
-- [docs/config.md](/Volumes/Black/Projects/ulanzi-deck-go/docs/config.md:1) for the full config reference
-- [examples/test-config.yaml](/Volumes/Black/Projects/ulanzi-deck-go/examples/test-config.yaml:1) for the canonical demo profile
+- [docs/config.md](docs/config.md) for the full config reference
+- [examples/test-config.yaml](examples/test-config.yaml) for the canonical demo profile
 
 The demo config includes:
 
@@ -393,18 +404,9 @@ Notes:
 - The built-in fallback `focus` behavior tries to open a new terminal tab
   and run `tmux attach-session -t <session>` for `iTerm` and `Terminal`.
   Other terminals currently fall back to opening the project directory.
-- The demo project scripts also honor `PROJECT_CHROME_PROJECT`,
-  `SLATE_CLI_PATH`, and `SLATE_EXT_ID` so they can open/close a Chrome
-  project through Slate when that tooling is available.
 - The demo `start` script is idempotent: if the tmux session already
-  exists, it jumps straight to `focus`. On first launch it creates a
-  three-pane `main` window and starts:
-  - `PROJECT_WEB_CMD`
-  - `PROJECT_QUEUE_CMD`
-  - `PROJECT_CLAUDE_CMD`
-- The defaults for those demo commands match the current Laravel-style
-  workflow: `npm run dev`, `php85 artisan queue:listen`, and `claude`
-  inside `PROJECT_EDITOR_TARGET`.
+  exists it does nothing. Otherwise it creates a two-pane `main` window;
+  replace its commands with your own.
 - Project scripts are invoked through `/bin/sh`, so they do not need the
   executable bit as long as the script contents are valid shell.
 - Spotify widgets use one internal shared service inside the

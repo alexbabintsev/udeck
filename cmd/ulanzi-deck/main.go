@@ -26,7 +26,20 @@ import (
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/widgets"
 )
 
-const defaultConfigPath = "examples/test-config.yaml"
+// defaultConfigPath is where run looks for the config without --config:
+// $XDG_CONFIG_HOME/ulanzi-deck/config.yaml, by default
+// ~/.config/ulanzi-deck/config.yaml.
+var defaultConfigPath = func() string {
+	dir := os.Getenv("XDG_CONFIG_HOME")
+	if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "config.yaml"
+		}
+		dir = filepath.Join(home, ".config")
+	}
+	return filepath.Join(dir, "ulanzi-deck", "config.yaml")
+}
 
 const usage = `ulanzi-deck — minimal headless daemon for the Ulanzi D200
 
@@ -47,8 +60,9 @@ page upload, plus widget fetch failures, for diagnosing device drop-outs.
 Note: Ulanzi Studio holds an exclusive HID lock. Quit it before running:
   osascript -e 'tell application "Ulanzi Studio" to quit'
 
-If --config is omitted for run, the default is:
-  ` + defaultConfigPath + `
+If --config is omitted, run reads $XDG_CONFIG_HOME/ulanzi-deck/config.yaml
+(~/.config/ulanzi-deck/config.yaml by default). A demo profile lives in
+examples/test-config.yaml.
 `
 
 // External dependencies, replaced by tests.
@@ -208,7 +222,7 @@ func cmdSetBrightness(args []string, stdout, stderr io.Writer) error {
 func cmdRun(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	cfgPath := fs.String("config", defaultConfigPath, "path to YAML config")
+	cfgPath := fs.String("config", defaultConfigPath(), "path to YAML config")
 	debugFlag := fs.Bool("debug", false, "verbose diagnostics")
 	logFile := fs.String("log-file", "", "also write the log to this file")
 	if err := fs.Parse(args); err != nil {

@@ -250,3 +250,15 @@ func TestCLIExplicitLogFileAndRotation(t *testing.T) {
 		t.Fatal("unwritable log path must fail")
 	}
 }
+
+func TestDefaultConfigPath(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/xdg")
+	if got := defaultConfigPath(); got != filepath.Join("/xdg", "ulanzi-deck", "config.yaml") {
+		t.Fatalf("with XDG_CONFIG_HOME: %q", got)
+	}
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", "/home/u")
+	if got := defaultConfigPath(); got != filepath.Join("/home/u", ".config", "ulanzi-deck", "config.yaml") {
+		t.Fatalf("default: %q", got)
+	}
+}

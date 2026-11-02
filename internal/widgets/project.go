@@ -240,7 +240,6 @@ func (w *ProjectWidget) runScript(scriptPath string) error {
 		"PROJECT_EDITOR="+w.editor,
 		"PROJECT_EDITOR_SUBDIR="+w.editorSubdir,
 		"PROJECT_EDITOR_TARGET="+w.editorTarget(),
-		"PROJECT_CHROME_PROJECT="+filepath.Base(w.projectDir),
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {

@@ -369,7 +369,7 @@ pages:
               icon: test-icons/work-folder.png
               widget:
                 type: project
-                project_dir: /Users/alexbabintsev/Projects/babintsev
+                project_dir: project-demo
                 hold_ms: 500
                 on:
                   tap: start
@@ -457,7 +457,7 @@ pages:
               icon: test-icons/work-folder.png
               widget:
                 type: project
-                project_dir: /Users/alexbabintsev/Projects/babintsev
+                project_dir: project-demo
                 hold_ms: 500
                 on:
                   tap: start

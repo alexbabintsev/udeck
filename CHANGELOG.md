@@ -9,6 +9,11 @@ actual development milestones rather than formal releases.
 
 - Keep updating this section for user-visible changes that have not been
   grouped into a tagged release yet.
+- `run` without `--config` now reads
+  `$XDG_CONFIG_HOME/ulanzi-deck/config.yaml` (default
+  `~/.config/ulanzi-deck/config.yaml`) instead of the tracked demo
+  profile, so personal configs and tokens stay out of the checkout.
+- Generic `examples/project-demo` scripts and relative documentation links.
 - Stop the periodic full-page re-upload: the idle keepalive is now a
   single brightness (or label-style) packet, so the keys no longer
   flash every 30 seconds.
@@ -170,7 +175,7 @@ actual development milestones rather than formal releases.
 - Added `editor_subdir` support for project widgets and the derived
   `PROJECT_EDITOR_TARGET` script environment variable.
 - Added demo project scripts in
-  [examples/project-demo](/Volumes/Black/Projects/ulanzi-deck-go/examples/project-demo:1).
+  [examples/project-demo](examples/project-demo).
 - Demo project `start` / `stop` scripts now also open/close a Chrome
   project through Slate when available.
 - Project fallback focus now attaches to the running tmux session in a
@@ -196,7 +201,7 @@ actual development milestones rather than formal releases.
 - Added top-level `pages` with looping `page_next` / `page_prev`
   actions, and migrated the demo config to the new multi-page layout.
 - Added a dedicated config reference in
-  [docs/config.md](/Volumes/Black/Projects/ulanzi-deck-go/docs/config.md:1)
+  [docs/config.md](docs/config.md)
   with field-by-field schema documentation, allowed values, and
   examples.
 - Added support for the physical double-wide `3_2` button slot, including
@@ -256,7 +261,7 @@ actual development milestones rather than formal releases.
   - `hold`
   - `repeat`
 - Config hot reload during `run`.
-- Canonical demo profile in [examples/test-config.yaml](/Volumes/Black/Projects/ulanzi-deck-go/examples/test-config.yaml:1).
+- Canonical demo profile in [examples/test-config.yaml](examples/test-config.yaml).
 
 ### Changed
 
