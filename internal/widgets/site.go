@@ -37,8 +37,8 @@ type siteStats struct {
 // last 24 hours, from one request.
 type SiteWidget struct {
 	*widgetBase
-	api    siteAPI
-	pollMS time.Duration
+	api  siteAPI
+	poll time.Duration
 
 	mu           sync.Mutex
 	stats        *siteStats
@@ -50,13 +50,13 @@ func NewSiteWidget(id string, cfg *config.Widget, notify func(string)) (*SiteWid
 	if err != nil {
 		return nil, err
 	}
-	w := &SiteWidget{widgetBase: base, api: newSiteAPI(cfg), pollMS: sitePoll(cfg.PollMS)}
+	w := &SiteWidget{widgetBase: base, api: newSiteAPI(cfg), poll: sitePoll(cfg.PollMS)}
 	// Render the placeholder so the icon exists before the first fetch.
 	if _, err := w.writeIcon(w.renderImage()); err != nil {
 		_ = w.Close()
 		return nil, fmt.Errorf("write site icon: %w", err)
 	}
-	w.every(w.pollMS, func(time.Time) { w.refresh() })
+	w.every(w.poll, func(time.Time) { w.refresh() })
 	go w.refresh()
 	return w, nil
 }

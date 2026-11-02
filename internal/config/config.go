@@ -428,7 +428,7 @@ var widgetMinPollMS = map[string]int{
 	"spotify_artwork":    1000,
 	"wide_dashboard":     1000,
 	"freqtrade":          3000,
-	"site":               10000,
+	"site":               30000,
 	"weather_day":        1000,
 	"project":            1000,
 }

@@ -136,7 +136,7 @@ type WeatherDayWidget struct {
 	*widgetBase
 	city     string
 	dayIndex int
-	pollMS   time.Duration
+	poll     time.Duration
 	cache    *weatherCityCache
 	subToken int
 
@@ -156,7 +156,7 @@ func NewWeatherDayWidget(id string, cfg *config.Widget, notify func(string)) (*W
 		widgetBase: base,
 		city:       city,
 		dayIndex:   dayIndex,
-		pollMS:     weatherDayPoll(cfg.PollMS),
+		poll:       weatherDayPoll(cfg.PollMS),
 		cache:      weatherCacheForCity(city),
 	}
 
@@ -172,8 +172,8 @@ func NewWeatherDayWidget(id string, cfg *config.Widget, notify func(string)) (*W
 	w.lastFrameKey = weatherDayFrameKey(w.city, w.dayIndex, w.forecast)
 
 	// The cache is shared per city: only one HTTP call for all widgets.
-	go w.cache.refresh(w.city, w.pollMS)
-	w.every(time.Minute, func(time.Time) { w.cache.refresh(w.city, w.pollMS) })
+	go w.cache.refresh(w.city, w.poll)
+	w.every(time.Minute, func(time.Time) { w.cache.refresh(w.city, w.poll) })
 	return w, nil
 }
 
@@ -191,7 +191,7 @@ func (w *WeatherDayWidget) onData(days weatherForecast) {
 
 func (w *WeatherDayWidget) HandleGesture(_ ig.Kind) {}
 
-func (w *WeatherDayWidget) resume() { w.cache.refresh(w.city, w.pollMS) }
+func (w *WeatherDayWidget) resume() { w.cache.refresh(w.city, w.poll) }
 
 func (w *WeatherDayWidget) Close() error {
 	w.cache.unsubscribe(w.subToken)

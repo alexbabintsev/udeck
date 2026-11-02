@@ -52,7 +52,7 @@ type ProjectWidget struct {
 	projectDir string
 	session    string
 	title      string
-	pollMS     time.Duration
+	poll       time.Duration
 
 	startScript  string
 	stopScript   string
@@ -92,7 +92,7 @@ func NewProjectWidget(id string, btn config.Button, settings config.ProjectWidge
 		projectDir:   projectDir,
 		session:      projectSessionName(projectDir, wcfg.Session),
 		title:        projectTitle(wcfg.Title, btn.Label, projectDir),
-		pollMS:       pollDurationOrDefault(wcfg.PollMS, defaultProjectPollMS),
+		poll:         pollDurationOrDefault(wcfg.PollMS, defaultProjectPollMS),
 		startScript:  startScript,
 		stopScript:   resolveProjectScriptPath(projectDir, wcfg.Scripts.Stop, "stop"),
 		focusScript:  resolveProjectScriptPath(projectDir, wcfg.Scripts.Focus, "focus"),
@@ -119,7 +119,7 @@ func NewProjectWidget(id string, btn config.Button, settings config.ProjectWidge
 		_ = w.Close()
 		return nil, fmt.Errorf("write project widget icon: %w", err)
 	}
-	w.every(w.pollMS, func(time.Time) {
+	w.every(w.poll, func(time.Time) {
 		w.mu.Lock()
 		busy := w.busy
 		w.mu.Unlock()

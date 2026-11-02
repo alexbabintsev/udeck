@@ -21,10 +21,10 @@ import (
 )
 
 const (
-	dashboardTickInterval     = time.Second
-	dashboardWeatherTimeout   = 8 * time.Second
-	dashboardWeatherPollMS    = 10 * time.Minute
-	dashboardWeatherMinPollMS = 60 * time.Second
+	dashboardTickInterval       = time.Second
+	dashboardWeatherTimeout     = 8 * time.Second
+	dashboardWeatherDefaultPoll = 10 * time.Minute
+	dashboardWeatherMinPoll     = 60 * time.Second
 )
 
 var (
@@ -215,11 +215,11 @@ func dashboardFrameKey(now time.Time, ctx Context, weather dashboardWeatherState
 
 func dashboardWeatherPoll(ms int) time.Duration {
 	if ms <= 0 {
-		return dashboardWeatherPollMS
+		return dashboardWeatherDefaultPoll
 	}
 	d := time.Duration(ms) * time.Millisecond
-	if d < dashboardWeatherMinPollMS {
-		return dashboardWeatherMinPollMS
+	if d < dashboardWeatherMinPoll {
+		return dashboardWeatherMinPoll
 	}
 	return d
 }

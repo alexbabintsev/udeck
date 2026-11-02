@@ -31,8 +31,6 @@ const (
 
 var freqtradeHTTPClient = &http.Client{Timeout: freqtradeHTTPTimeout}
 
-var ()
-
 type freqtradeAPI struct {
 	User string
 	Pass string
@@ -54,9 +52,9 @@ type freqtradeSummary struct {
 
 type FreqtradeWidget struct {
 	*widgetBase
-	title  string
-	apis   []freqtradeAPI
-	pollMS time.Duration
+	title string
+	apis  []freqtradeAPI
+	poll  time.Duration
 
 	mu      sync.RWMutex
 	mode    int
@@ -80,14 +78,14 @@ func NewFreqtradeWidget(id string, cfg *config.Widget, notify func(string)) (*Fr
 		widgetBase: base,
 		title:      strings.TrimSpace(cfg.Title),
 		apis:       apis,
-		pollMS:     pollDurationOrDefault(cfg.PollMS, defaultFreqtradePollMS),
+		poll:       pollDurationOrDefault(cfg.PollMS, defaultFreqtradePollMS),
 		mode:       freqtradeModeSummary,
 	}
 	if _, err := w.writeIcon(w.renderImage()); err != nil {
 		_ = w.Close()
 		return nil, fmt.Errorf("write freqtrade widget icon: %w", err)
 	}
-	w.every(w.pollMS, func(time.Time) { w.refresh() })
+	w.every(w.poll, func(time.Time) { w.refresh() })
 	go w.refresh()
 	return w, nil
 }
@@ -260,7 +258,6 @@ func fetchAllFreqtradeData(apis []freqtradeAPI) ([]freqtradeTrade, *freqtradeSum
 
 	var wg sync.WaitGroup
 	for _, api := range apis {
-		api := api
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

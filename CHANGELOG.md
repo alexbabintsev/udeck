@@ -22,7 +22,10 @@ actual development milestones rather than formal releases.
 - HTTP error messages and debug logs no longer include URL query strings
   or credentials; widgets warn when credentials would go over plain HTTP
   to a public host.
+- `site` widgets: the minimum `poll_ms` is now 30000, matching the
+  effective interval.
 - Generic `examples/project-demo` scripts and relative documentation links.
+- CI on GitHub Actions: gofmt, vet, staticcheck, race tests, govulncheck.
 - Stop the periodic full-page re-upload: the idle keepalive is now a
   single brightness (or label-style) packet, so the keys no longer
   flash every 30 seconds.

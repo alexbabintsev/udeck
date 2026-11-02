@@ -34,8 +34,8 @@ var execCommandContext = exec.CommandContext
 
 type MemoryWidget struct {
 	*widgetBase
-	apps   []string
-	pollMS time.Duration
+	apps []string
+	poll time.Duration
 	// restart and readPercent are seams for tests.
 	restart     func(app string) error
 	readPercent func() (int, error)
@@ -53,7 +53,7 @@ func NewMemoryWidget(id string, cfg *config.Widget, notify func(string)) (*Memor
 	w := &MemoryWidget{
 		widgetBase:  base,
 		apps:        append([]string(nil), cfg.Apps...),
-		pollMS:      pollDuration(cfg.PollMS),
+		poll:        pollDuration(cfg.PollMS),
 		restart:     restartApp,
 		readPercent: readMemoryPercent,
 	}
@@ -64,7 +64,7 @@ func NewMemoryWidget(id string, cfg *config.Widget, notify func(string)) (*Memor
 		_ = w.Close()
 		return nil, fmt.Errorf("write memory widget icon: %w", err)
 	}
-	w.every(w.pollMS, func(time.Time) { _, _ = w.updateMemory() })
+	w.every(w.poll, func(time.Time) { _, _ = w.updateMemory() })
 	return w, nil
 }
 

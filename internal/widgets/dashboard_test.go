@@ -91,7 +91,7 @@ func TestWideDashboardWeatherFailure(t *testing.T) {
 }
 
 func TestDashboardHelpers(t *testing.T) {
-	if dashboardWeatherPoll(0) != dashboardWeatherPollMS || dashboardWeatherPoll(1) != dashboardWeatherMinPollMS || dashboardWeatherPoll(3600000) != time.Hour {
+	if dashboardWeatherPoll(0) != dashboardWeatherDefaultPoll || dashboardWeatherPoll(1) != dashboardWeatherMinPoll || dashboardWeatherPoll(3600000) != time.Hour {
 		t.Fatal("dashboardWeatherPoll")
 	}
 	for d := time.Sunday; d <= time.Saturday; d++ {

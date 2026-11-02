@@ -26,6 +26,7 @@ func StudioRunning() error {
 	if len(out) == 0 {
 		return nil
 	}
+	//lint:ignore ST1005 the message starts with the product name
 	return errors.New("Ulanzi Studio is running and holds an exclusive HID lock on the D200. " +
 		"Quit it first: `osascript -e 'tell application \"Ulanzi Studio\" to quit'`")
 }

@@ -1,15 +1,16 @@
 # ulanzi-deck-go
 
+[![CI](https://github.com/alexbabintsev/ulanzi-deck-go/actions/workflows/ci.yml/badge.svg)](https://github.com/alexbabintsev/ulanzi-deck-go/actions/workflows/ci.yml)
+
 Headless daemon for the **Ulanzi D200** stream deck. Single Go binary,
 YAML config, no GUI. Replaces the official "Ulanzi Studio" app for the
 subset of features implemented here and is designed for direct local
 automation.
 
-> Status: **v2 workbench**. Direct HID control works, nested directories
-> work, widgets work, config hot reload works, and the runtime keeps the
-> device awake / recovers from common HID interruptions. The runtime
-> also handles macOS sleep, wake, and shutdown events. SmallView and
-> richer profile management are still pending.
+> Status: **usable, pre-1.0**. Direct HID control, pages and nested
+> folders, widgets, config hot reload, device recovery and macOS
+> sleep/wake handling work. SmallView and richer profile management are
+> still pending. Not affiliated with Ulanzi.
 
 ## Why
 
@@ -20,9 +21,11 @@ it with whatever automation you already run.
 
 ## Requirements
 
-- macOS (Linux/Windows untested in v1)
+- macOS (the HID, key-event and power code is macOS-specific)
 - Go 1.27.1+
-- `hidapi` system library: `brew install hidapi`
+- Xcode Command Line Tools for cgo: `xcode-select --install`
+  (hidapi is bundled; no Homebrew packages are needed)
+- Optional: `tmux` for `project` widgets
 
 ## Install
 
@@ -97,7 +100,7 @@ Then:
 host-controlled mode, applies label style / brightness, starts listening
 for button events, hot-reloads the config when the YAML changes, and
 hot-reloads static button icons when their image files change, and
-sends a lightweight keepalive packet (re-applied brightness) when the
+sends a lightweight keepalive packet (the device-info request) when the
 link is idle so the firmware screensaver does not take over. Widget and
 toggle changes redraw only the affected keys; the full layout is
 uploaded only on start, page switch, config reload, wake, or after the
@@ -413,8 +416,6 @@ Notes:
   `ulanzi-deck` process; no separate `spotify-daemon` is required.
 - Freqtrade widget polls configured REST APIs directly; no separate
   freqtrade daemon or local bridge is required.
-- Freqtrade widget text uses `PragmataPro` when that font is available
-  locally, with a fallback renderer otherwise.
 - Widget instances are created when you first open the page that uses
   them and then stay cached until config reload or shutdown.
 - Spotify uses one shared runtime that is prewarmed when the config
@@ -422,7 +423,7 @@ Notes:
   incur a cold-start delay.
 - Spotify artwork fetch still uses network access to resolve current
   cover art from Spotify track metadata.
-- The runtime periodically reapplies device state as a keepalive and
+- The runtime sends a keepalive packet when the link is idle and
   attempts to reopen the device automatically after common HID failures.
 - On macOS, system sleep and shutdown dim the deck and close the HID
   session cleanly; wake triggers a reopen-and-restore flow.
@@ -438,6 +439,21 @@ Notes:
   shell actions that invoke `/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs`.
 - Static button icons support global and per-button margins, which lets
   you keep important pixels away from the D200's edge distortion zone.
+
+## Security
+
+- The config is code: `shell` actions and `project` scripts run with
+  your user's permissions, and `key` actions can type into any app once
+  Accessibility access is granted. Only run configs you wrote or
+  reviewed, and keep the file writable only by you — it is hot-reloaded.
+- Keep secrets (`site` tokens, freqtrade `dsns`) out of git. The
+  repository ignores `/config.yaml`, and the default config lives
+  outside the checkout in `~/.config/ulanzi-deck/config.yaml`.
+- Use `https://` for endpoints that receive credentials. Widgets log a
+  warning when a token or password would be sent over plain `http://`
+  to a host that is not loopback or a private (LAN/VPN) address.
+- Error messages and `--debug` logs omit URL query strings and
+  credentials; log files are created owner-only (`0600`).
 
 ## Troubleshooting
 
