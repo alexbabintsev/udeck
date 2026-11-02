@@ -16,15 +16,8 @@ import (
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
 	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
-	xdraw "golang.org/x/image/draw"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
-)
-
-const (
-	dashboardModeClock = iota
-	dashboardModeSpotify
-	dashboardModeCount
 )
 
 const (
@@ -59,20 +52,17 @@ type WideDashboardWidget struct {
 	*widgetBase
 	city        string
 	weatherPoll time.Duration
-	spotify     *SpotifyService
 
 	mu           sync.RWMutex
-	mode         int
 	context      Context
 	weather      dashboardWeatherState
 	coords       *dashboardWeatherCoords
 	lastWeather  time.Time
 	fetching     bool
-	spotifyNow   spotifySnapshot
 	lastFrameKey string
 }
 
-func NewWideDashboardWidget(id string, cfg *config.Widget, spotify *SpotifyService, notify func(string)) (*WideDashboardWidget, error) {
+func NewWideDashboardWidget(id string, cfg *config.Widget, notify func(string)) (*WideDashboardWidget, error) {
 	base, err := newWidgetBase(id, "wide-dashboard", "dashboard.png", notify)
 	if err != nil {
 		return nil, err
@@ -81,10 +71,6 @@ func NewWideDashboardWidget(id string, cfg *config.Widget, spotify *SpotifyServi
 		widgetBase:  base,
 		city:        strings.TrimSpace(cfg.City),
 		weatherPoll: dashboardWeatherPoll(cfg.PollMS),
-		spotify:     spotify,
-	}
-	if spotify != nil {
-		spotify.Subscribe(w)
 	}
 	if _, err := w.draw(time.Now(), false); err != nil {
 		_ = w.Close()
@@ -95,21 +81,9 @@ func NewWideDashboardWidget(id string, cfg *config.Widget, spotify *SpotifyServi
 	return w, nil
 }
 
-// HandleGesture cycles clock / Spotify on tap (not while it acts as the
-// folder Back key).
-func (w *WideDashboardWidget) HandleGesture(kind ig.Kind) {
-	if kind != ig.Tap || w.isClosed() {
-		return
-	}
-	w.mu.Lock()
-	if w.context.InFolder() {
-		w.mu.Unlock()
-		return
-	}
-	w.mode = (w.mode + 1) % dashboardModeCount
-	w.mu.Unlock()
-	_, _ = w.render(time.Now())
-}
+// HandleGesture does nothing: the dashboard is display-only (inside a
+// folder the event loop treats it as the Back key).
+func (w *WideDashboardWidget) HandleGesture(ig.Kind) {}
 
 // SetContext redraws for the new page/folder. It does not notify: the
 // event loop calls it right before uploading the page, which already
@@ -123,21 +97,6 @@ func (w *WideDashboardWidget) SetContext(ctx Context) {
 	w.context = ctx
 	w.mu.Unlock()
 	_, _ = w.draw(time.Now(), false)
-}
-
-func (w *WideDashboardWidget) spotifyUpdate(s spotifySnapshot) {
-	if w.isClosed() {
-		return
-	}
-	w.mu.Lock()
-	w.spotifyNow = s
-	mode := w.mode
-	ctx := w.context
-	w.mu.Unlock()
-	if mode != dashboardModeSpotify || ctx.InFolder() {
-		return
-	}
-	_, _ = w.render(time.Now())
 }
 
 func (w *WideDashboardWidget) resume() { w.tick(time.Now()) }
@@ -210,11 +169,9 @@ func (w *WideDashboardWidget) render(now time.Time) (bool, error) {
 
 func (w *WideDashboardWidget) draw(now time.Time, notify bool) (bool, error) {
 	w.mu.Lock()
-	mode := w.mode
 	ctx := w.context
 	weather := w.weather
-	spotifyNow := w.spotifyNow
-	frameKey := dashboardFrameKey(now, mode, ctx, weather, spotifyNow)
+	frameKey := dashboardFrameKey(now, ctx)
 	if frameKey == w.lastFrameKey {
 		w.mu.Unlock()
 		return false, nil
@@ -222,12 +179,9 @@ func (w *WideDashboardWidget) draw(now time.Time, notify bool) (bool, error) {
 	w.mu.Unlock()
 
 	img := image.NewRGBA(image.Rect(0, 0, icons.WideWidth, icons.IconHeight))
-	switch {
-	case ctx.InFolder():
+	if ctx.InFolder() {
 		renderDashboardBack(img)
-	case mode == dashboardModeSpotify:
-		renderDashboardSpotify(img, spotifyNow)
-	default:
+	} else {
 		renderDashboardClock(img, now, weather)
 	}
 
@@ -245,20 +199,11 @@ func (w *WideDashboardWidget) draw(now time.Time, notify bool) (bool, error) {
 	return changed, nil
 }
 
-func dashboardFrameKey(now time.Time, mode int, ctx Context, weather dashboardWeatherState, spotifyNow spotifySnapshot) string {
+func dashboardFrameKey(now time.Time, ctx Context) string {
 	if ctx.InFolder() {
 		return fmt.Sprintf("back:%d:%d:%d", ctx.PageIndex, ctx.TotalPages, ctx.FolderDepth)
 	}
-	switch mode {
-	case dashboardModeSpotify:
-		sec := int(math.Floor(spotifyNow.PositionSec))
-		if !spotifyNow.Playing {
-			sec = int(math.Round(spotifyNow.PositionSec))
-		}
-		return fmt.Sprintf("spotify:%d:%t:%s:%s:%s:%s:%d:%d:%t", ctx.PageIndex, spotifyNow.Running, spotifyNow.State, spotifyNow.TrackID, spotifyNow.TrackName, spotifyNow.Album, sec, spotifyNow.DurationMS, spotifyNow.Artwork != nil)
-	default:
-		return fmt.Sprintf("clock:%s:%d", now.Format("2006-01-02 15:04"), ctx.PageIndex)
-	}
+	return fmt.Sprintf("clock:%s:%d", now.Format("2006-01-02 15:04"), ctx.PageIndex)
 }
 
 func dashboardWeatherPoll(ms int) time.Duration {
@@ -311,125 +256,10 @@ func renderDashboardClock(img *image.RGBA, now time.Time, weather dashboardWeath
 	drawDashboardClockWeatherSummary(img, weather)
 }
 
-func renderDashboardSpotify(img *image.RGBA, s spotifySnapshot) {
-	draw.Draw(img, img.Bounds(), &image.Uniform{color.Black}, image.Point{}, draw.Src)
-
-	artRect := rectWH(0, 0, 192, 192)
-	drawDashboardArtwork(img, artRect, s)
-
-	drawSpotifySourceRow(img, s)
-	track := s.TrackName
-	if track == "" {
-		track = "Open Spotify"
-	}
-	artistLine := dashboardSpotifyArtistLine(s)
-	drawDashboardLeftText(img, shortenLine(track, 22), rectWH(218, 64, 212, 28), color.White, 24)
-	drawDashboardLeftText(img, shortenLine(artistLine, 26), rectWH(218, 94, 224, 24), color.RGBA{0xbb, 0xbb, 0xbb, 0xff}, 18)
-	drawSpotifyProgressBlock(img, s)
-}
-
 func renderDashboardBack(img *image.RGBA) {
 	draw.Draw(img, img.Bounds(), &image.Uniform{color.Black}, image.Point{}, draw.Src)
 	drawIcon(img, "lucide/arrow-left", CenterX(-80), CenterY(0), 70, 70, rgb("aaaaaa"))
 	drawText(img, "BACK", CenterX(40), CenterY(0), 140, 48, AlignMiddleLeft, color.White, 48, true)
-}
-
-func drawDashboardArtwork(img *image.RGBA, rect image.Rectangle, s spotifySnapshot) {
-	fillRoundRect(img, rect, 18, rgb("181818"))
-	if s.Artwork == nil {
-		drawDashboardMusicIcon(img, rect.Min.X+rect.Dx()/2, rect.Min.Y+rect.Dy()/2, 28, spotifyAccent(s))
-		return
-	}
-
-	scaled := image.NewRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))
-	xdraw.CatmullRom.Scale(scaled, scaled.Bounds(), s.Artwork, s.Artwork.Bounds(), draw.Over, nil)
-	for y := rect.Min.Y; y < rect.Max.Y; y++ {
-		for x := rect.Min.X; x < rect.Max.X; x++ {
-			if pointInRoundedRect(x, y, rect, 18) {
-				img.Set(x, y, scaled.At(x-rect.Min.X, y-rect.Min.Y))
-			}
-		}
-	}
-	for y := rect.Max.Y - 38; y < rect.Max.Y; y++ {
-		alpha := uint8((y - (rect.Max.Y - 38)) * 140 / 38)
-		draw.Draw(img, image.Rect(rect.Min.X, y, rect.Max.X, y+1), &image.Uniform{color.RGBA{0, 0, 0, alpha}}, image.Point{}, draw.Over)
-	}
-}
-
-func drawSpotifySourceRow(img *image.RGBA, s spotifySnapshot) {
-	fillCircle(img, 222, 36, 4, spotifyAccent(s))
-	drawFittedLeftText(img, "SPOTIFY", image.Rect(234, 24, 356, 44), color.RGBA{0x99, 0x99, 0x99, 0xff}, 18, false)
-}
-
-func drawSpotifyProgressBlock(img *image.RGBA, s spotifySnapshot) {
-	left := 218
-	right := 430
-	drawFittedLeftText(img, dashboardSpotifyLeftStamp(s), image.Rect(left, 140, left+64, 160), color.RGBA{0x77, 0x77, 0x77, 0xff}, 16, false)
-	drawFittedLeftText(img, dashboardSpotifyRightStamp(s), image.Rect(right-64, 140, right, 160), color.RGBA{0x77, 0x77, 0x77, 0xff}, 16, false)
-	draw.Draw(img, image.Rect(left, 168, right, 172), &image.Uniform{color.RGBA{0x22, 0x22, 0x22, 0xff}}, image.Point{}, draw.Src)
-	fillW := int(float64(right-left) * dashboardSpotifyProgress(s))
-	if fillW < 8 {
-		fillW = 8
-	}
-	draw.Draw(img, image.Rect(left, 168, left+fillW, 172), &image.Uniform{spotifyAccent(s)}, image.Point{}, draw.Src)
-	fillCircle(img, left+fillW, 170, 4, color.White)
-}
-
-func dashboardSpotifyArtistLine(s spotifySnapshot) string {
-	artist := displayArtist(s)
-	if s.Album != "" {
-		if artist != "" && artist != "Not Running" && artist != "Open App" {
-			return artist + " · " + s.Album
-		}
-		return s.Album
-	}
-	return artist
-}
-
-func dashboardSpotifyLeftStamp(s spotifySnapshot) string {
-	if secs := int(math.Round(s.PositionSec)); secs > 0 {
-		return formatSpotifyTimestamp(secs)
-	}
-	if s.Running {
-		return "0:00"
-	}
-	return "--:--"
-}
-
-func dashboardSpotifyRightStamp(s spotifySnapshot) string {
-	if s.DurationMS > 0 {
-		return formatSpotifyTimestamp(s.DurationMS / 1000)
-	}
-	if s.Running {
-		return "--:--"
-	}
-	return "--:--"
-}
-
-func dashboardSpotifyProgress(s spotifySnapshot) float64 {
-	if s.DurationMS > 0 {
-		ratio := s.PositionSec / (float64(s.DurationMS) / 1000.0)
-		if ratio < 0 {
-			return 0
-		}
-		if ratio > 1 {
-			return 1
-		}
-		return ratio
-	}
-	if !s.Running {
-		return 0.12
-	}
-	return 0.24
-}
-
-func formatSpotifyTimestamp(totalSeconds int) string {
-	if totalSeconds < 0 {
-		totalSeconds = 0
-	}
-	minutes := totalSeconds / 60
-	seconds := totalSeconds % 60
-	return fmt.Sprintf("%d:%02d", minutes, seconds)
 }
 
 func drawDashboardClockWeatherSummary(img *image.RGBA, weather dashboardWeatherState) {
@@ -563,44 +393,6 @@ func dashboardWeekday(day time.Weekday) string {
 	}
 }
 
-func drawDashboardMusicIcon(img *image.RGBA, cx, cy, size int, clr color.Color) {
-	stemTopY := cy - size
-	stemBottomY := cy + size/2
-	drawStrokeLine(img, cx-size/5, stemTopY, cx-size/5, stemBottomY, 5, clr)
-	drawStrokeLine(img, cx-size/5, stemTopY, cx+size/2, stemTopY-size/5, 5, clr)
-	drawStrokeLine(img, cx+size/2, stemTopY-size/5, cx+size/2, cy, 5, clr)
-	drawCircleStroke(img, cx-size/2, cy+size/2, size/3, 5, clr)
-	drawCircleStroke(img, cx+size/5, cy+size/3, size/3, 5, clr)
-}
-
-func drawStrokeLine(img *image.RGBA, x1, y1, x2, y2, width int, clr color.Color) {
-	steps := max(abs(x2-x1), abs(y2-y1))
-	if steps == 0 {
-		fillCircle(img, x1, y1, max(1, width/2), clr)
-		return
-	}
-	for i := 0; i <= steps; i++ {
-		t := float64(i) / float64(steps)
-		x := int(math.Round(float64(x1) + float64(x2-x1)*t))
-		y := int(math.Round(float64(y1) + float64(y2-y1)*t))
-		fillCircle(img, x, y, max(1, width/2), clr)
-	}
-}
-
-func drawCircleStroke(img *image.RGBA, cx, cy, radius, width int, clr color.Color) {
-	inner := max(0, radius-width)
-	for y := cy - radius; y <= cy+radius; y++ {
-		for x := cx - radius; x <= cx+radius; x++ {
-			dx := x - cx
-			dy := y - cy
-			dist := dx*dx + dy*dy
-			if dist <= radius*radius && dist >= inner*inner {
-				img.Set(x, y, clr)
-			}
-		}
-	}
-}
-
 func fetchDashboardCoords(city string) (*dashboardWeatherCoords, error) {
 	u, err := url.Parse(dashboardGeocodeURL)
 	if err != nil {
@@ -672,11 +464,4 @@ func fetchDashboardWeather(coords dashboardWeatherCoords) (dashboardWeatherState
 		Code:  payload.Current.Code,
 		Ready: true,
 	}, nil
-}
-
-func abs(v int) int {
-	if v < 0 {
-		return -v
-	}
-	return v
 }

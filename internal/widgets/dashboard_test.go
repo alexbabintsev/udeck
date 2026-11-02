@@ -11,11 +11,10 @@ import (
 	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
 )
 
-func TestWideDashboardWidgetModesContextAndWeather(t *testing.T) {
+func TestWideDashboardWidgetContextAndWeather(t *testing.T) {
 	newOpenMeteo(t)
 	rec := &recorder{}
-	svc := &SpotifyService{}
-	w, err := NewWideDashboardWidget("dash", &config.Widget{City: "Kyiv"}, svc, rec.notify)
+	w, err := NewWideDashboardWidget("dash", &config.Widget{City: "Kyiv"}, rec.notify)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,33 +28,25 @@ func TestWideDashboardWidgetModesContextAndWeather(t *testing.T) {
 		t.Fatalf("city = %q", w.weather.CityName)
 	}
 
-	// Tap switches to the Spotify card, Spotify updates then redraw it.
+	// The dashboard is display-only: a tap must not redraw anything.
+	key := w.lastFrameKey
 	before := rec.count()
 	w.HandleGesture(ig.Tap)
-	if w.mode != dashboardModeSpotify || rec.count() == before {
-		t.Fatal("tap must switch mode and redraw")
-	}
-	before = rec.count()
-	w.spotifyUpdate(spotifySnapshot{Running: true, State: "playing", Playing: true, TrackName: "Song", Artist: "Band", PositionSec: 61, DurationMS: 180000})
-	if rec.count() == before {
-		t.Fatal("spotify update must redraw the Spotify card")
+	if rec.count() != before || w.lastFrameKey != key {
+		t.Fatal("tap must not change the dashboard")
 	}
 
-	// In a folder the widget is the Back key: taps do nothing and the
-	// context switch redraws silently (the page upload carries it).
-	before = rec.count()
+	// In a folder the widget is the Back key: the context switch redraws
+	// silently (the page upload carries it).
 	w.SetContext(Context{FolderDepth: 1})
 	w.SetContext(Context{FolderDepth: 1})
-	w.HandleGesture(ig.Tap)
-	w.spotifyUpdate(spotifySnapshot{Running: true, TrackName: "Other"})
-	if rec.count() != before || w.mode != dashboardModeSpotify {
-		t.Fatal("folder context must not notify or change mode")
+	if rec.count() != before || !strings.HasPrefix(w.lastFrameKey, "back:") {
+		t.Fatal("folder context must redraw as Back without notifying")
 	}
-	w.HandleGesture(ig.Hold)
 }
 
 func TestWideDashboardWithoutCity(t *testing.T) {
-	w, err := NewWideDashboardWidget("dash", &config.Widget{}, nil, nil)
+	w, err := NewWideDashboardWidget("dash", &config.Widget{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +62,7 @@ func TestWideDashboardWithoutCity(t *testing.T) {
 func TestWideDashboardWeatherFailure(t *testing.T) {
 	om := newOpenMeteo(t)
 	om.fail.Store(true)
-	w, err := NewWideDashboardWidget("dash", &config.Widget{City: "Kyiv"}, nil, nil)
+	w, err := NewWideDashboardWidget("dash", &config.Widget{City: "Kyiv"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,24 +91,6 @@ func TestDashboardHelpers(t *testing.T) {
 			t.Fatalf("no weekday name for %v", d)
 		}
 	}
-	if formatSpotifyTimestamp(0) != "0:00" || formatSpotifyTimestamp(125) != "2:05" || formatSpotifyTimestamp(-5) != "0:00" {
-		t.Fatalf("formatSpotifyTimestamp: %q %q", formatSpotifyTimestamp(0), formatSpotifyTimestamp(125))
-	}
-	s := spotifySnapshot{Running: true, Artist: "A", Album: "B", PositionSec: 30, DurationMS: 60000}
-	if p := dashboardSpotifyProgress(s); p < 0.49 || p > 0.51 {
-		t.Fatalf("progress = %v", p)
-	}
-	if dashboardSpotifyProgress(spotifySnapshot{PositionSec: 99, DurationMS: 1000}) != 1 || dashboardSpotifyProgress(spotifySnapshot{PositionSec: -1, DurationMS: 1000}) != 0 {
-		t.Fatal("progress must clamp")
-	}
-	// Without a duration a fixed placeholder fill is drawn.
-	if dashboardSpotifyProgress(spotifySnapshot{}) <= 0 || dashboardSpotifyProgress(spotifySnapshot{Running: true}) <= 0 {
-		t.Fatal("placeholder progress")
-	}
-	if !strings.Contains(dashboardSpotifyArtistLine(s), "A") || dashboardSpotifyLeftStamp(s) == "" || dashboardSpotifyRightStamp(s) == "" {
-		t.Fatal("spotify text helpers")
-	}
-	_ = dashboardSpotifyArtistLine(spotifySnapshot{})
 	if rgb("#ff8000") != (color.RGBA{255, 128, 0, 255}) || rgb("bad").A != 0 || rgb("zzzzzz").A != 0 {
 		t.Fatal("rgb")
 	}
@@ -125,20 +98,17 @@ func TestDashboardHelpers(t *testing.T) {
 		t.Fatal("rectWH")
 	}
 	now := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	k1 := dashboardFrameKey(now, 0, Context{}, dashboardWeatherState{}, spotifySnapshot{})
-	k2 := dashboardFrameKey(now.Add(time.Minute), 0, Context{}, dashboardWeatherState{}, spotifySnapshot{})
-	k3 := dashboardFrameKey(now, 0, Context{FolderDepth: 1}, dashboardWeatherState{}, spotifySnapshot{})
-	k4 := dashboardFrameKey(now, dashboardModeSpotify, Context{}, dashboardWeatherState{}, spotifySnapshot{TrackName: "x"})
-	if k1 == k2 || k1 == k3 || k1 == k4 {
-		t.Fatal("frame keys must differ per minute, context and mode")
+	k1 := dashboardFrameKey(now, Context{})
+	k2 := dashboardFrameKey(now.Add(time.Minute), Context{})
+	k3 := dashboardFrameKey(now, Context{FolderDepth: 1})
+	if k1 == k2 || k1 == k3 {
+		t.Fatal("frame keys must differ per minute and context")
 	}
 
-	// Rendering paths, including artwork and the fallback card.
+	// Rendering paths.
 	img := image.NewRGBA(image.Rect(0, 0, 458, 196))
 	temp := 3.0
 	renderDashboardClock(img, now, dashboardWeatherState{Ready: true, TempC: &temp, CityName: "Kyiv"})
 	renderDashboardClock(img, now, dashboardWeatherState{Error: "Weather unavailable"})
-	renderDashboardSpotify(img, spotifySnapshot{})
-	renderDashboardSpotify(img, spotifySnapshot{Running: true, Playing: true, TrackName: strings.Repeat("Long ", 20), Artwork: image.NewRGBA(image.Rect(0, 0, 64, 64))})
 	renderDashboardBack(img)
 }

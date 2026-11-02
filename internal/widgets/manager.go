@@ -318,14 +318,7 @@ func (m *Manager) newWidgetLocked(id string) (Widget, error) {
 	case "freqtrade":
 		item, err = NewFreqtradeWidget(id, def.btn.Widget, m.notify)
 	case "wide_dashboard":
-		if m.spotify == nil {
-			service, err := newSpotifyService(defaultSpotifyPollMS)
-			if err != nil {
-				return nil, err
-			}
-			m.spotify = service
-		}
-		item, err = NewWideDashboardWidget(id, def.btn.Widget, m.spotify, m.notify)
+		item, err = NewWideDashboardWidget(id, def.btn.Widget, m.notify)
 	case "spotify_play_pause", "spotify_next", "spotify_artwork":
 		if m.spotify == nil {
 			service, err := newSpotifyService(def.btn.Widget.PollMS)

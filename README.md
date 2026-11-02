@@ -180,7 +180,7 @@ Current config surface:
         - only valid at `at: [2, 3]`
         - `city`: optional weather city name
         - `poll_ms`: optional weather refresh override
-        - tap cycles `clock -> spotify`
+        - shows the clock and weather; tap does nothing
         - inside folders it turns into the folder `Back` button
         - on top-level pages `2+` it shows the page number in the corner
         - clock mode refreshes on minute changes instead of every second
