@@ -11,11 +11,13 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 )
 
 func TestWidgetBasePublishWriteAndClose(t *testing.T) {
 	rec := &recorder{}
-	b, err := newWidgetBase("id", "t", "x.png", rec.notify)
+	b, err := newWidgetBase("id", "t", rec.notify)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,6 +25,8 @@ func TestWidgetBasePublishWriteAndClose(t *testing.T) {
 	if changed, err := b.writeIcon(img); err != nil || !changed || rec.count() != 0 {
 		t.Fatalf("writeIcon changed=%v err=%v notifies=%d", changed, err, rec.count())
 	}
+	// Published images are not modified afterwards; a change is a new one.
+	img = image.NewRGBA(image.Rect(0, 0, 4, 4))
 	copy(img.Pix[:4], []byte{255, 255, 255, 255})
 	if changed, _ := b.publish(img); !changed || rec.count() != 1 {
 		t.Fatal("publish must notify on change")
@@ -46,24 +50,14 @@ func TestWidgetBasePublishWriteAndClose(t *testing.T) {
 	if changed, err := b.publish(img); changed || err != nil {
 		t.Fatal("closed widget must not write")
 	}
-	if _, err := os.Stat(filepath.Dir(b.IconPath())); !os.IsNotExist(err) {
-		t.Fatal("Close must remove the temp dir")
+	if _, ok := icons.Image(b.IconPath()); ok {
+		t.Fatal("Close must drop the icon")
 	}
 	_ = b.Close()
 
-	nb, _ := newWidgetBase("n", "t", "x.png", nil)
+	nb, _ := newWidgetBase("n", "t", nil)
 	defer nb.Close()
 	nb.notify("ignored") // nil notify replaced with a no-op
-}
-
-func TestWritePNGAtomicErrors(t *testing.T) {
-	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
-	if err := writePNGAtomic(filepath.Join(t.TempDir(), "missing", "x.png"), img); err == nil {
-		t.Fatal("expected error for a missing directory")
-	}
-	if _, err := writePNGAtomicIfChanged(t.TempDir(), image.NewRGBA(image.Rect(0, 0, 0, 0))); err == nil {
-		t.Fatal("expected encode error for an empty image")
-	}
 }
 
 func TestHTTPGetAndJSON(t *testing.T) {

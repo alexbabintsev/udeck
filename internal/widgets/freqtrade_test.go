@@ -5,10 +5,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
@@ -164,27 +164,14 @@ func TestFreqtradeWidgetTapCyclesMode(t *testing.T) {
 	}
 	defer w.Close()
 
-	waitForFile(t, w.IconPath())
 	w.refresh()
-	waitForFile(t, w.IconPath())
-
-	before, err := os.ReadFile(w.IconPath())
-	if err != nil {
-		t.Fatalf("read initial icon: %v", err)
-	}
+	before, _ := icons.MemVersion(w.IconPath())
 
 	w.HandleGesture(ig.Tap)
 
-	after, err := os.ReadFile(w.IconPath())
-	if err != nil {
-		t.Fatalf("read cycled icon: %v", err)
-	}
-	if string(before) == string(after) {
+	after, ok := icons.MemVersion(w.IconPath())
+	if !ok || before == after {
 		t.Fatal("expected icon to change after mode switch")
-	}
-
-	if _, err := os.Stat(filepath.Dir(w.IconPath())); err != nil {
-		t.Fatalf("expected widget temp dir to exist before close: %v", err)
 	}
 }
 

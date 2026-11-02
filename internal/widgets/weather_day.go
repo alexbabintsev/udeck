@@ -174,7 +174,7 @@ type WeatherDayWidget struct {
 }
 
 func NewWeatherDayWidget(id string, cfg *config.Widget, notify func(string)) (*WeatherDayWidget, error) {
-	base, err := newWidgetBase(id, "weather-day", "weather_day.png", notify)
+	base, err := newWidgetBase(id, "weather-day", notify)
 	if err != nil {
 		return nil, err
 	}

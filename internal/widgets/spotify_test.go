@@ -1,10 +1,7 @@
 package widgets
 
 import (
-	"bytes"
 	"image/color"
-	"image/png"
-	"os"
 	"testing"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
@@ -73,7 +70,7 @@ func TestShortenLine(t *testing.T) {
 }
 
 func TestSpotifyPlayPauseWidgetRendersMinimalIcon(t *testing.T) {
-	base, err := newSpotifyBaseWidget("test", &SpotifyService{}, func(string) {}, "spotify-playpause.png")
+	base, err := newSpotifyBaseWidget("test", &SpotifyService{}, func(string) {}, "spotify-playpause")
 	if err != nil {
 		t.Fatalf("new spotify base widget: %v", err)
 	}
@@ -82,14 +79,7 @@ func TestSpotifyPlayPauseWidgetRendersMinimalIcon(t *testing.T) {
 	w := &SpotifyPlayPauseWidget{spotifyBaseWidget: base}
 	w.spotifyUpdate(spotifySnapshot{Running: true, Playing: true})
 
-	data, err := os.ReadFile(base.iconPath)
-	if err != nil {
-		t.Fatalf("read rendered icon: %v", err)
-	}
-	img, err := png.Decode(bytes.NewReader(data))
-	if err != nil {
-		t.Fatalf("decode rendered icon: %v", err)
-	}
+	img := readIcon(t, base.iconPath)
 
 	bg := color.RGBAModel.Convert(img.At(8, 8)).(color.RGBA)
 	if bg.R > 4 || bg.G > 4 || bg.B > 4 {
@@ -126,14 +116,7 @@ func TestNewSpotifyPlayPauseWidgetWritesInitialIcon(t *testing.T) {
 	}
 	defer w.Close()
 
-	data, err := os.ReadFile(w.IconPath())
-	if err != nil {
-		t.Fatalf("read initial icon: %v", err)
-	}
-	img, err := png.Decode(bytes.NewReader(data))
-	if err != nil {
-		t.Fatalf("decode initial icon: %v", err)
-	}
+	img := readIcon(t, w.IconPath())
 
 	foundGreen := false
 	for y := 34; y < 162 && !foundGreen; y++ {

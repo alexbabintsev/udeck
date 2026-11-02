@@ -82,7 +82,7 @@ func NewFreqtradeWidget(id string, cfg *config.Widget, notify func(string)) (*Fr
 	for _, api := range apis {
 		warnClearCredentials("freqtrade", api.URL)
 	}
-	base, err := newWidgetBase(id, "freqtrade-widget", "freqtrade.png", notify)
+	base, err := newWidgetBase(id, "freqtrade-widget", notify)
 	if err != nil {
 		return nil, err
 	}

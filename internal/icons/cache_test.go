@@ -2,7 +2,9 @@ package icons
 
 import (
 	"bytes"
+	"image"
 	"image/color"
+	"image/draw"
 	"os"
 	"path/filepath"
 	"testing"
@@ -74,20 +76,68 @@ func TestEncodedCacheEvictsLeastRecentlyUsed(t *testing.T) {
 	c := &encodedCache{entries: map[cacheKey]*cacheEntry{}}
 	key := func(i int) cacheKey { return cacheKey{width: i} }
 	for i := 0; i < iconCacheMax; i++ {
-		c.put(key(i), nil, []byte{byte(i)})
+		c.put(key(i), cacheStamp{}, []byte{byte(i)})
 	}
-	c.get(key(0), nil) // key 0 is now the most recent
-	c.put(key(iconCacheMax), nil, nil)
+	c.get(key(0), cacheStamp{}) // key 0 is now the most recent
+	c.put(key(iconCacheMax), cacheStamp{}, nil)
 	if len(c.entries) != iconCacheMax {
 		t.Fatalf("size %d", len(c.entries))
 	}
-	if _, ok := c.get(key(0), nil); !ok {
+	if _, ok := c.get(key(0), cacheStamp{}); !ok {
 		t.Fatal("recently used entry evicted")
 	}
-	if _, ok := c.get(key(1), nil); ok {
+	if _, ok := c.get(key(1), cacheStamp{}); ok {
 		t.Fatal("least recently used entry kept")
 	}
 	if sameFile(nil, nil) != true {
 		t.Fatal("pack icons have no file info")
 	}
+}
+
+func TestMemIconsAreStoredEncodedAndCached(t *testing.T) {
+	SetFormat(JPEG)
+	ref := NewMemRef("test")
+	if !IsMemIcon(ref) || IsPackIcon(ref) {
+		t.Fatalf("ref %q", ref)
+	}
+	if _, err := LoadForButton(ref, Insets{}, [2]int{0, 0}, ""); err == nil {
+		t.Fatal("unknown image must fail")
+	}
+	solid := func(c color.RGBA) *image.RGBA {
+		img := image.NewRGBA(image.Rect(0, 0, 8, 8))
+		draw.Draw(img, img.Bounds(), &image.Uniform{c}, image.Point{}, draw.Src)
+		return img
+	}
+	if !PutImage(ref, solid(color.RGBA{255, 0, 0, 255})) {
+		t.Fatal("first put must report a change")
+	}
+	if PutImage(ref, solid(color.RGBA{255, 0, 0, 255})) {
+		t.Fatal("identical pixels must not count as a change")
+	}
+	v1, _ := MemVersion(ref)
+	before := cacheMisses()
+	red, err := LoadForButton(ref, Insets{}, [2]int{0, 0}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	LoadForButton(ref, Insets{}, [2]int{0, 0}, "")
+	if cacheMisses() != before+1 {
+		t.Fatal("unchanged image must be encoded once")
+	}
+	PutImage(ref, solid(color.RGBA{0, 0, 255, 255}))
+	if v2, _ := MemVersion(ref); v2 == v1 {
+		t.Fatal("version must change with the content")
+	}
+	blue, _ := LoadForButton(ref, Insets{}, [2]int{0, 0}, "")
+	if bytes.Equal(red, blue) || cacheMisses() != before+2 {
+		t.Fatal("changed image must be re-encoded")
+	}
+	DeleteImage(ref)
+	if _, ok := Image(ref); ok {
+		t.Fatal("deleted image still present")
+	}
+	if PutImage(ref, image.NewGray(image.Rect(0, 0, 1, 1))) != true || sameImage(image.NewGray(image.Rect(0, 0, 1, 1)), image.NewGray(image.Rect(0, 0, 1, 1))) {
+		t.Fatal("non-RGBA images always count as changed")
+	}
+	DeleteImage(ref)
 }

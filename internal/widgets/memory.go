@@ -46,7 +46,7 @@ type MemoryWidget struct {
 }
 
 func NewMemoryWidget(id string, cfg *config.Widget, notify func(string)) (*MemoryWidget, error) {
-	base, err := newWidgetBase(id, "memory-widget", "memory.png", notify)
+	base, err := newWidgetBase(id, "memory-widget", notify)
 	if err != nil {
 		return nil, err
 	}

@@ -72,7 +72,7 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
 - Auto-recovery on common HID read/write/open failures
 - Widget instances are created on first page visit and then cached
 - Spotify shared runtime is prewarmed when the config contains Spotify widgets
-- Widget icon files are only rewritten when the rendered frame actually changes
+- Widget icons are rendered in memory and only re-sent when the frame actually changes
 - Visible widget refreshes now update only the changed slot instead of reflashing the whole page
 - macOS power-event handling for sleep / wake / shutdown
 - Startup retry/backoff to survive transient HID access errors
@@ -390,10 +390,8 @@ Notes:
   - the current step controls the button's visible `label` / `icon`
   - after the step runs, the button advances to the next step
   - only one gesture per button can define a toggle sequence
-- Widgets write icons atomically so page refreshes do not race on partial
-  PNG files.
-- Encoded key images are cached, so switching pages does not re-encode
-  every icon.
+- Widgets render their icons in memory (no temp files), and encoded key
+  images are cached, so switching pages does not re-encode every icon.
 - Widgets for the same city (`weather_day`, `wide_dashboard`) share one
   weather request per poll interval.
 - `run` warns when the config file is writable by other users.
@@ -486,9 +484,8 @@ Notes:
     also written to `~/Library/Logs/ulanzi-deck/debug.log` (or the path
     given with `--log-file`), rotated to `.1` past 10 MB.
 - Spotify artwork updates but then breaks
-  - Artwork icons are written atomically now; if updates still fail,
-    check Spotify itself is running and that network access is available
-    for cover-art lookup.
+  - Check Spotify itself is running and that network access is
+    available for cover-art lookup.
 - Key actions do nothing
   - Grant Accessibility permission to the app that launched
     `ulanzi-deck` in macOS System Settings. For example, if you run it

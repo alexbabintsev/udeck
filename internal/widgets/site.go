@@ -49,7 +49,7 @@ type SiteWidget struct {
 }
 
 func NewSiteWidget(id string, cfg *config.Widget, notify func(string)) (*SiteWidget, error) {
-	base, err := newWidgetBase(id, "site", "site.png", notify)
+	base, err := newWidgetBase(id, "site", notify)
 	if err != nil {
 		return nil, err
 	}

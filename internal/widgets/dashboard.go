@@ -63,7 +63,7 @@ type WideDashboardWidget struct {
 }
 
 func NewWideDashboardWidget(id string, cfg *config.Widget, notify func(string)) (*WideDashboardWidget, error) {
-	base, err := newWidgetBase(id, "wide-dashboard", "dashboard.png", notify)
+	base, err := newWidgetBase(id, "wide-dashboard", notify)
 	if err != nil {
 		return nil, err
 	}

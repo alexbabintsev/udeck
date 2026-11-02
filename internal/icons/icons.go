@@ -128,25 +128,43 @@ func LoadForButton(path string, margins Insets, at [2]int, iconColor string) ([]
 		path: path, margins: margins, width: width, height: height,
 		color: iconColor, format: CurrentFormat(), quality: imageQuality(),
 	}
-	// Pack icons are embedded and never change; files are re-encoded
-	// when they do (widgets rewrite theirs on every update).
-	var info os.FileInfo
-	if !IsPackIcon(path) {
+	// Pack icons are embedded and never change; files and in-memory
+	// widget images are re-encoded when they do.
+	var stamp cacheStamp
+	switch {
+	case IsMemIcon(path):
+		v, ok := MemVersion(path)
+		if !ok {
+			return nil, fmt.Errorf("icon %q: no such image", path)
+		}
+		stamp.version = v
+	case !IsPackIcon(path):
 		st, err := os.Stat(expandTilde(path))
 		if err != nil {
 			return nil, fmt.Errorf("open icon %q: %w", expandTilde(path), err)
 		}
-		info = st
+		stamp.info = st
 	}
-	if data, ok := iconCache.get(key, info); ok {
+	if data, ok := iconCache.get(key, stamp); ok {
 		return data, nil
 	}
 	data, err := loadSized(path, margins, width, height, iconColor)
 	if err != nil {
 		return nil, err
 	}
-	iconCache.put(key, info, data)
+	iconCache.put(key, stamp, data)
 	return data, nil
+}
+
+// cacheStamp identifies the content a cache entry was encoded from: a
+// file's identity and mtime, or an in-memory image version.
+type cacheStamp struct {
+	info    os.FileInfo
+	version uint64
+}
+
+func (a cacheStamp) matches(b cacheStamp) bool {
+	return a.version == b.version && sameFile(a.info, b.info)
 }
 
 // iconCacheMax bounds the cache: static icons of all pages plus one
@@ -163,9 +181,9 @@ type cacheKey struct {
 }
 
 type cacheEntry struct {
-	info os.FileInfo // nil for pack icons
-	data []byte
-	used uint64
+	stamp cacheStamp
+	data  []byte
+	used  uint64
 }
 
 // iconCache keeps encoded key images so a page switch does not decode,
@@ -179,11 +197,11 @@ type encodedCache struct {
 	misses  int // for tests
 }
 
-func (c *encodedCache) get(key cacheKey, info os.FileInfo) ([]byte, bool) {
+func (c *encodedCache) get(key cacheKey, stamp cacheStamp) ([]byte, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.entries[key]
-	if !ok || !sameFile(e.info, info) {
+	if !ok || !e.stamp.matches(stamp) {
 		c.misses++
 		return nil, false
 	}
@@ -192,13 +210,13 @@ func (c *encodedCache) get(key cacheKey, info os.FileInfo) ([]byte, bool) {
 	return e.data, true
 }
 
-// put stores data encoded from the file as it was at info (stat taken
-// before reading, so a write in between only causes another miss).
-func (c *encodedCache) put(key cacheKey, info os.FileInfo, data []byte) {
+// put stores data encoded from the content identified by stamp (taken
+// before reading, so a change in between only causes another miss).
+func (c *encodedCache) put(key cacheKey, stamp cacheStamp, data []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.clock++
-	c.entries[key] = &cacheEntry{info: info, data: data, used: c.clock}
+	c.entries[key] = &cacheEntry{stamp: stamp, data: data, used: c.clock}
 	if len(c.entries) <= iconCacheMax {
 		return
 	}
@@ -224,16 +242,23 @@ func loadSized(path string, margins Insets, width, height int, iconColor string)
 		return loadPackSized(path, margins, width, height, iconColor)
 	}
 
-	path = expandTilde(path)
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("open icon %q: %w", path, err)
-	}
-	defer f.Close()
-
-	src, _, err := image.Decode(f)
-	if err != nil {
-		return nil, fmt.Errorf("decode icon %q: %w", path, err)
+	var src image.Image
+	if IsMemIcon(path) {
+		img, ok := Image(path)
+		if !ok {
+			return nil, fmt.Errorf("icon %q: no such image", path)
+		}
+		src = img
+	} else {
+		path = expandTilde(path)
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, fmt.Errorf("open icon %q: %w", path, err)
+		}
+		defer f.Close()
+		if src, _, err = image.Decode(f); err != nil {
+			return nil, fmt.Errorf("decode icon %q: %w", path, err)
+		}
 	}
 
 	dst := image.NewRGBA(image.Rect(0, 0, width, height))

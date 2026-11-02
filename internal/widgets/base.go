@@ -1,17 +1,16 @@
 package widgets
 
 import (
-	"fmt"
 	"image"
-	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 )
 
-// widgetBase is the lifecycle every widget shares: a private temp
-// directory holding the rendered icon, change notification towards the
+// widgetBase is the lifecycle every widget shares: the rendered icon,
+// held in memory (icons.PutImage), change notification towards the
 // Manager, and background loops that stop as soon as the widget is
 // closed (not on their next tick, which for slow pollers can be minutes
 // after a config reload replaced the widget). Loops are also paused
@@ -19,25 +18,24 @@ import (
 // opened once does not keep polling its API forever.
 type widgetBase struct {
 	id       string
-	iconPath string
+	iconPath string // an icons mem: reference
 	notify   func(string)
 
+	// closeMu orders icon writes before Close, so a render racing with
+	// Close cannot store an image after it was deleted.
+	closeMu   sync.RWMutex
 	done      chan struct{}
 	closeOnce sync.Once
 	active    atomic.Bool
 }
 
-func newWidgetBase(id, kind, filename string, notify func(string)) (*widgetBase, error) {
-	dir, err := os.MkdirTemp("", "ulanzi-"+kind+"-")
-	if err != nil {
-		return nil, fmt.Errorf("create %s widget temp dir: %w", kind, err)
-	}
+func newWidgetBase(id, kind string, notify func(string)) (*widgetBase, error) {
 	if notify == nil {
 		notify = func(string) {}
 	}
 	b := &widgetBase{
 		id:       id,
-		iconPath: filepath.Join(dir, filename),
+		iconPath: icons.NewMemRef(kind),
 		notify:   notify,
 		done:     make(chan struct{}),
 	}
@@ -54,14 +52,19 @@ func (b *widgetBase) setActive(on bool) bool {
 	return b.active.Swap(on) != on && on
 }
 
-// IconPath returns the file the widget renders into.
+// IconPath returns the icon reference the widget renders into.
 func (b *widgetBase) IconPath() string { return b.iconPath }
 
-// Close stops the widget's loops and removes its icon directory. It is
-// safe to call more than once.
+// Close stops the widget's loops and drops its icon. It is safe to call
+// more than once.
 func (b *widgetBase) Close() error {
-	b.closeOnce.Do(func() { close(b.done) })
-	return os.RemoveAll(filepath.Dir(b.iconPath))
+	b.closeMu.Lock()
+	defer b.closeMu.Unlock()
+	b.closeOnce.Do(func() {
+		close(b.done)
+		icons.DeleteImage(b.iconPath)
+	})
+	return nil
 }
 
 // isClosed reports whether Close has been called.
@@ -74,13 +77,16 @@ func (b *widgetBase) isClosed() bool {
 	}
 }
 
-// writeIcon atomically stores img and reports whether the file changed.
-// It does not notify; use it for the initial render in constructors.
+// writeIcon stores img and reports whether the icon changed. It does not
+// notify; use it for the initial render in constructors. img must not be
+// modified afterwards.
 func (b *widgetBase) writeIcon(img image.Image) (bool, error) {
+	b.closeMu.RLock()
+	defer b.closeMu.RUnlock()
 	if b.isClosed() {
 		return false, nil
 	}
-	return writePNGAtomicIfChanged(b.iconPath, img)
+	return icons.PutImage(b.iconPath, img), nil
 }
 
 // publish stores img and tells the Manager when the icon changed.

@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
+
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
 )
@@ -139,9 +141,6 @@ func TestManagerResolveButtonsOverlaysPageNumber(t *testing.T) {
 	if isPageNavButton(config.Button{Widget: &config.Widget{}}) || isPageNavButton(buttons[2]) {
 		t.Fatal("isPageNavButton")
 	}
-	if sanitizeKey("a/b|1") != "a_b_1" {
-		t.Fatal("sanitizeKey")
-	}
 }
 
 func TestManagerRejectsUnknownWidget(t *testing.T) {
@@ -185,8 +184,8 @@ func TestManagerCreatesEveryWidgetType(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, b := range resolved {
-		if _, err := os.Stat(b.Icon); err != nil {
-			t.Fatalf("%s: icon not rendered: %v", b.RuntimeID, err)
+		if _, ok := icons.Image(b.Icon); !ok {
+			t.Fatalf("%s: icon %q not rendered", b.RuntimeID, b.Icon)
 		}
 	}
 	m.SetContext(Context{FolderDepth: 1})

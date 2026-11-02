@@ -359,11 +359,16 @@ func styleAndBrightness(cfg *config.Config) ([][protocol.PacketSize]byte, error)
 }
 
 // buttonSignature identifies what a key shows: its label, icon settings
-// and the current bytes of a file icon (widgets rewrite the same path).
+// and the current content of the icon (widgets update theirs in place).
 func buttonSignature(b config.Button) string {
 	h := fnv.New64a()
 	fmt.Fprintf(h, "%s\x00%s\x00%s\x00%v\x00", b.Label, b.Icon, b.IconColor, b.IconMargins)
-	if b.Icon != "" && !icons.IsPackIcon(b.Icon) {
+	switch {
+	case b.Icon == "" || icons.IsPackIcon(b.Icon):
+	case icons.IsMemIcon(b.Icon):
+		v, _ := icons.MemVersion(b.Icon)
+		fmt.Fprintf(h, "v%d", v)
+	default:
 		if data, err := os.ReadFile(b.Icon); err == nil {
 			h.Write(data)
 		}

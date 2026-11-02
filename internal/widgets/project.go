@@ -83,7 +83,7 @@ func NewProjectWidget(id string, btn config.Button, settings config.ProjectWidge
 		return nil, fmt.Errorf("project start script %q: %w", startScript, err)
 	}
 
-	base, err := newWidgetBase(id, "project-widget", "project.png", notify)
+	base, err := newWidgetBase(id, "project-widget", notify)
 	if err != nil {
 		return nil, err
 	}

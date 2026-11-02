@@ -34,6 +34,8 @@ actual development milestones rather than formal releases.
   terminal close and service stop); Ctrl-C still leaves the deck as is.
 - Encoded key images are cached by content: a full page builds in about
   0.5 ms instead of 12 ms (24 MB less garbage per page switch).
+- Widgets render into memory instead of temp PNG files; no `ulanzi-*`
+  directories are left in `$TMPDIR`.
 - `weather_day` and `wide_dashboard` widgets for the same city share one
   forecast request, which now also carries the current conditions.
 - The freqtrade widget shows OFFLINE when no bot answers and NO TRADES

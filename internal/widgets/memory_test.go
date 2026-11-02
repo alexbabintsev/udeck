@@ -1,18 +1,17 @@
 package widgets
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"image"
 	"image/color"
-	"image/png"
-	"os"
 	"os/exec"
 	"runtime"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
@@ -38,7 +37,7 @@ func (r *recorder) count() int {
 
 func testBase(t *testing.T, notify func(string)) *widgetBase {
 	t.Helper()
-	b, err := newWidgetBase("test", "test", "icon.png", notify)
+	b, err := newWidgetBase("test", "test", notify)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,15 +45,12 @@ func testBase(t *testing.T, notify func(string)) *widgetBase {
 	return b
 }
 
-func readPNG(t *testing.T, path string) image.Image {
+// readIcon returns the image a widget rendered under ref.
+func readIcon(t *testing.T, ref string) image.Image {
 	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read icon: %v", err)
-	}
-	img, err := png.Decode(bytes.NewReader(data))
-	if err != nil {
-		t.Fatalf("decode icon: %v", err)
+	img, ok := icons.Image(ref)
+	if !ok {
+		t.Fatalf("no icon %q", ref)
 	}
 	return img
 }
@@ -80,7 +76,7 @@ func TestMemoryWidgetRendersRingAndDigits(t *testing.T) {
 	if err != nil || !changed {
 		t.Fatalf("changed=%v err=%v", changed, err)
 	}
-	img := readPNG(t, w.iconPath)
+	img := readIcon(t, w.iconPath)
 	if bg := rgbaAt(img, 8, 8); bg.R > 4 || bg.G > 4 || bg.B > 4 {
 		t.Fatalf("expected black background, got %#v", bg)
 	}
@@ -101,7 +97,7 @@ func TestMemoryWidgetBusyRendersLucideIcon(t *testing.T) {
 	if _, err := w.render(); err != nil {
 		t.Fatal(err)
 	}
-	img := readPNG(t, w.iconPath)
+	img := readIcon(t, w.iconPath)
 	if !anyPixel(img, image.Rect(58, 58, 138, 138), func(c color.RGBA) bool { return c.R > 150 && c.G < 120 && c.B < 120 }) {
 		t.Fatal("expected lucide busy icon pixels")
 	}
@@ -131,7 +127,7 @@ func TestMemoryWidgetTapShowsBusyThenRestartsApps(t *testing.T) {
 	if rec.count() != before+1 {
 		t.Fatal("expected immediate widget update on tap")
 	}
-	img := readPNG(t, w.iconPath)
+	img := readIcon(t, w.iconPath)
 	if !anyPixel(img, image.Rect(58, 58, 138, 138), func(c color.RGBA) bool { return c.G > 120 && c.G > c.R }) {
 		t.Fatal("expected busy icon right after tap")
 	}
@@ -187,14 +183,14 @@ func TestNewMemoryWidgetPollsAndStopsOnClose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(w.IconPath()); err != nil {
-		t.Fatalf("initial icon missing: %v", err)
+	if _, ok := icons.Image(w.IconPath()); !ok {
+		t.Fatal("initial icon missing")
 	}
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(w.IconPath()); !os.IsNotExist(err) {
-		t.Fatal("Close must remove the icon directory")
+	if _, ok := icons.Image(w.IconPath()); ok {
+		t.Fatal("Close must drop the icon")
 	}
 	if err := w.Close(); err != nil {
 		t.Fatal("second Close must be safe")

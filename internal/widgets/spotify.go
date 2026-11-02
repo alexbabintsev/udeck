@@ -411,8 +411,8 @@ func (w *spotifyBaseWidget) resume() {
 	}
 }
 
-func newSpotifyBaseWidget(id string, service *SpotifyService, notify func(string), filename string) (*spotifyBaseWidget, error) {
-	base, err := newWidgetBase(id, "spotify-widget", filename, notify)
+func newSpotifyBaseWidget(id string, service *SpotifyService, notify func(string), kind string) (*spotifyBaseWidget, error) {
+	base, err := newWidgetBase(id, kind, notify)
 	if err != nil {
 		return nil, err
 	}
@@ -424,7 +424,7 @@ type SpotifyPlayPauseWidget struct {
 }
 
 func NewSpotifyPlayPauseWidget(id string, service *SpotifyService, notify func(string)) (*SpotifyPlayPauseWidget, error) {
-	base, err := newSpotifyBaseWidget(id, service, notify, "spotify-playpause.png")
+	base, err := newSpotifyBaseWidget(id, service, notify, "spotify-playpause")
 	if err != nil {
 		return nil, err
 	}
@@ -468,7 +468,7 @@ type SpotifyNextWidget struct {
 }
 
 func NewSpotifyNextWidget(id string, service *SpotifyService, notify func(string)) (*SpotifyNextWidget, error) {
-	base, err := newSpotifyBaseWidget(id, service, notify, "spotify-next.png")
+	base, err := newSpotifyBaseWidget(id, service, notify, "spotify-next")
 	if err != nil {
 		return nil, err
 	}
@@ -499,7 +499,7 @@ type SpotifyArtworkWidget struct {
 }
 
 func NewSpotifyArtworkWidget(id string, service *SpotifyService, notify func(string)) (*SpotifyArtworkWidget, error) {
-	base, err := newSpotifyBaseWidget(id, service, notify, "spotify-artwork.png")
+	base, err := newSpotifyBaseWidget(id, service, notify, "spotify-artwork")
 	if err != nil {
 		return nil, err
 	}

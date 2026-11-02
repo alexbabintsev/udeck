@@ -5,8 +5,6 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
@@ -14,24 +12,24 @@ import (
 )
 
 // pageNavOverlay renders page-navigation button icons with the current page
-// number badge. Icons are cached per (iconID, iconColor, pageNumber) tuple and
-// written as PNGs to a shared temp directory.
+// number badge. Icons are cached per (iconID, iconColor, pageNumber) tuple as
+// in-memory images.
 type pageNavOverlay struct {
 	mu    sync.Mutex
-	dir   string
-	cache map[string]string // key → file path
+	cache map[string]string // key → icons mem: reference
 }
 
 func newPageNavOverlay() (*pageNavOverlay, error) {
-	dir, err := os.MkdirTemp("", "ulanzi-page-nav-")
-	if err != nil {
-		return nil, err
-	}
-	return &pageNavOverlay{dir: dir, cache: map[string]string{}}, nil
+	return &pageNavOverlay{cache: map[string]string{}}, nil
 }
 
 func (o *pageNavOverlay) close() {
-	_ = os.RemoveAll(o.dir)
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for _, ref := range o.cache {
+		icons.DeleteImage(ref)
+	}
+	clear(o.cache)
 }
 
 // resolve returns an icon path for the given button with a page number badge.
@@ -67,25 +65,10 @@ func (o *pageNavOverlay) resolve(iconID, iconColor string, pageNumber int) strin
 	drawText(img, fmt.Sprintf("%d", pageNumber),
 		FromLeft(badgeMargin), FromTop(badgeMargin), badgeSize, badgeSize, AlignMiddleCenter, color.Black, 34, true)
 
-	path := filepath.Join(o.dir, fmt.Sprintf("page_nav_%s.png", sanitizeKey(key)))
-	if err := writePNGAtomic(path, img); err != nil {
-		return ""
-	}
-	o.cache[key] = path
-	return path
-}
-
-func sanitizeKey(s string) string {
-	out := make([]byte, len(s))
-	for i := range s {
-		c := s[i]
-		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
-			out[i] = c
-		} else {
-			out[i] = '_'
-		}
-	}
-	return string(out)
+	ref := icons.NewMemRef("page-nav")
+	icons.PutImage(ref, img)
+	o.cache[key] = ref
+	return ref
 }
 
 // isPageNavBinding returns true if any gesture on the button has type
