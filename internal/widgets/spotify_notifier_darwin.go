@@ -2,79 +2,77 @@
 
 package widgets
 
-import (
-	"bufio"
-	"context"
-	"os"
-	"os/exec"
-)
+/*
+#cgo LDFLAGS: -framework CoreFoundation
+#include <CoreFoundation/CoreFoundation.h>
 
-const spotifyWatcherSwift = `import Foundation
+extern void goSpotifyNotification(void);
 
-final class Observer: NSObject {
-    @objc func handle(_ note: Notification) {
-        print("spotify")
-        fflush(stdout)
-    }
+static void spotify_cb(CFNotificationCenterRef center, void *observer,
+		CFNotificationName name, const void *object, CFDictionaryRef info) {
+	goSpotifyNotification();
 }
 
-let observer = Observer()
-DistributedNotificationCenter.default().addObserver(
-    observer,
-    selector: #selector(Observer.handle(_:)),
-    name: Notification.Name("com.spotify.client.PlaybackStateChanged"),
-    object: nil
+static int spotify_observer_token;
+
+static void spotify_observe(void) {
+	CFNotificationCenterAddObserver(CFNotificationCenterGetDistributedCenter(),
+		&spotify_observer_token, spotify_cb,
+		CFSTR("com.spotify.client.PlaybackStateChanged"), NULL,
+		CFNotificationSuspensionBehaviorDeliverImmediately);
+}
+*/
+import "C"
+
+import (
+	"context"
+	"sync"
 )
-RunLoop.main.run()
-`
 
-func startSpotifyNotifier(ctx context.Context) (<-chan struct{}, error) {
-	if _, err := os.Stat("/usr/bin/swift"); err != nil {
-		return nil, err
-	}
-	script, err := os.CreateTemp("", "ulanzi-spotify-watcher-*.swift")
-	if err != nil {
-		return nil, err
-	}
-	if _, err := script.WriteString(spotifyWatcherSwift); err != nil {
-		script.Close()
-		_ = os.Remove(script.Name())
-		return nil, err
-	}
-	if err := script.Close(); err != nil {
-		_ = os.Remove(script.Name())
-		return nil, err
-	}
+// spotifyNotifications fans Spotify's distributed notifications out to
+// the running SpotifyServices. The observer is registered once for the
+// life of the process, since services come and go with config reloads.
+//
+// Distributed notifications arrive through the main run loop, which
+// the daemon serves via internal/mainloop. Without it (tests) nothing
+// is delivered and the service relies on polling alone.
+var spotifyNotifications struct {
+	once sync.Once
+	mu   sync.Mutex
+	subs map[chan struct{}]struct{}
+}
 
-	cmd := exec.CommandContext(ctx, "/usr/bin/swift", script.Name())
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		_ = os.Remove(script.Name())
-		return nil, err
-	}
-	cmd.Stderr = ioDiscard{}
-	if err := cmd.Start(); err != nil {
-		_ = os.Remove(script.Name())
-		return nil, err
-	}
-
-	ch := make(chan struct{}, 16)
-	go func() {
-		defer close(ch)
-		defer cmd.Wait()
-		defer os.Remove(script.Name())
-
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			select {
-			case ch <- struct{}{}:
-			default:
-			}
+//export goSpotifyNotification
+func goSpotifyNotification() {
+	n := &spotifyNotifications
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	for ch := range n.subs {
+		select {
+		case ch <- struct{}{}:
+		default:
 		}
+	}
+}
+
+// startSpotifyNotifier delivers a value whenever Spotify's playback state
+// changes, until ctx is done; then the channel is closed.
+func startSpotifyNotifier(ctx context.Context) (<-chan struct{}, error) {
+	n := &spotifyNotifications
+	n.once.Do(func() {
+		n.subs = map[chan struct{}]struct{}{}
+		C.spotify_observe()
+	})
+	ch := make(chan struct{}, 16)
+	n.mu.Lock()
+	n.subs[ch] = struct{}{}
+	n.mu.Unlock()
+	go func() {
+		<-ctx.Done()
+		n.mu.Lock()
+		delete(n.subs, ch)
+		n.mu.Unlock()
+		close(ch)
 	}()
 	return ch, nil
 }
-
-type ioDiscard struct{}
-
-func (ioDiscard) Write(p []byte) (int, error) { return len(p), nil }

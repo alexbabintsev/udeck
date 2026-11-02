@@ -9,7 +9,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/device"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/mainloop"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/preflight"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/widgets"
@@ -78,14 +78,16 @@ var (
 	requestKeyPermissions = actions.RequestKeyPermissions
 	startPowerWatcher     = newPowerWatcher
 	signalContext         = func() (context.Context, context.CancelFunc) {
-		return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		return notifySignals(os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	}
 )
 
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
 	log.SetOutput(os.Stderr)
-	os.Exit(runCLI(os.Args[1:], os.Stdout, os.Stderr))
+	// The main thread serves the macOS run loop (Spotify notifications);
+	// the CLI runs on another goroutine.
+	mainloop.Run(func() int { return runCLI(os.Args[1:], os.Stdout, os.Stderr) })
 }
 
 // runCLI dispatches a subcommand and returns the process exit code.
@@ -266,8 +268,11 @@ func cmdRun(args []string, stdout, stderr io.Writer) error {
 
 	ctx, stop := signalContext()
 	defer stop()
-	if pw, err := startPowerWatcher(ctx); err == nil && pw != nil {
+	if pw, err := startPowerWatcher(ctx); err != nil {
+		log.Printf("sleep/wake notifications unavailable: %v", err)
+	} else if pw != nil {
 		s.power = pw.Events()
+		s.powerAck = pw.Ack
 	}
 
 	log.Println("running. Ctrl-C to exit.")

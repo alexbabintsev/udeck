@@ -26,6 +26,12 @@ actual development milestones rather than formal releases.
   effective interval.
 - Generic `examples/project-demo` scripts and relative documentation links.
 - CI on GitHub Actions: gofmt, vet, staticcheck, race tests, govulncheck.
+- Sleep/wake and Spotify notifications use IOKit and CoreFoundation
+  in-process instead of two `swift` interpreter helpers (~190 MB RSS
+  together, and an "install developer tools" prompt on Macs without
+  them). System sleep now waits until the deck is dimmed and closed.
+- Shutdown dimming is driven by `SIGTERM`/`SIGHUP` (also sent on logout,
+  terminal close and service stop); Ctrl-C still leaves the deck as is.
 - Stop the periodic full-page re-upload: the idle keepalive is now a
   single brightness (or label-style) packet, so the keys no longer
   flash every 30 seconds.

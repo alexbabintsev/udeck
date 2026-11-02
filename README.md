@@ -104,9 +104,12 @@ sends a lightweight keepalive packet (the device-info request) when the
 link is idle so the firmware screensaver does not take over. Widget and
 toggle changes redraw only the affected keys; the full layout is
 uploaded only on start, page switch, config reload, wake, or after the
-device was actually reset. On macOS it also listens for system sleep, wake,
-and shutdown notifications so it can dim/close the device cleanly before
-sleep and restore the current page after wake.
+device was actually reset. On macOS it also subscribes to system sleep
+and wake (IOKit) so it can dim/close the device before sleep — the
+system waits for that, up to 5 s — and restore the current page after
+wake. `SIGTERM`/`SIGHUP` (shutdown, logout, closing the terminal,
+stopping a launchd service) dim the deck before exiting; Ctrl-C leaves
+it as it is.
 
 If `--config` is omitted, `run` reads
 `$XDG_CONFIG_HOME/ulanzi-deck/config.yaml` (by default
@@ -426,7 +429,9 @@ Notes:
 - The runtime sends a keepalive packet when the link is idle and
   attempts to reopen the device automatically after common HID failures.
 - On macOS, system sleep and shutdown dim the deck and close the HID
-  session cleanly; wake triggers a reopen-and-restore flow.
+  session cleanly; wake triggers a reopen-and-restore flow. Sleep/wake
+  and Spotify notifications use native APIs in-process (no helper
+  processes).
 - Device open uses retry/backoff, so transient startup failures such as
   `privilege violation` often recover automatically without needing to
   restart the program manually.

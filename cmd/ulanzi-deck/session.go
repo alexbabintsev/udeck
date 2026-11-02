@@ -69,9 +69,10 @@ type session struct {
 	toggles  *toggleManager
 	widgets  *widgets.Manager
 	actions  *actionRunner
-	// power delivers macOS sleep/wake/shutdown notifications; nil when
-	// unavailable.
-	power <-chan powerEvent
+	// power delivers macOS sleep/wake notifications; nil when
+	// unavailable. powerAck lets a pending sleep proceed.
+	power    <-chan powerEvent
+	powerAck func()
 	// out receives one line per device event (dump-events, --debug).
 	out io.Writer
 	// tx performs all device writes off the loop goroutine; nil in
@@ -105,6 +106,11 @@ func (s *session) run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			// Shutdown, logout or a stopped service: dim the deck like
+			// before sleep. Ctrl-C leaves it as it is.
+			if s.nav != nil && terminatedBySystem(ctx) {
+				s.handlePower(powerEventShutdown)
+			}
 			return nil
 		default:
 		}
@@ -413,6 +419,9 @@ func (s *session) handlePower(evt powerEvent) (stop bool) {
 			s.tx.discard()
 		}
 		s.withTx(func() { prepareDeviceForSleep(s.dev) })
+		if s.powerAck != nil {
+			s.powerAck()
+		}
 	case powerEventWake:
 		log.Println("system wake detected; restoring device")
 		s.sleeping = false

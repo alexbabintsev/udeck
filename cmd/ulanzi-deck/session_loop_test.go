@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -498,6 +499,39 @@ func TestPowerSleepWakeShutdown(t *testing.T) {
 
 	if !s.handlePower(powerEventShutdown) {
 		t.Fatal("shutdown must stop the loop")
+	}
+}
+
+func TestSleepAcksAfterDimming(t *testing.T) {
+	s, dev := newTestSession(t, loopConfig)
+	acked := false
+	s.powerAck = func() {
+		if len(dev.transfers(protocol.CmdSetBrightness)) != 1 || dev.closed != 1 {
+			t.Error("sleep acknowledged before the deck was dimmed and closed")
+		}
+		acked = true
+	}
+	s.handlePower(powerEventSleep)
+	if !acked {
+		t.Fatal("sleep must be acknowledged")
+	}
+}
+
+func TestSystemTerminationDimsDeck(t *testing.T) {
+	for _, tc := range []struct {
+		sig  syscall.Signal
+		dims bool
+	}{{syscall.SIGTERM, true}, {syscall.SIGHUP, true}, {syscall.SIGINT, false}} {
+		s, dev := newTestSession(t, loopConfig)
+		ctx, cancel := context.WithCancelCause(context.Background())
+		cancel(signalCause{tc.sig})
+		if err := s.run(ctx); err != nil {
+			t.Fatalf("%v: run: %v", tc.sig, err)
+		}
+		dimmed := len(dev.transfers(protocol.CmdSetBrightness)) == 1 && dev.closed == 1
+		if dimmed != tc.dims {
+			t.Fatalf("%v: dimmed=%v, want %v", tc.sig, dimmed, tc.dims)
+		}
 	}
 }
 
