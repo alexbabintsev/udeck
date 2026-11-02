@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 	"gopkg.in/yaml.v3"
@@ -126,6 +127,11 @@ type Widget struct {
 	// Devices are the output devices audio_output cycles through, by
 	// (partial, case-insensitive) name; empty means all of them.
 	Devices []string `yaml:"devices,omitempty"`
+	// Timezone is the IANA time zone of a clock, e.g. "Europe/Kyiv";
+	// empty means local time.
+	Timezone string `yaml:"timezone,omitempty"`
+	// Hour12 shows a clock in 12-hour format.
+	Hour12 bool `yaml:"hour12,omitempty"`
 }
 
 type WidgetScripts struct {
@@ -456,6 +462,7 @@ var widgetMinPollMS = map[string]int{
 	"microphone":         200,
 	"audio_output":       500,
 	"media":              1000,
+	"clock":              1000,
 }
 
 func validateWidget(w *Widget, at [2]int, path string) error {
@@ -464,7 +471,7 @@ func validateWidget(w *Widget, at [2]int, path string) error {
 	}
 	minPoll, known := widgetMinPollMS[w.Type]
 	if !known {
-		return fmt.Errorf("%s.type %q unknown (volume|microphone|audio_output|media|memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|weather_day|freqtrade|site|project)", path, w.Type)
+		return fmt.Errorf("%s.type %q unknown (clock|volume|microphone|audio_output|media|memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|weather_day|freqtrade|site|project)", path, w.Type)
 	}
 	switch w.Type {
 	case "wide_dashboard":
@@ -497,6 +504,12 @@ func validateWidget(w *Widget, at [2]int, path string) error {
 		}
 		if w.Step < 0 || w.Step > 50 {
 			return fmt.Errorf("%s.step must be 1-50, got %d", path, w.Step)
+		}
+	case "clock":
+		if tz := strings.TrimSpace(w.Timezone); tz != "" {
+			if _, err := time.LoadLocation(tz); err != nil {
+				return fmt.Errorf("%s.timezone %q unknown (use an IANA name such as Europe/Kyiv)", path, tz)
+			}
 		}
 	case "media":
 		switch w.Action {

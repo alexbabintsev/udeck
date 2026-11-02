@@ -59,6 +59,7 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
   - `page_prev`
   - `close_all_projects`
 - Widgets, each independent and in one shared style:
+  - `clock`: local time or a world clock for any time zone
   - `volume`: level ring; mute, or volume up/down with hold-to-repeat
   - `microphone`: system-wide mic mute with a live/muted indicator
   - `audio_output`: current output device; tap switches to the next one
@@ -181,6 +182,9 @@ Current config surface:
     - `folder.buttons`: nested page; runtime injects a `Back` button
       - if the current page has `widget.type: wide_dashboard` at `at: [2, 3]`, that wide widget becomes the folder `Back` button automatically
     - `widget`
+      - `type: clock`
+        - `timezone`: optional IANA zone such as `America/New_York`
+        - `title`: optional label; `hour12`: optional 12-hour format
       - `type: volume`
         - `action`: `mute` (default) | `up` | `down`
         - `step`: percent per press for `up`/`down`, default `5`

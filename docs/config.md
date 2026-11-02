@@ -704,18 +704,43 @@ their own state.
 
 Supported widget types:
 
-- general purpose: `volume`, `microphone`, `audio_output`, `media`,
-  `memory`, `weather_day`, `wide_dashboard`
+- general purpose: `clock`, `volume`, `microphone`, `audio_output`,
+  `media`, `memory`, `weather_day`, `wide_dashboard`
 - Spotify: `spotify_play_pause`, `spotify_next`, `spotify_artwork`
 - specialised: `freqtrade`, `site`, `project`
 
 Every widget is independent: it reads its own state and needs no other
 widget on the page. The general-purpose ones share one look: black
 background, a level ring with the value inside (`volume`, `memory`) or a
-large icon with an upper-case label (`microphone`, `audio_output`,
-`media`). Color carries the state the same way everywhere: green is
+large icon or value with an upper-case label (`clock`, `microphone`,
+`audio_output`, `media`). Color carries the state the same way everywhere: green is
 live, red is muted/off/failing, blue is neutral information, grey is "no
 data".
+
+### `widget.type: clock`
+
+The time with the weekday and date above it (red on weekends). With a
+`timezone` it becomes a world clock with the city's name under the time.
+
+```yaml
+- at: [0, 0]
+  widget: {type: clock}                                # local time
+- at: [0, 1]
+  widget: {type: clock, timezone: "America/New_York"}  # "NEW YORK"
+- at: [0, 2]
+  widget: {type: clock, timezone: "Asia/Tokyo", title: "Tokyo office", hour12: true}
+```
+
+Fields:
+
+- `timezone`
+  - optional IANA time zone name, e.g. `Europe/Kyiv`; default local time
+- `title`
+  - optional label; defaults to the city of `timezone`, none for local
+- `hour12`
+  - optional, `true` for 12-hour time with AM/PM
+
+Tap does nothing. The key is redrawn once a minute.
 
 ### `widget.type: volume`
 
@@ -1140,7 +1165,7 @@ The loader validates:
 - known widget types
 - `poll_ms` minimums per widget type
 - `wide_dashboard` only at `at: [2, 3]`
-- `volume.action` and `volume.step`, `media.action`
+- `volume.action` and `volume.step`, `media.action`, `clock.timezone`
 - `weather_day` requires `city`; `site` requires an `http(s)` `url`
 - `freqtrade` requires `dsns`
 - `project` widgets require `project_dir`

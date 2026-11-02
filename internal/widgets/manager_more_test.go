@@ -192,6 +192,7 @@ func TestManagerCreatesEveryWidgetType(t *testing.T) {
 		{RuntimeID: "k", Widget: &config.Widget{Type: "audio_output"}},
 		{RuntimeID: "l", Widget: &config.Widget{Type: "media", Action: "next"}},
 		{RuntimeID: "n", Widget: &config.Widget{Type: "memory"}},
+		{RuntimeID: "o", Widget: &config.Widget{Type: "clock", Timezone: "Europe/Kyiv"}},
 	}
 	m, err := NewManager(&config.Config{Buttons: buttons})
 	if err != nil {

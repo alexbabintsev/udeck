@@ -13,6 +13,8 @@ actual development milestones rather than formal releases.
   devices without a mute switch or with fixed volume), `microphone`
   (system-wide input mute), `audio_output` (switch the default output
   device) and `media` (system play/pause, next, previous keys).
+- New `clock` widget: local time or a world clock for an IANA time
+  zone, with the date (red on weekends) and the city name.
 - General-purpose widgets share one look: level ring or large icon with
   an upper-case label, with the same state colors. The `memory` widget
   moved to it.

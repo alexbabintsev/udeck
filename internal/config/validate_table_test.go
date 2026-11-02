@@ -75,6 +75,7 @@ func TestValidateRejects(t *testing.T) {
 		"media no action":    {btnYAML("widget: {type: media}"), "action is empty"},
 		"media bad action":   {btnYAML("widget: {type: media, action: stop}"), "action \"stop\" unknown"},
 		"mic poll":           {btnYAML("widget: {type: microphone, poll_ms: 10}"), "poll_ms too small"},
+		"clock zone":         {btnYAML("widget: {type: clock, timezone: Mars/Olympus}"), "timezone \"Mars/Olympus\" unknown"},
 		"toggle icon color":  {btnYAML("on: {tap: {toggle: [{icon_color: xyz, action: {type: shell, cmd: a}}, {action: {type: shell, cmd: b}}]}}"), "icon_color"},
 	}
 	for name, tc := range cases {
@@ -181,11 +182,15 @@ buttons:
     widget: {type: microphone, title: Zoom}
   - at: [1, 0]
     widget: {type: audio_output, devices: [airpods, smsl]}
+  - at: [1, 1]
+    widget: {type: clock, timezone: America/New_York, hour12: true}
+  - at: [1, 2]
+    widget: {type: clock}
 `)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Buttons[1].Widget.Step != 10 || cfg.Buttons[3].Widget.Devices[1] != "smsl" {
+	if cfg.Buttons[1].Widget.Step != 10 || cfg.Buttons[3].Widget.Devices[1] != "smsl" || !cfg.Buttons[4].Widget.Hour12 {
 		t.Fatalf("fields not parsed: %+v", cfg.Buttons)
 	}
 	if cfg.UsesKeyActions() {
