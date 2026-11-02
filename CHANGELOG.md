@@ -32,6 +32,8 @@ actual development milestones rather than formal releases.
   them). System sleep now waits until the deck is dimmed and closed.
 - Shutdown dimming is driven by `SIGTERM`/`SIGHUP` (also sent on logout,
   terminal close and service stop); Ctrl-C still leaves the deck as is.
+- Encoded key images are cached by content: a full page builds in about
+  0.5 ms instead of 12 ms (24 MB less garbage per page switch).
 - `weather_day` and `wide_dashboard` widgets for the same city share one
   forecast request, which now also carries the current conditions.
 - The freqtrade widget shows OFFLINE when no bot answers and NO TRADES

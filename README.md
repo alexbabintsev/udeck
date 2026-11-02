@@ -392,6 +392,8 @@ Notes:
   - only one gesture per button can define a toggle sequence
 - Widgets write icons atomically so page refreshes do not race on partial
   PNG files.
+- Encoded key images are cached, so switching pages does not re-encode
+  every icon.
 - Widgets for the same city (`weather_day`, `wide_dashboard`) share one
   weather request per poll interval.
 - `run` warns when the config file is writable by other users.

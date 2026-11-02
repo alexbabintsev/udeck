@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/chai2010/webp"
@@ -119,10 +120,103 @@ func SlotDimensions(col, row int) (width, height int) {
 }
 
 // LoadForButton reads an image file and resizes it to the physical pixel
-// size of the target button slot before encoding it as JPEG.
+// size of the target button slot before encoding it in the current
+// format. Results are cached (see iconCache).
 func LoadForButton(path string, margins Insets, at [2]int, iconColor string) ([]byte, error) {
 	width, height := SlotDimensions(at[0], at[1])
-	return loadSized(path, margins, width, height, iconColor)
+	key := cacheKey{
+		path: path, margins: margins, width: width, height: height,
+		color: iconColor, format: CurrentFormat(), quality: imageQuality(),
+	}
+	// Pack icons are embedded and never change; files are re-encoded
+	// when they do (widgets rewrite theirs on every update).
+	var info os.FileInfo
+	if !IsPackIcon(path) {
+		st, err := os.Stat(expandTilde(path))
+		if err != nil {
+			return nil, fmt.Errorf("open icon %q: %w", expandTilde(path), err)
+		}
+		info = st
+	}
+	if data, ok := iconCache.get(key, info); ok {
+		return data, nil
+	}
+	data, err := loadSized(path, margins, width, height, iconColor)
+	if err != nil {
+		return nil, err
+	}
+	iconCache.put(key, info, data)
+	return data, nil
+}
+
+// iconCacheMax bounds the cache: static icons of all pages plus one
+// entry per widget, whose entry is replaced on every update.
+const iconCacheMax = 512
+
+type cacheKey struct {
+	path          string
+	margins       Insets
+	width, height int
+	color         string
+	format        Format
+	quality       int
+}
+
+type cacheEntry struct {
+	info os.FileInfo // nil for pack icons
+	data []byte
+	used uint64
+}
+
+// iconCache keeps encoded key images so a page switch does not decode,
+// scale and re-encode every icon again.
+var iconCache = &encodedCache{entries: map[cacheKey]*cacheEntry{}}
+
+type encodedCache struct {
+	mu      sync.Mutex
+	entries map[cacheKey]*cacheEntry
+	clock   uint64
+	misses  int // for tests
+}
+
+func (c *encodedCache) get(key cacheKey, info os.FileInfo) ([]byte, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.entries[key]
+	if !ok || !sameFile(e.info, info) {
+		c.misses++
+		return nil, false
+	}
+	c.clock++
+	e.used = c.clock
+	return e.data, true
+}
+
+// put stores data encoded from the file as it was at info (stat taken
+// before reading, so a write in between only causes another miss).
+func (c *encodedCache) put(key cacheKey, info os.FileInfo, data []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.clock++
+	c.entries[key] = &cacheEntry{info: info, data: data, used: c.clock}
+	if len(c.entries) <= iconCacheMax {
+		return
+	}
+	var oldest cacheKey
+	var oldestUsed uint64 = math.MaxUint64
+	for k, e := range c.entries {
+		if e.used < oldestUsed {
+			oldest, oldestUsed = k, e.used
+		}
+	}
+	delete(c.entries, oldest)
+}
+
+func sameFile(a, b os.FileInfo) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return os.SameFile(a, b) && a.ModTime().Equal(b.ModTime()) && a.Size() == b.Size()
 }
 
 func loadSized(path string, margins Insets, width, height int, iconColor string) ([]byte, error) {
