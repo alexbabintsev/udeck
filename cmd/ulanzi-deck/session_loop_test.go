@@ -185,6 +185,34 @@ func TestPageNextRedraws(t *testing.T) {
 	}
 }
 
+func TestDelayedChainSwitchesPageThroughLoop(t *testing.T) {
+	s, dev := newTestSession(t, `
+pages:
+  - buttons:
+      - at: [0, 0]
+        label: Later
+        on:
+          tap:
+            chain:
+              - delay_ms: 500
+              - action: {type: page_next}
+  - buttons:
+      - at: [0, 0]
+        label: Second
+`)
+	// The chain runs on the worker; its delay must not hold the loop,
+	// which applies the posted page switch on a later iteration.
+	runReads(t, s, dev, tap(0)...)
+	eventually(t, func() bool { return len(s.pageMoves) == 1 }, "posted page switch")
+	runReads(t, s, dev)
+	if s.nav.page != 1 {
+		t.Fatalf("page = %d", s.nav.page)
+	}
+	if n := len(dev.transfers(protocol.CmdSetButtons)); n != 1 {
+		t.Fatalf("expected one full page after the switch, got %d", n)
+	}
+}
+
 func TestToggleRedrawsOnlyThatKey(t *testing.T) {
 	got := stubActions(t)
 	s, dev := newTestSession(t, loopConfig)

@@ -171,7 +171,7 @@ func (w *WideDashboardWidget) draw(now time.Time, notify bool) (bool, error) {
 	w.mu.Lock()
 	ctx := w.context
 	weather := w.weather
-	frameKey := dashboardFrameKey(now, ctx)
+	frameKey := dashboardFrameKey(now, ctx, weather)
 	if frameKey == w.lastFrameKey {
 		w.mu.Unlock()
 		return false, nil
@@ -199,11 +199,18 @@ func (w *WideDashboardWidget) draw(now time.Time, notify bool) (bool, error) {
 	return changed, nil
 }
 
-func dashboardFrameKey(now time.Time, ctx Context) string {
+// dashboardFrameKey identifies what the dashboard shows; a redraw is
+// skipped while it stays the same. The weather is part of it so a fetch
+// result shows up at once, not on the next minute change.
+func dashboardFrameKey(now time.Time, ctx Context, weather dashboardWeatherState) string {
 	if ctx.InFolder() {
 		return fmt.Sprintf("back:%d:%d:%d", ctx.PageIndex, ctx.TotalPages, ctx.FolderDepth)
 	}
-	return fmt.Sprintf("clock:%s:%d", now.Format("2006-01-02 15:04"), ctx.PageIndex)
+	temp := "-"
+	if weather.TempC != nil {
+		temp = fmt.Sprintf("%.0f", math.Round(*weather.TempC))
+	}
+	return fmt.Sprintf("clock:%s:%d:%s:%d", now.Format("2006-01-02 15:04"), ctx.PageIndex, temp, weather.Code)
 }
 
 func dashboardWeatherPoll(ms int) time.Duration {

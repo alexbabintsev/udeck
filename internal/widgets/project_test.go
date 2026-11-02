@@ -186,6 +186,51 @@ func TestManagerCloseAllProjectsRunsStopForConfiguredWidgets(t *testing.T) {
 	waitForMissingFile(t, filepath.Join(dirB, ".running"))
 }
 
+func TestManagerCloseAllProjectsDoesNotHoldLock(t *testing.T) {
+	dir := t.TempDir()
+	writeTestScript(t, filepath.Join(dir, "start"), "true\n")
+	// The stop script signals it started, then waits to be released.
+	writeTestScript(t, filepath.Join(dir, "stop"), "touch \"$PROJECT_DIR/.stopping\"\nwhile [ ! -f \"$PROJECT_DIR/.release\" ]; do sleep 0.02; done\n")
+
+	oldHasSession := projectHasSession
+	defer func() { projectHasSession = oldHasSession }()
+	projectHasSession = func(string) (bool, error) { return true, nil }
+
+	cfg := &config.Config{Pages: []config.Page{{Buttons: []config.Button{{
+		RuntimeID: "buttons[0]",
+		Widget:    &config.Widget{Type: "project", ProjectDir: dir},
+	}}}}}
+	mgr, err := NewManager(cfg)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer mgr.Close()
+
+	done := make(chan error, 1)
+	go func() { done <- mgr.CloseAllProjects() }()
+	waitForFile(t, filepath.Join(dir, ".stopping"))
+
+	// The event loop must still be able to switch pages while a stop
+	// script runs.
+	ctxDone := make(chan struct{})
+	go func() {
+		mgr.SetContext(Context{PageIndex: 1})
+		close(ctxDone)
+	}()
+	select {
+	case <-ctxDone:
+	case <-time.After(time.Second):
+		t.Fatal("SetContext blocked while a stop script was running")
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, ".release"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("close all projects: %v", err)
+	}
+}
+
 func writeTestScript(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte("#!/bin/sh\nset -eu\n"+body), 0o644); err != nil {

@@ -22,6 +22,12 @@ func TestParseFreqtradeDSNs(t *testing.T) {
 	if got[1].URL != "https://ft.example.com" || got[1].Name != "bot2" {
 		t.Fatalf("unexpected second api: %+v", got[1])
 	}
+
+	// "@" and ":" inside the password are kept.
+	got = parseFreqtradeDSNs("trader:p@ss:w@rd@https://bot.example.com\nnoscheme:pw@bot.example.com\n")
+	if len(got) != 1 || got[0].User != "trader" || got[0].Pass != "p@ss:w@rd" || got[0].URL != "https://bot.example.com" {
+		t.Fatalf("password with @: %+v", got)
+	}
 }
 
 func TestFetchAllFreqtradeData(t *testing.T) {

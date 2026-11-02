@@ -285,16 +285,17 @@ func newRunSession(cfgPath string, cfg *config.Config, dev deck, firmware string
 		return nil, fmt.Errorf("widgets: %w", err)
 	}
 	s := &session{
-		cfgPath:  cfgPath,
-		cfg:      cfg,
-		dev:      dev,
-		nav:      nav,
-		gestures: newGestureManager(),
-		toggles:  toggles,
-		widgets:  widgetMgr,
-		actions:  newActionRunner(),
-		tx:       newOutbox(dev),
-		firmware: firmware,
+		cfgPath:   cfgPath,
+		cfg:       cfg,
+		dev:       dev,
+		nav:       nav,
+		gestures:  newGestureManager(),
+		toggles:   toggles,
+		widgets:   widgetMgr,
+		actions:   newActionRunner(),
+		tx:        newOutbox(dev),
+		firmware:  firmware,
+		pageMoves: make(chan int, 8),
 	}
 	if err := s.refreshPage(); err != nil {
 		s.close()

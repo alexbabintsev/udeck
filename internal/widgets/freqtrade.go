@@ -230,15 +230,17 @@ func parseFreqtradeDSNs(raw string) []freqtradeAPI {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		mid := strings.Index(line, "@")
+		// The URL starts at the last "@http": passwords may contain "@".
+		mid := strings.LastIndex(line, "@http://")
+		if https := strings.LastIndex(line, "@https://"); https > mid {
+			mid = https
+		}
 		colon := strings.Index(line, ":")
 		if colon <= 0 || mid <= colon {
+			debug.Logf("freqtrade: skipping dsn %d: want user:password@http(s)://host", len(apis)+1)
 			continue
 		}
 		base := strings.TrimRight(line[mid+1:], "/")
-		if !strings.HasPrefix(base, "http://") && !strings.HasPrefix(base, "https://") {
-			continue
-		}
 		apis = append(apis, freqtradeAPI{
 			User: line[:colon],
 			Pass: line[colon+1 : mid],

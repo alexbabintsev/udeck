@@ -27,12 +27,20 @@ func TestWideDashboardWidgetContextAndWeather(t *testing.T) {
 	if w.weather.CityName != "Kyiv, Ukraine" {
 		t.Fatalf("city = %q", w.weather.CityName)
 	}
+	// The fetched weather is published right away, not on the next
+	// minute change.
+	waitFor(t, "weather redraw", func() bool { return rec.count() > 0 })
 
 	// The dashboard is display-only: a tap must not redraw anything.
-	key := w.lastFrameKey
+	frameKey := func() string {
+		w.mu.RLock()
+		defer w.mu.RUnlock()
+		return w.lastFrameKey
+	}
+	key := frameKey()
 	before := rec.count()
 	w.HandleGesture(ig.Tap)
-	if rec.count() != before || w.lastFrameKey != key {
+	if rec.count() != before || frameKey() != key {
 		t.Fatal("tap must not change the dashboard")
 	}
 
@@ -40,7 +48,7 @@ func TestWideDashboardWidgetContextAndWeather(t *testing.T) {
 	// silently (the page upload carries it).
 	w.SetContext(Context{FolderDepth: 1})
 	w.SetContext(Context{FolderDepth: 1})
-	if rec.count() != before || !strings.HasPrefix(w.lastFrameKey, "back:") {
+	if rec.count() != before || !strings.HasPrefix(frameKey(), "back:") {
 		t.Fatal("folder context must redraw as Back without notifying")
 	}
 }
@@ -98,16 +106,18 @@ func TestDashboardHelpers(t *testing.T) {
 		t.Fatal("rectWH")
 	}
 	now := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
-	k1 := dashboardFrameKey(now, Context{})
-	k2 := dashboardFrameKey(now.Add(time.Minute), Context{})
-	k3 := dashboardFrameKey(now, Context{FolderDepth: 1})
-	if k1 == k2 || k1 == k3 {
-		t.Fatal("frame keys must differ per minute and context")
+	temp := 3.0
+	k1 := dashboardFrameKey(now, Context{}, dashboardWeatherState{})
+	k2 := dashboardFrameKey(now.Add(time.Minute), Context{}, dashboardWeatherState{})
+	k3 := dashboardFrameKey(now, Context{FolderDepth: 1}, dashboardWeatherState{})
+	k4 := dashboardFrameKey(now, Context{}, dashboardWeatherState{Ready: true, TempC: &temp})
+	k5 := dashboardFrameKey(now, Context{}, dashboardWeatherState{Ready: true, TempC: &temp, Code: 61})
+	if k1 == k2 || k1 == k3 || k1 == k4 || k4 == k5 {
+		t.Fatal("frame keys must differ per minute, context and weather")
 	}
 
 	// Rendering paths.
 	img := image.NewRGBA(image.Rect(0, 0, 458, 196))
-	temp := 3.0
 	renderDashboardClock(img, now, dashboardWeatherState{Ready: true, TempC: &temp, CityName: "Kyiv"})
 	renderDashboardClock(img, now, dashboardWeatherState{Error: "Weather unavailable"})
 	renderDashboardBack(img)

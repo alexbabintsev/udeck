@@ -20,12 +20,36 @@ func TestBindingNeedsLoopOnlyForPageActions(t *testing.T) {
 		t.Fatal("page_next must run on the loop")
 	}
 	chain := &config.GestureBinding{Chain: []config.ChainStep{
-		{DelayMS: 100},
+		{Action: &config.Action{Type: "key", Key: "a"}},
 		{Action: &config.Action{Type: "page_prev"}},
 	}}
 	if !bindingNeedsLoop(chain) {
 		t.Fatal("chain containing page_prev must run on the loop")
 	}
+	delayed := &config.GestureBinding{Chain: []config.ChainStep{
+		{DelayMS: 100},
+		{Action: &config.Action{Type: "page_prev"}},
+	}}
+	if bindingNeedsLoop(delayed) {
+		t.Fatal("chain with a delay must run on the worker, not stall the loop")
+	}
+}
+
+func TestDeferredPagerPostsMoves(t *testing.T) {
+	ch := make(chan int, 1)
+	p := deferredPager(ch)
+	if p.nextPage() {
+		t.Fatal("deferred move must not report an immediate change")
+	}
+	if got := <-ch; got != 1 {
+		t.Fatalf("next = %d", got)
+	}
+	p.prevPage()
+	if got := <-ch; got != -1 {
+		t.Fatalf("prev = %d", got)
+	}
+	p.nextPage()
+	p.nextPage() // queue full: dropped, must not block
 }
 
 func TestDeviceErrorClassification(t *testing.T) {

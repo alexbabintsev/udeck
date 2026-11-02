@@ -227,37 +227,48 @@ func (m *Manager) HandleEvent(id string, pressed bool, now time.Time) bool {
 	return true
 }
 
+// CloseAllProjects stops every configured project, including ones on
+// pages that were never shown. The stop scripts run without holding the
+// manager lock: they can take seconds each, and the event loop needs the
+// lock for every page switch and widget update.
 func (m *Manager) CloseAllProjects() error {
+	var (
+		errs     []error
+		projects []*ProjectWidget
+	)
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	var errs []error
 	for id, def := range m.defs {
 		if def.kind != "project" {
 			continue
 		}
-
 		item, ok := m.items[id]
 		if !ok {
-			var err error
-			item, err = m.newWidgetLocked(id)
+			created, err := m.newWidgetLocked(id)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("%s: %w", id, err))
 				continue
 			}
-			m.items[id] = item
+			// Off screen: no polling until its page is shown.
+			if p, ok := created.(pausable); ok {
+				p.setActive(false)
+			}
+			m.items[id] = created
+			item = created
 		}
-
 		project, ok := item.(*ProjectWidget)
 		if !ok {
 			errs = append(errs, fmt.Errorf("%s: project widget type assertion failed", id))
 			continue
 		}
+		projects = append(projects, project)
+	}
+	m.mu.Unlock()
+
+	for _, project := range projects {
 		if err := project.stopNow(); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", id, err))
+			errs = append(errs, fmt.Errorf("%s: %w", project.id, err))
 		}
 	}
-
 	return errors.Join(errs...)
 }
 

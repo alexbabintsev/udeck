@@ -13,6 +13,12 @@ actual development milestones rather than formal releases.
   `$XDG_CONFIG_HOME/ulanzi-deck/config.yaml` (default
   `~/.config/ulanzi-deck/config.yaml`) instead of the tracked demo
   profile, so personal configs and tokens stay out of the checkout.
+- `close_all_projects` no longer freezes the deck while stop scripts run.
+- The wide dashboard shows fetched weather at once instead of on the next
+  minute change; it no longer has a Spotify mode (tap does nothing).
+- Freqtrade `dsns` accept passwords containing `@`.
+- Chains that combine `delay_ms` with `page_next`/`page_prev` run off the
+  event loop, so their delays no longer stall key handling.
 - Generic `examples/project-demo` scripts and relative documentation links.
 - Stop the periodic full-page re-upload: the idle keepalive is now a
   single brightness (or label-style) packet, so the keys no longer

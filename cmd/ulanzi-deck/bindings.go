@@ -24,7 +24,30 @@ func resolveBindingEvent(evt *gestureEvent, toggles *toggleManager) (*config.Ges
 	return bindingForKind(evt.Button.On, evt.Kind), false
 }
 
-func runBinding(binding *config.GestureBinding, nav *navigator, widgetMgr *widgets.Manager) (bool, error) {
+// pager switches top-level pages. The navigator implements it on the loop
+// goroutine; the action worker uses a deferredPager instead.
+type pager interface {
+	nextPage() bool
+	prevPage() bool
+}
+
+// deferredPager hands page switches from the action worker to the event
+// loop, which owns the navigator. It reports no immediate change: the
+// loop redraws when it applies the move.
+type deferredPager chan<- int
+
+func (d deferredPager) nextPage() bool { d.post(+1); return false }
+func (d deferredPager) prevPage() bool { d.post(-1); return false }
+
+func (d deferredPager) post(delta int) {
+	select {
+	case d <- delta:
+	default:
+		log.Println("page switch queue full; dropping")
+	}
+}
+
+func runBinding(binding *config.GestureBinding, nav pager, widgetMgr *widgets.Manager) (bool, error) {
 	if binding == nil {
 		return false, nil
 	}
@@ -50,7 +73,7 @@ func runBinding(binding *config.GestureBinding, nav *navigator, widgetMgr *widge
 	return pageChanged, nil
 }
 
-func runAction(action *config.Action, nav *navigator, widgetMgr *widgets.Manager) (bool, error) {
+func runAction(action *config.Action, nav pager, widgetMgr *widgets.Manager) (bool, error) {
 	if action == nil {
 		return false, nil
 	}
@@ -75,21 +98,26 @@ func runAction(action *config.Action, nav *navigator, widgetMgr *widgets.Manager
 	}
 }
 
-// bindingNeedsLoop reports whether a binding contains an action that
-// mutates loop-owned state (page navigation).
+// bindingNeedsLoop reports whether a binding should run on the event
+// loop: it switches pages (the loop owns the navigator) and has no
+// delay_ms steps that would stall HID reads. Chains that combine page
+// switches with delays run on the worker and post their page switches
+// back to the loop.
 func bindingNeedsLoop(binding *config.GestureBinding) bool {
-	needs := func(a *config.Action) bool {
+	isPage := func(a *config.Action) bool {
 		return a != nil && (a.Type == "page_next" || a.Type == "page_prev")
 	}
-	if needs(binding.Action()) {
+	if isPage(binding.Action()) {
 		return true
 	}
+	hasPage := false
 	for i := range binding.Chain {
-		if needs(binding.Chain[i].Action) {
-			return true
+		if binding.Chain[i].DelayMS > 0 {
+			return false
 		}
+		hasPage = hasPage || isPage(binding.Chain[i].Action)
 	}
-	return false
+	return hasPage
 }
 
 // actionRunner executes actions in order on a single worker goroutine.

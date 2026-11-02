@@ -80,6 +80,9 @@ type session struct {
 	// firmware is the device's firmware version ("" if unknown); it
 	// decides whether key images can be WebP.
 	firmware string
+	// pageMoves carries page switches (+1/-1) from chains running on
+	// the action worker to the loop, which owns the navigator.
+	pageMoves chan int
 
 	sleeping bool
 	// offline is set when recovery gave up; the loop then polls for the
@@ -150,6 +153,14 @@ func (s *session) run(ctx context.Context) error {
 					return err
 				}
 			}
+		}
+
+		select {
+		case delta := <-s.pageMoves:
+			if err := s.movePage(delta); err != nil {
+				return err
+			}
+		default:
 		}
 
 		if s.widgets != nil {
@@ -266,13 +277,21 @@ func (s *session) dispatch(binding *config.GestureBinding) error {
 	}
 	if s.actions != nil && !bindingNeedsLoop(binding) {
 		mgr := s.widgets
+		var p pager
+		if s.pageMoves != nil {
+			p = deferredPager(s.pageMoves)
+		}
 		s.actions.submit(func() error {
-			_, err := runBinding(binding, nil, mgr)
+			_, err := runBinding(binding, p, mgr)
 			return err
 		})
 		return nil
 	}
-	changed, err := runBinding(binding, s.nav, s.widgets)
+	var p pager
+	if s.nav != nil {
+		p = s.nav
+	}
+	changed, err := runBinding(binding, p, s.widgets)
 	if err != nil {
 		log.Printf("action error: %v", err)
 		return nil
@@ -281,6 +300,26 @@ func (s *session) dispatch(binding *config.GestureBinding) error {
 		return s.do("switch page", s.queuePage)
 	}
 	return nil
+}
+
+// movePage applies a page switch posted by the action worker.
+func (s *session) movePage(delta int) error {
+	if s.nav == nil {
+		return nil
+	}
+	changed := false
+	if delta > 0 {
+		changed = s.nav.nextPage()
+	} else {
+		changed = s.nav.prevPage()
+	}
+	if !changed {
+		return nil
+	}
+	if s.gestures != nil {
+		s.gestures.Reset()
+	}
+	return s.do("switch page", s.queuePage)
 }
 
 // do runs a device operation. Build errors are logged and the loop keeps
