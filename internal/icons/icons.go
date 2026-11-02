@@ -12,6 +12,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -352,7 +353,16 @@ func loadPackSized(id string, margins Insets, width, height int, iconColor strin
 	}
 }
 
+// DrawPackIcon draws a pack icon into target, its strokes scaled with
+// the icon's size.
 func DrawPackIcon(dst stddraw.Image, id string, target image.Rectangle, clr color.Color) error {
+	return DrawPackIconStroke(dst, id, target, clr, 0)
+}
+
+// DrawPackIconStroke is DrawPackIcon with the strokes drawn as for an
+// icon strokeOf pixels in size, so icons of different sizes side by side
+// can share one line weight. strokeOf <= 0 means the target's own size.
+func DrawPackIconStroke(dst stddraw.Image, id string, target image.Rectangle, clr color.Color, strokeOf int) error {
 	ref, ok := parseIconRef(id)
 	if !ok {
 		return fmt.Errorf("unknown icon pack id %q", id)
@@ -363,7 +373,11 @@ func DrawPackIcon(dst stddraw.Image, id string, target image.Rectangle, clr colo
 
 	switch ref.Pack {
 	case "lucide":
-		return drawLucideIcon(dst, ref.Name, target, clr)
+		scale := lucideStrokeScale(target)
+		if strokeOf > 0 {
+			scale = lucideStrokeScale(image.Rect(0, 0, strokeOf, strokeOf))
+		}
+		return drawLucideIconScaled(dst, ref.Name, target, clr, scale)
 	default:
 		return fmt.Errorf("unsupported icon pack %q", ref.Pack)
 	}
@@ -392,7 +406,10 @@ func loadLucideSized(name string, _ Insets, width, height int, iconColor string)
 }
 
 func drawLucideIcon(dst stddraw.Image, name string, target image.Rectangle, clr color.Color) error {
-	scale := lucideStrokeScale(target)
+	return drawLucideIconScaled(dst, name, target, clr, lucideStrokeScale(target))
+}
+
+func drawLucideIconScaled(dst stddraw.Image, name string, target image.Rectangle, clr color.Color, scale float64) error {
 	icon, err := readLucideIcon(name, clr, scale)
 	if err != nil {
 		return err
@@ -453,10 +470,30 @@ func normalizeLucideSVG(data []byte, clr color.Color, strokeScale float64) strin
 		svg = svg[idx:]
 	}
 	svg = strings.ReplaceAll(svg, "currentColor", hexColor(clr))
+	svg = fillRectRY(svg)
 	if strokeScale > 1 {
 		svg = strings.ReplaceAll(svg, `stroke-width="2"`, fmt.Sprintf(`stroke-width="%.3f"`, 2*strokeScale))
 	}
 	return svg
+}
+
+var (
+	svgRectTag = regexp.MustCompile(`<rect\b[^>]*>`)
+	svgRectRX  = regexp.MustCompile(`\srx="([^"]*)"`)
+	svgRectRY  = regexp.MustCompile(`\sry="`)
+)
+
+// fillRectRY gives every <rect> with only rx an equal ry. SVG defaults a
+// missing ry to rx, but oksvg uses 0, which squares off the corners of
+// hundreds of Lucide icons (the mic capsule, batteries, cards, ...).
+func fillRectRY(svg string) string {
+	return svgRectTag.ReplaceAllStringFunc(svg, func(tag string) string {
+		m := svgRectRX.FindStringSubmatch(tag)
+		if m == nil || svgRectRY.MatchString(tag) {
+			return tag
+		}
+		return strings.Replace(tag, m[0], m[0]+` ry="`+m[1]+`"`, 1)
+	})
 }
 
 func lucideStrokeScale(target image.Rectangle) float64 {

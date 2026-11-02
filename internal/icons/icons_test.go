@@ -190,3 +190,53 @@ func writeSolidPNG(t *testing.T, path string, clr color.Color) {
 		t.Fatalf("encode png: %v", err)
 	}
 }
+
+func TestFillRectRY(t *testing.T) {
+	cases := map[string]string{
+		`<rect x="9" y="2" width="6" height="13" rx="3" />`:          `<rect x="9" y="2" width="6" height="13" rx="3" ry="3" />`,
+		`<rect width="6" rx="1.5" ry="0.5"/>`:                        `<rect width="6" rx="1.5" ry="0.5"/>`,
+		`<rect width="6" height="6"/>`:                               `<rect width="6" height="6"/>`,
+		`<path d="M1 1" rx="2"/><rect rx="2"/><rect rx="1" ry="1"/>`: `<path d="M1 1" rx="2"/><rect rx="2" ry="2"/><rect rx="1" ry="1"/>`,
+	}
+	for in, want := range cases {
+		if got := fillRectRY(in); got != want {
+			t.Fatalf("fillRectRY(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestLucideRoundedRectHasRoundCorners(t *testing.T) {
+	// lucide/square is a 18x18 rect with rx=2 at (3,3): its outer corner
+	// must stay empty when corners are rounded.
+	dst := image.NewRGBA(image.Rect(0, 0, 240, 240))
+	if err := drawLucideIcon(dst, "square", dst.Bounds(), color.White); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, a := dst.At(26, 26).RGBA(); a != 0 {
+		t.Fatalf("corner pixel is drawn (alpha %d): rx without ry was ignored", a)
+	}
+	if _, _, _, a := dst.At(120, 30).RGBA(); a == 0 {
+		t.Fatal("edge pixel must be drawn")
+	}
+}
+
+func TestDrawPackIconStrokeMatchesLargerIcon(t *testing.T) {
+	// A horizontal minus: its stroke thickness at the middle column.
+	thickness := func(strokeOf int) int {
+		dst := image.NewRGBA(image.Rect(0, 0, 72, 72))
+		if err := DrawPackIconStroke(dst, "lucide/minus", dst.Bounds(), color.White, strokeOf); err != nil {
+			t.Fatal(err)
+		}
+		n := 0
+		for y := 0; y < 72; y++ {
+			if _, _, _, a := dst.At(36, y).RGBA(); a > 0x8000 {
+				n++
+			}
+		}
+		return n
+	}
+	own, heavier := thickness(0), thickness(96)
+	if own != 6 || heavier != 8 {
+		t.Fatalf("stroke %dpx at 72, %dpx as for 96; want 6 and 8", own, heavier)
+	}
+}
