@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -260,5 +261,28 @@ func TestDefaultConfigPath(t *testing.T) {
 	t.Setenv("HOME", "/home/u")
 	if got := defaultConfigPath(); got != filepath.Join("/home/u", ".config", "ulanzi-deck", "config.yaml") {
 		t.Fatalf("default: %q", got)
+	}
+}
+
+func TestWarnConfigPermissions(t *testing.T) {
+	var buf bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&buf)
+	defer log.SetOutput(prev)
+
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	warnConfigPermissions(path)
+	if buf.Len() != 0 {
+		t.Fatalf("unexpected warning: %s", buf.String())
+	}
+	if err := os.Chmod(path, 0o666); err != nil {
+		t.Fatal(err)
+	}
+	warnConfigPermissions(path)
+	if !strings.Contains(buf.String(), "writable by other users") {
+		t.Fatalf("expected warning, got %q", buf.String())
 	}
 }

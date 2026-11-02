@@ -239,6 +239,7 @@ func cmdRun(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	warnConfigPermissions(*cfgPath)
 	if cfg.UsesKeyActions() {
 		requestKeyPermissions()
 	}
@@ -277,6 +278,14 @@ func cmdRun(args []string, stdout, stderr io.Writer) error {
 
 	log.Println("running. Ctrl-C to exit.")
 	return s.run(ctx)
+}
+
+// warnConfigPermissions logs when other users could edit the config,
+// which can run shell commands.
+func warnConfigPermissions(path string) {
+	if mode, bad := config.WritableByOthers(path); bad {
+		log.Printf("warning: %s is writable by other users (mode %v); it can run commands as you — chmod go-w it", path, mode)
+	}
 }
 
 // newRunSession builds the runtime state for cfg and uploads the initial

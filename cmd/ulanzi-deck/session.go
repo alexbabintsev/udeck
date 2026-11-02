@@ -474,6 +474,7 @@ func (s *session) reloadConfig(reloader *configReloader) {
 		log.Printf("config reload failed: %v", err)
 		return
 	}
+	warnConfigPermissions(s.cfgPath)
 	applyImageSettings(nextCfg, s.firmware)
 	nextNav := newNavigator(nextCfg.PagesOrDefault())
 	nextToggles := newToggleManager(nextCfg)

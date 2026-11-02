@@ -36,6 +36,7 @@ actual development milestones rather than formal releases.
   forecast request, which now also carries the current conditions.
 - The freqtrade widget shows OFFLINE when no bot answers and NO TRADES
   when there is nothing to show, instead of loading dots forever.
+- `run` warns when the config file is writable by other users.
 - Stop the periodic full-page re-upload: the idle keepalive is now a
   single brightness (or label-style) packet, so the keys no longer
   flash every 30 seconds.

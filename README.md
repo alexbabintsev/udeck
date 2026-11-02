@@ -394,6 +394,7 @@ Notes:
   PNG files.
 - Widgets for the same city (`weather_day`, `wide_dashboard`) share one
   weather request per poll interval.
+- `run` warns when the config file is writable by other users.
 - Widget renders skip identical frames, and visible widget updates use a
   single-slot partial refresh path to reduce CPU use and avoid full-page
   flicker.

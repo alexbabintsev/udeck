@@ -829,3 +829,24 @@ func TestValidateRejectsInvalidToggleIconColor(t *testing.T) {
 		t.Fatalf("expected icon_color validation error, got %v", err)
 	}
 }
+
+func TestWritableByOthers(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, bad := WritableByOthers(path); bad {
+		t.Fatal("0600 is fine")
+	}
+	for _, mode := range []os.FileMode{0o620, 0o602, 0o666} {
+		if err := os.Chmod(path, mode); err != nil {
+			t.Fatal(err)
+		}
+		if got, bad := WritableByOthers(path); !bad || got != mode {
+			t.Fatalf("mode %v: got %v bad=%v", mode, got, bad)
+		}
+	}
+	if _, bad := WritableByOthers(filepath.Join(t.TempDir(), "missing")); bad {
+		t.Fatal("a missing file is not flagged")
+	}
+}

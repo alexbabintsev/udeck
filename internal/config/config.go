@@ -235,6 +235,18 @@ func Load(path string) (*Config, error) {
 	return &c, nil
 }
 
+// WritableByOthers reports whether the file at path can be modified by
+// users other than its owner. The config runs shell commands and is
+// hot-reloaded, so such a file lets them run code as this user.
+func WritableByOthers(path string) (os.FileMode, bool) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, false
+	}
+	mode := info.Mode().Perm()
+	return mode, mode&0o022 != 0
+}
+
 func (c *Config) Validate() error {
 	if len(c.Pages) > 0 && len(c.Buttons) > 0 {
 		return fmt.Errorf("config cannot define both pages and buttons")
