@@ -392,6 +392,8 @@ Notes:
   - only one gesture per button can define a toggle sequence
 - Widgets write icons atomically so page refreshes do not race on partial
   PNG files.
+- Widgets for the same city (`weather_day`, `wide_dashboard`) share one
+  weather request per poll interval.
 - Widget renders skip identical frames, and visible widget updates use a
   single-slot partial refresh path to reduce CPU use and avoid full-page
   flicker.

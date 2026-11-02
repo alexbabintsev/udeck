@@ -37,14 +37,33 @@ type weatherDayData struct {
 
 type weatherForecast = [weatherDayMaxForecast]*weatherDayData
 
+// weatherCurrent is the current conditions, fetched with the forecast.
+type weatherCurrent struct {
+	TempC float64
+	Code  int
+}
+
+// weatherUpdate is what a city cache hands to its subscribers.
+type weatherUpdate struct {
+	Days     weatherForecast
+	Current  *weatherCurrent
+	CityName string // "City, Country" once geocoded
+	Failed   bool   // the last fetch failed; any data is from earlier
+}
+
+// weatherCityCache is shared by every widget showing the same city
+// (weather_day keys, the wide dashboard): one geocode and one forecast
+// request per poll interval serve them all.
 type weatherCityCache struct {
 	mu        sync.Mutex
 	coords    *dashboardWeatherCoords
 	days      weatherForecast
+	current   *weatherCurrent
+	failed    bool
 	lastFetch time.Time
 	fetching  bool
 	nextSub   int
-	subs      map[int]func(weatherForecast)
+	subs      map[int]func(weatherUpdate)
 }
 
 var (
@@ -58,19 +77,27 @@ func weatherCacheForCity(city string) *weatherCityCache {
 	if c, ok := weatherCaches[city]; ok {
 		return c
 	}
-	c := &weatherCityCache{subs: map[int]func(weatherForecast){}}
+	c := &weatherCityCache{subs: map[int]func(weatherUpdate){}}
 	weatherCaches[city] = c
 	return c
 }
 
 // subscribe registers fn for future data and returns a token for
 // unsubscribe plus the data cached so far (entries may be nil).
-func (c *weatherCityCache) subscribe(fn func(weatherForecast)) (int, weatherForecast) {
+func (c *weatherCityCache) subscribe(fn func(weatherUpdate)) (int, weatherUpdate) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.nextSub++
 	c.subs[c.nextSub] = fn
-	return c.nextSub, c.days
+	return c.nextSub, c.updateLocked()
+}
+
+func (c *weatherCityCache) updateLocked() weatherUpdate {
+	u := weatherUpdate{Days: c.days, Current: c.current, Failed: c.failed}
+	if c.coords != nil {
+		u.CityName = c.coords.Name
+	}
+	return u
 }
 
 func (c *weatherCityCache) unsubscribe(token int) {
@@ -91,42 +118,43 @@ func (c *weatherCityCache) refresh(city string, poll time.Duration) {
 	coords := c.coords
 	c.mu.Unlock()
 
+	var (
+		days    weatherForecast
+		current *weatherCurrent
+		err     error
+	)
 	if coords == nil {
-		resolved, err := fetchDashboardCoords(city)
+		coords, err = fetchDashboardCoords(city)
 		if err != nil {
 			debug.Logf("weather %q: geocode: %v", city, err)
-			c.mu.Lock()
-			c.fetching = false
-			c.lastFetch = time.Now()
-			c.mu.Unlock()
-			return
 		}
-		c.mu.Lock()
-		c.coords = resolved
-		coords = resolved
-		c.mu.Unlock()
 	}
-
-	days, err := fetchWeatherDayAll(*coords)
-	if err != nil {
-		debug.Logf("weather %q: forecast: %v", city, err)
+	if err == nil {
+		days, current, err = fetchWeather(*coords)
+		if err != nil {
+			debug.Logf("weather %q: forecast: %v", city, err)
+		}
 	}
 
 	c.mu.Lock()
 	c.fetching = false
 	c.lastFetch = time.Now()
-	if err == nil {
-		c.days = days
+	if coords != nil {
+		c.coords = coords
 	}
-	subs := make([]func(weatherForecast), 0, len(c.subs))
+	c.failed = err != nil
+	if err == nil {
+		c.days, c.current = days, current
+	}
+	subs := make([]func(weatherUpdate), 0, len(c.subs))
 	for _, fn := range c.subs {
 		subs = append(subs, fn)
 	}
-	current := c.days
+	u := c.updateLocked()
 	c.mu.Unlock()
 
 	for _, fn := range subs {
-		fn(current)
+		fn(u)
 	}
 }
 
@@ -164,7 +192,7 @@ func NewWeatherDayWidget(id string, cfg *config.Widget, notify func(string)) (*W
 	// is drawn right away instead of the loading card.
 	token, existing := w.cache.subscribe(w.onData)
 	w.subToken = token
-	w.forecast = existing[dayIndex]
+	w.forecast = existing.Days[dayIndex]
 	if _, err := w.writeIcon(w.renderImage()); err != nil {
 		_ = w.Close()
 		return nil, fmt.Errorf("write weather day icon: %w", err)
@@ -177,12 +205,12 @@ func NewWeatherDayWidget(id string, cfg *config.Widget, notify func(string)) (*W
 	return w, nil
 }
 
-func (w *WeatherDayWidget) onData(days weatherForecast) {
+func (w *WeatherDayWidget) onData(u weatherUpdate) {
 	if w.isClosed() {
 		return
 	}
 	w.mu.Lock()
-	w.forecast = days[w.dayIndex]
+	w.forecast = u.Days[w.dayIndex]
 	w.mu.Unlock()
 	if err := w.render(); err != nil {
 		debug.Logf("widget %s: %v", w.id, err)
@@ -351,14 +379,17 @@ func weatherDayIconColor(code int) color.RGBA {
 
 // ── API fetch ────────────────────────────────────────────────────────────────
 
-func fetchWeatherDayAll(coords dashboardWeatherCoords) (weatherForecast, error) {
+// fetchWeather gets the daily forecast and the current conditions in
+// one request.
+func fetchWeather(coords dashboardWeatherCoords) (weatherForecast, *weatherCurrent, error) {
 	u, err := url.Parse(dashboardForecastURL)
 	if err != nil {
-		return weatherForecast{}, err
+		return weatherForecast{}, nil, err
 	}
 	q := u.Query()
 	q.Set("latitude", fmt.Sprintf("%.4f", coords.Latitude))
 	q.Set("longitude", fmt.Sprintf("%.4f", coords.Longitude))
+	q.Set("current", "temperature_2m,weather_code")
 	q.Set("daily", "weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_mean,relative_humidity_2m_mean,wind_speed_10m_max")
 	q.Set("forecast_days", fmt.Sprintf("%d", weatherDayMaxForecast))
 	// Match the field name: Open-Meteo defaults to km/h.
@@ -371,6 +402,10 @@ func fetchWeatherDayAll(coords dashboardWeatherCoords) (weatherForecast, error) 
 	u.RawQuery = q.Encode()
 
 	var payload struct {
+		Current *struct {
+			Temperature float64 `json:"temperature_2m"`
+			Code        int     `json:"weather_code"`
+		} `json:"current"`
 		Daily struct {
 			Time         []string  `json:"time"`
 			Code         []int     `json:"weather_code"`
@@ -382,7 +417,11 @@ func fetchWeatherDayAll(coords dashboardWeatherCoords) (weatherForecast, error) 
 		} `json:"daily"`
 	}
 	if err := getJSON(dashboardHTTPClient, u.String(), nil, &payload); err != nil {
-		return weatherForecast{}, fmt.Errorf("forecast: %w", err)
+		return weatherForecast{}, nil, fmt.Errorf("forecast: %w", err)
+	}
+	var current *weatherCurrent
+	if c := payload.Current; c != nil {
+		current = &weatherCurrent{TempC: c.Temperature, Code: c.Code}
 	}
 
 	d := payload.Daily
@@ -422,7 +461,7 @@ func fetchWeatherDayAll(coords dashboardWeatherCoords) (weatherForecast, error) 
 		}
 		result[i] = entry
 	}
-	return result, nil
+	return result, current, nil
 }
 
 func weatherDayPoll(ms int) time.Duration {

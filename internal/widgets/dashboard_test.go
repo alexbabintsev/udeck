@@ -14,7 +14,7 @@ import (
 func TestWideDashboardWidgetContextAndWeather(t *testing.T) {
 	newOpenMeteo(t)
 	rec := &recorder{}
-	w, err := NewWideDashboardWidget("dash", &config.Widget{City: "Kyiv"}, rec.notify)
+	w, err := NewWideDashboardWidget("dash", &config.Widget{City: uniqueCity(t)}, rec.notify)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,7 +22,7 @@ func TestWideDashboardWidgetContextAndWeather(t *testing.T) {
 	waitFor(t, "weather", func() bool {
 		w.mu.RLock()
 		defer w.mu.RUnlock()
-		return w.weather.Ready && !w.fetching
+		return w.weather.Ready
 	})
 	if w.weather.CityName != "Kyiv, Ukraine" {
 		t.Fatalf("city = %q", w.weather.CityName)
@@ -30,6 +30,7 @@ func TestWideDashboardWidgetContextAndWeather(t *testing.T) {
 	// The fetched weather is published right away, not on the next
 	// minute change.
 	waitFor(t, "weather redraw", func() bool { return rec.count() > 0 })
+	waitFor(t, "fetch done", w.cache.lastFetchSet)
 
 	// The dashboard is display-only: a tap must not redraw anything.
 	frameKey := func() string {
@@ -59,18 +60,17 @@ func TestWideDashboardWithoutCity(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer w.Close()
-	waitFor(t, "weather state", func() bool {
-		w.mu.RLock()
-		defer w.mu.RUnlock()
-		return w.weather.Error == "Set city"
-	})
+	if w.weather.Error != "Set city" || w.cache != nil {
+		t.Fatalf("weather=%+v", w.weather)
+	}
 	w.tick(time.Now().Add(time.Hour))
+	w.resume()
 }
 
 func TestWideDashboardWeatherFailure(t *testing.T) {
 	om := newOpenMeteo(t)
 	om.fail.Store(true)
-	w, err := NewWideDashboardWidget("dash", &config.Widget{City: "Kyiv"}, nil)
+	w, err := NewWideDashboardWidget("dash", &config.Widget{City: uniqueCity(t)}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,16 +78,34 @@ func TestWideDashboardWeatherFailure(t *testing.T) {
 	waitFor(t, "error state", func() bool {
 		w.mu.RLock()
 		defer w.mu.RUnlock()
-		return w.weather.Error == "Weather unavailable" && !w.fetching
+		return w.weather.Error == "Weather unavailable"
 	})
-	// A second refresh while one is in flight is a no-op.
-	w.mu.Lock()
-	w.fetching = true
-	w.mu.Unlock()
-	w.refreshWeather()
-	w.mu.Lock()
-	w.fetching = false
-	w.mu.Unlock()
+	waitFor(t, "fetch done", w.cache.lastFetchSet)
+	w.resume() // still within the poll interval: no new request
+	waitFor(t, "fetch done", w.cache.lastFetchSet)
+
+	// Closed widgets ignore late updates.
+	_ = w.Close()
+	w.onWeather(weatherUpdate{Current: &weatherCurrent{TempC: 1}})
+	if w.weather.Ready {
+		t.Fatal("closed widget must not take updates")
+	}
+}
+
+func TestDashboardStateFrom(t *testing.T) {
+	s := dashboardStateFrom(weatherUpdate{CityName: "Kyiv, Ukraine", Current: &weatherCurrent{TempC: -2.6, Code: 71}}, "Kyiv")
+	if !s.Ready || *s.TempC != -2.6 || s.Code != 71 || s.CityName != "Kyiv, Ukraine" {
+		t.Fatalf("ready state %+v", s)
+	}
+	// Stale data beats an error: the last reading is still shown.
+	s = dashboardStateFrom(weatherUpdate{Failed: true, Current: &weatherCurrent{TempC: 3}}, "Kyiv")
+	if !s.Ready || s.Error != "" {
+		t.Fatalf("stale state %+v", s)
+	}
+	s = dashboardStateFrom(weatherUpdate{Failed: true}, "Kyiv")
+	if s.Ready || s.Error != "Weather unavailable" || s.CityName != "Kyiv" {
+		t.Fatalf("failed state %+v", s)
+	}
 }
 
 func TestDashboardHelpers(t *testing.T) {

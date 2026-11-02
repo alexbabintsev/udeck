@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
 	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 	"golang.org/x/image/font"
@@ -53,12 +52,13 @@ type WideDashboardWidget struct {
 	city        string
 	weatherPoll time.Duration
 
+	// cache is the shared per-city weather (nil without a city).
+	cache    *weatherCityCache
+	subToken int
+
 	mu           sync.RWMutex
 	context      Context
 	weather      dashboardWeatherState
-	coords       *dashboardWeatherCoords
-	lastWeather  time.Time
-	fetching     bool
 	lastFrameKey string
 }
 
@@ -72,13 +72,63 @@ func NewWideDashboardWidget(id string, cfg *config.Widget, notify func(string)) 
 		city:        strings.TrimSpace(cfg.City),
 		weatherPoll: dashboardWeatherPoll(cfg.PollMS),
 	}
+	if w.city == "" {
+		w.weather = dashboardWeatherState{CityName: "Weather", Error: "Set city"}
+	} else {
+		// Shared with weather_day keys of the same city: one request
+		// serves all of them.
+		w.cache = weatherCacheForCity(w.city)
+		token, cached := w.cache.subscribe(w.onWeather)
+		w.subToken = token
+		w.weather = dashboardStateFrom(cached, w.city)
+	}
 	if _, err := w.draw(time.Now(), false); err != nil {
 		_ = w.Close()
 		return nil, err
 	}
 	w.every(dashboardTickInterval, w.tick)
-	go w.refreshWeather()
+	if w.cache != nil {
+		go w.cache.refresh(w.city, w.weatherPoll)
+		w.every(time.Minute, func(time.Time) { w.cache.refresh(w.city, w.weatherPoll) })
+	}
 	return w, nil
+}
+
+// Close stops the widget and its weather subscription.
+func (w *WideDashboardWidget) Close() error {
+	if w.cache != nil {
+		w.cache.unsubscribe(w.subToken)
+	}
+	return w.widgetBase.Close()
+}
+
+func (w *WideDashboardWidget) onWeather(u weatherUpdate) {
+	if w.isClosed() {
+		return
+	}
+	w.mu.Lock()
+	w.weather = dashboardStateFrom(u, w.city)
+	w.mu.Unlock()
+	_, _ = w.render(time.Now())
+}
+
+// dashboardStateFrom maps the shared city weather to what the dashboard
+// shows.
+func dashboardStateFrom(u weatherUpdate, city string) dashboardWeatherState {
+	state := dashboardWeatherState{CityName: u.CityName}
+	if state.CityName == "" {
+		state.CityName = city
+	}
+	switch {
+	case u.Current != nil:
+		temp := u.Current.TempC
+		state.TempC = &temp
+		state.Code = u.Current.Code
+		state.Ready = true
+	case u.Failed:
+		state.Error = "Weather unavailable"
+	}
+	return state
 }
 
 // HandleGesture does nothing: the dashboard is display-only (inside a
@@ -99,68 +149,14 @@ func (w *WideDashboardWidget) SetContext(ctx Context) {
 	_, _ = w.draw(time.Now(), false)
 }
 
-func (w *WideDashboardWidget) resume() { w.tick(time.Now()) }
-
-func (w *WideDashboardWidget) tick(now time.Time) {
-	w.mu.RLock()
-	stale := w.city != "" && !w.fetching && (w.lastWeather.IsZero() || now.Sub(w.lastWeather) >= w.weatherPoll)
-	w.mu.RUnlock()
-	if stale {
-		go w.refreshWeather()
+func (w *WideDashboardWidget) resume() {
+	w.tick(time.Now())
+	if w.cache != nil {
+		go w.cache.refresh(w.city, w.weatherPoll)
 	}
-	_, _ = w.render(now)
 }
 
-func (w *WideDashboardWidget) refreshWeather() {
-	w.mu.Lock()
-	if w.fetching || w.isClosed() {
-		w.mu.Unlock()
-		return
-	}
-	w.fetching = true
-	city := w.city
-	coords := w.coords
-	w.mu.Unlock()
-
-	state := dashboardWeatherState{}
-	if city == "" {
-		state.Error = "Set city"
-	} else {
-		if coords == nil {
-			resolved, err := fetchDashboardCoords(city)
-			if err != nil {
-				debug.Logf("dashboard %q: %v", city, err)
-				state.Error = "Weather unavailable"
-			} else {
-				coords = resolved
-			}
-		}
-		if coords != nil {
-			nextState, err := fetchDashboardWeather(*coords)
-			if err != nil {
-				debug.Logf("dashboard %q: %v", city, err)
-				state.Error = "Weather unavailable"
-			} else {
-				state = nextState
-				state.CityName = coords.Name
-			}
-		}
-	}
-	if state.CityName == "" {
-		state.CityName = city
-		if city == "" {
-			state.CityName = "Weather"
-		}
-	}
-
-	w.mu.Lock()
-	w.fetching = false
-	w.coords = coords
-	w.weather = state
-	w.lastWeather = time.Now()
-	w.mu.Unlock()
-	_, _ = w.render(time.Now())
-}
+func (w *WideDashboardWidget) tick(now time.Time) { _, _ = w.render(now) }
 
 // render redraws and notifies the Manager when the icon changed.
 func (w *WideDashboardWidget) render(now time.Time) (bool, error) {
@@ -437,38 +433,5 @@ func fetchDashboardCoords(city string) (*dashboardWeatherCoords, error) {
 		Latitude:  res.Latitude,
 		Longitude: res.Longitude,
 		Timezone:  res.Timezone,
-	}, nil
-}
-
-func fetchDashboardWeather(coords dashboardWeatherCoords) (dashboardWeatherState, error) {
-	u, err := url.Parse(dashboardForecastURL)
-	if err != nil {
-		return dashboardWeatherState{}, err
-	}
-	q := u.Query()
-	q.Set("latitude", fmt.Sprintf("%.4f", coords.Latitude))
-	q.Set("longitude", fmt.Sprintf("%.4f", coords.Longitude))
-	q.Set("current", "temperature_2m,weather_code")
-	if coords.Timezone != "" {
-		q.Set("timezone", coords.Timezone)
-	} else {
-		q.Set("timezone", "auto")
-	}
-	u.RawQuery = q.Encode()
-
-	var payload struct {
-		Current struct {
-			Temperature float64 `json:"temperature_2m"`
-			Code        int     `json:"weather_code"`
-		} `json:"current"`
-	}
-	if err := getJSON(dashboardHTTPClient, u.String(), nil, &payload); err != nil {
-		return dashboardWeatherState{}, fmt.Errorf("forecast: %w", err)
-	}
-	temp := payload.Current.Temperature
-	return dashboardWeatherState{
-		TempC: &temp,
-		Code:  payload.Current.Code,
-		Ready: true,
 	}, nil
 }

@@ -40,15 +40,15 @@ func newOpenMeteo(t *testing.T) *openMeteo {
 			fmt.Fprint(w, `{"results":[{"name":"Kyiv","country":"Ukraine","latitude":50.45,"longitude":30.52,"timezone":"Europe/Kyiv"}]}`)
 		case "/forecast":
 			om.forecasts.Add(1)
-			if q.Get("current") != "" {
-				fmt.Fprint(w, `{"current":{"temperature_2m":21.5,"weather_code":2}}`)
-				return
-			}
 			if q.Get("wind_speed_unit") != "ms" {
 				http.Error(w, "wind unit must be m/s", http.StatusBadRequest)
 				return
 			}
-			fmt.Fprint(w, `{"daily":{"time":["2026-10-07","bad-date"],"weather_code":[61,0],
+			current := ""
+			if q.Get("current") == "temperature_2m,weather_code" {
+				current = `"current":{"temperature_2m":21.5,"weather_code":2},`
+			}
+			fmt.Fprint(w, `{`+current+`"daily":{"time":["2026-10-07","bad-date"],"weather_code":[61,0],
 				"temperature_2m_max":[12.3,15],"temperature_2m_min":[4.1,6],
 				"apparent_temperature_mean":[10],"relative_humidity_2m_mean":[80.4],"wind_speed_10m_max":[5.5]}}`)
 		default:
@@ -70,11 +70,14 @@ func uniqueCity(t *testing.T) string {
 	return fmt.Sprintf("City-%s-%d", strings.ReplaceAll(t.Name(), "/", "-"), cityCounter.Add(1))
 }
 
-func TestFetchWeatherDayAll(t *testing.T) {
+func TestFetchWeather(t *testing.T) {
 	newOpenMeteo(t)
-	days, err := fetchWeatherDayAll(dashboardWeatherCoords{Latitude: 1, Longitude: 2})
+	days, current, err := fetchWeather(dashboardWeatherCoords{Latitude: 1, Longitude: 2})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if current == nil || current.TempC != 21.5 || current.Code != 2 {
+		t.Fatalf("current = %+v", current)
 	}
 	d0, d1 := days[0], days[1]
 	if d0 == nil || d0.TempMaxC != 12.3 || d0.HumidityPct != 80 || d0.WindSpeedMS != 5.5 || d0.FeelsLikeC != 10 {
@@ -88,7 +91,7 @@ func TestFetchWeatherDayAll(t *testing.T) {
 	}
 }
 
-func TestFetchDashboardCoordsAndWeather(t *testing.T) {
+func TestFetchCoordsAndWeatherErrors(t *testing.T) {
 	om := newOpenMeteo(t)
 	coords, err := fetchDashboardCoords("Kyiv")
 	if err != nil || coords.Name != "Kyiv, Ukraine" || coords.Timezone != "Europe/Kyiv" {
@@ -97,16 +100,9 @@ func TestFetchDashboardCoordsAndWeather(t *testing.T) {
 	if _, err := fetchDashboardCoords("Nowhere"); err == nil {
 		t.Fatal("expected city not found")
 	}
-	state, err := fetchDashboardWeather(dashboardWeatherCoords{})
-	if err != nil || !state.Ready || *state.TempC != 21.5 || state.Code != 2 {
-		t.Fatalf("state=%+v err=%v", state, err)
-	}
 	om.fail.Store(true)
-	if _, err := fetchDashboardWeather(*coords); err == nil {
+	if _, _, err := fetchWeather(*coords); err == nil {
 		t.Fatal("expected forecast error")
-	}
-	if _, err := fetchWeatherDayAll(*coords); err == nil {
-		t.Fatal("expected daily forecast error")
 	}
 }
 
@@ -135,6 +131,25 @@ func TestWeatherDayWidgetsShareOneFetchPerCity(t *testing.T) {
 	tomorrow.cache.refresh(city, time.Hour)
 	if om.forecasts.Load() != 1 || om.geocodes.Load() != 1 {
 		t.Fatalf("expected one fetch, got geocode=%d forecast=%d", om.geocodes.Load(), om.forecasts.Load())
+	}
+
+	// The wide dashboard for the same city shares the cached request too.
+	dash, err := NewWideDashboardWidget("dash", &config.Widget{City: city}, rec.notify)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dash.mu.RLock()
+	ready := dash.weather.Ready && *dash.weather.TempC == 21.5
+	dash.mu.RUnlock()
+	if !ready {
+		t.Fatal("dashboard must start from the cached current weather")
+	}
+	dash.cache.refresh(city, time.Hour)
+	if om.forecasts.Load() != 1 || om.geocodes.Load() != 1 {
+		t.Fatalf("dashboard must not fetch again, got geocode=%d forecast=%d", om.geocodes.Load(), om.forecasts.Load())
+	}
+	if err := dash.Close(); err != nil {
+		t.Fatal(err)
 	}
 
 	// Closing one widget must remove only its own subscription.
