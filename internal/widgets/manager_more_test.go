@@ -200,6 +200,10 @@ func TestManagerCreatesEveryWidgetType(t *testing.T) {
 		{RuntimeID: "p", Widget: &config.Widget{Type: "timer"}},
 		{RuntimeID: "q", Widget: &config.Widget{Type: "stopwatch"}},
 		{RuntimeID: "r", Widget: &config.Widget{Type: "pomodoro"}},
+		{RuntimeID: "s", Widget: &config.Widget{Type: "cpu"}},
+		{RuntimeID: "u", Widget: &config.Widget{Type: "disk"}},
+		{RuntimeID: "v", Widget: &config.Widget{Type: "network"}},
+		{RuntimeID: "w", Widget: &config.Widget{Type: "battery"}},
 	}
 	m, err := NewManager(&config.Config{Buttons: buttons})
 	if err != nil {

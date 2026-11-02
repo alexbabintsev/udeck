@@ -66,7 +66,7 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
   - `microphone`: system-wide mic mute with a live/muted indicator
   - `audio_output`: current output device; tap switches to the next one
   - `media`: play/pause, next, previous for whatever app is playing
-  - `memory`: used memory ring
+  - `cpu`, `memory`, `disk`, `network`, `battery`: system monitor
   - `weather_day`, `wide_dashboard`: forecast and clock (Open-Meteo)
   - `spotify_play_pause`, `spotify_next`, `spotify_artwork`
   - `freqtrade`, `site`, `project`
@@ -200,6 +200,9 @@ Current config surface:
       - `type: media`
         - `action`: `play_pause` | `next` | `previous` (needs
           Accessibility access, like `type: key`)
+      - `type: cpu` | `disk` | `network` | `battery`
+        - `path` (disk): volume to show, default `/`
+        - `interface` (network): interface name prefixes, default `en`
       - `type: memory`
         - `apps`: optional app list restarted on press
         - `poll_ms`: optional polling override

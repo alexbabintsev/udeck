@@ -143,6 +143,11 @@ type Widget struct {
 	Break     string `yaml:"break,omitempty"`
 	LongBreak string `yaml:"long_break,omitempty"`
 	Rounds    int    `yaml:"rounds,omitempty"`
+	// Path is the volume a disk widget shows (any path on it); default /.
+	Path string `yaml:"path,omitempty"`
+	// Interface lists the network interface name prefixes to count,
+	// comma-separated ("en0", "en,bridge"); default en (Wi-Fi, Ethernet).
+	Interface string `yaml:"interface,omitempty"`
 }
 
 // TimerDuration parses a timer or pomodoro duration field; empty means
@@ -504,6 +509,10 @@ var widgetMinPollMS = map[string]int{
 	"timer":              1000,
 	"stopwatch":          1000,
 	"pomodoro":           1000,
+	"cpu":                500,
+	"network":            500,
+	"disk":               5000,
+	"battery":            5000,
 }
 
 func validateWidget(w *Widget, at [2]int, path string) error {
@@ -512,7 +521,7 @@ func validateWidget(w *Widget, at [2]int, path string) error {
 	}
 	minPoll, known := widgetMinPollMS[w.Type]
 	if !known {
-		return fmt.Errorf("%s.type %q unknown (clock|timer|stopwatch|pomodoro|volume|microphone|audio_output|media|memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|weather_day|freqtrade|site|project)", path, w.Type)
+		return fmt.Errorf("%s.type %q unknown (clock|timer|stopwatch|pomodoro|cpu|disk|network|battery|volume|microphone|audio_output|media|memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|weather_day|freqtrade|site|project)", path, w.Type)
 	}
 	switch w.Type {
 	case "wide_dashboard":

@@ -705,15 +705,15 @@ their own state.
 Supported widget types:
 
 - general purpose: `clock`, `timer`, `stopwatch`, `pomodoro`, `volume`,
-  `microphone`, `audio_output`, `media`, `memory`, `weather_day`,
-  `wide_dashboard`
+  `microphone`, `audio_output`, `media`, `weather_day`, `wide_dashboard`
+- system monitor: `cpu`, `memory`, `disk`, `network`, `battery`
 - Spotify: `spotify_play_pause`, `spotify_next`, `spotify_artwork`
 - specialised: `freqtrade`, `site`, `project`
 
 Every widget is independent: it reads its own state and needs no other
 widget on the page. The general-purpose ones share one look: black
-background, a level ring with the value inside (`volume`, `memory`,
-the timers) or a
+background, a level ring with the value inside (`volume`, the timers,
+the system monitors) or a
 large icon or value with an upper-case label (`clock`, `microphone`,
 `audio_output`, `media`). Color carries the state the same way everywhere: green is
 live, red is muted/off/failing, blue is neutral information, grey is "no
@@ -776,6 +776,38 @@ Fields:
 - `sound` (timer, pomodoro)
   - a sound from `/System/Library/Sounds` by name (`Glass`, `Ping`,
     `Hero`, ...), default `Glass`; `none` for silence
+
+### `widget.type: cpu`, `disk`, `network`, `battery`
+
+System monitors. Each key polls its own reading and is re-sent to the
+deck only when the picture changes. Tap does nothing.
+
+```yaml
+- at: [0, 0]
+  widget: {type: cpu}                     # busy %, all cores
+- at: [0, 1]
+  widget: {type: memory}                  # used %
+- at: [0, 2]
+  widget: {type: disk}                    # free space of /
+- at: [0, 3]
+  widget: {type: network}                 # Wi-Fi + Ethernet, down/up
+- at: [0, 4]
+  widget: {type: battery}
+```
+
+- `cpu`: busy share of all cores on a ring; green, amber from 60%, red
+  from 85%. Default `poll_ms` `2000`, minimum `500`.
+- `disk`: free space in large type, the ring how full the volume is;
+  amber from 80% full, red from 90%. `path` picks the volume (any path
+  on it, `~` expands; default `/`), `title` replaces the word FREE.
+  Default `poll_ms` `60000`, minimum `5000`.
+- `network`: download and upload rates in bytes per second. Counts the
+  interfaces whose names start with `interface` (comma-separated
+  prefixes, default `en`: Wi-Fi and Ethernet; VPN tunnels are not
+  counted twice). Default `poll_ms` `2000`, minimum `500`.
+- `battery`: charge on a ring; amber from 20%, red from 10% (not while
+  plugged in); a bolt while charging, a plug when held on power. Shows
+  NO BATTERY on desktop Macs. Default `poll_ms` `30000`, minimum `5000`.
 
 ### `widget.type: volume`
 

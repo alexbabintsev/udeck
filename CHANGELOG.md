@@ -18,6 +18,8 @@ actual development milestones rather than formal releases.
 - New `timer`, `stopwatch` and `pomodoro` widgets: tap to start/pause,
   hold to reset; timers and pomodoro phases ring with a system sound,
   even when their page is hidden.
+- New system monitor widgets: `cpu`, `disk` (free space), `network`
+  (download/upload rate) and `battery`, next to `memory`.
 - General-purpose widgets share one look: level ring or large icon with
   an upper-case label, with the same state colors. The `memory` widget
   moved to it.

@@ -81,6 +81,8 @@ func TestValidateRejects(t *testing.T) {
 		"timer sound path":   {btnYAML("widget: {type: timer, sound: ../x}"), "system sound name"},
 		"pomodoro break":     {btnYAML("widget: {type: pomodoro, break: 0s}"), "break:"},
 		"pomodoro rounds":    {btnYAML("widget: {type: pomodoro, rounds: 13}"), "rounds must be"},
+		"cpu poll":           {btnYAML("widget: {type: cpu, poll_ms: 100}"), "poll_ms too small"},
+		"disk poll":          {btnYAML("widget: {type: disk, poll_ms: 1000}"), "poll_ms too small"},
 		"toggle icon color":  {btnYAML("on: {tap: {toggle: [{icon_color: xyz, action: {type: shell, cmd: a}}, {action: {type: shell, cmd: b}}]}}"), "icon_color"},
 	}
 	for name, tc := range cases {
@@ -197,6 +199,10 @@ buttons:
     widget: {type: pomodoro, work: 50m, break: 10m, rounds: 3, sound: none}
   - at: [2, 0]
     widget: {type: stopwatch}
+  - at: [2, 1]
+    widget: {type: disk, path: ~/Backups, title: Backup}
+  - at: [2, 2]
+    widget: {type: network, interface: "en0, bridge"}
 `)
 	if err != nil {
 		t.Fatal(err)
