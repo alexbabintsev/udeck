@@ -134,6 +134,20 @@ func TestSiteFormatting(t *testing.T) {
 	}
 }
 
+func TestSiteTitle(t *testing.T) {
+	for _, c := range []struct{ title, url, want string }{
+		{" laravel-ua ", "https://laravelukraine.com", "laravel-ua"},
+		{"", "https://xmlvalid.com", "xmlvalid"},
+		{"", "https://www.example.co:8443/x", "example"},
+		{"", "http://localhost:8000", "localhost"},
+		{"", "http://\x00bad", ""},
+	} {
+		if got := siteTitle(c.title, c.url); got != c.want {
+			t.Fatalf("siteTitle(%q, %q) = %q, want %q", c.title, c.url, got, c.want)
+		}
+	}
+}
+
 func TestSiteCardRendersBadgeByColor(t *testing.T) {
 	stats := func(change *float64) *siteStats {
 		s := &siteStats{}
@@ -145,28 +159,28 @@ func TestSiteCardRendersBadgeByColor(t *testing.T) {
 	rise, fall := 12.0, -35.0
 	// A pixel inside the badge, at its right edge and vertical center.
 	badge := func(img *image.RGBA) (r, g, b uint8) {
-		innerH := img.Bounds().Dy() - siteMargin*2
+		innerH := img.Bounds().Dy() - siteBodyTop - siteBottom
 		topH := innerH * 11 / 20
-		y := siteMargin + topH + (innerH-topH)/2
+		y := siteBodyTop + topH + (innerH-topH)/2
 		c := rgbaAt(img, img.Bounds().Dx()-siteMargin-3, y)
 		return c.R, c.G, c.B
 	}
 
 	img := image.NewRGBA(image.Rect(0, 0, 196, 196))
-	renderSiteCard(img, stats(&rise))
+	renderSiteCard(img, "xmlvalid", stats(&rise))
 	if r, g, b := badge(img); [3]uint8{r, g, b} != [3]uint8{siteRise.R, siteRise.G, siteRise.B} {
 		t.Fatalf("rise badge = %d,%d,%d", r, g, b)
 	}
-	renderSiteCard(img, stats(&fall))
+	renderSiteCard(img, "xmlvalid", stats(&fall))
 	if r, g, b := badge(img); [3]uint8{r, g, b} != [3]uint8{siteFall.R, siteFall.G, siteFall.B} {
 		t.Fatalf("fall badge = %d,%d,%d", r, g, b)
 	}
-	renderSiteCard(img, stats(nil))
+	renderSiteCard(img, "xmlvalid", stats(nil))
 	if r, g, b := badge(img); r+g+b != 0 {
 		t.Fatalf("no change must draw no badge, got %d,%d,%d", r, g, b)
 	}
-	renderSiteCard(img, nil)
+	renderSiteCard(img, "", nil)
 	big := stats(&rise)
 	big.Online.Visitors = 123456
-	renderSiteCard(img, big)
+	renderSiteCard(img, "laravelukraine", big)
 }

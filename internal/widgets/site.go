@@ -6,6 +6,8 @@ import (
 	"image/color"
 	"image/draw"
 	"math"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,8 +39,9 @@ type siteStats struct {
 // last 24 hours, from one request.
 type SiteWidget struct {
 	*widgetBase
-	api  siteAPI
-	poll time.Duration
+	api   siteAPI
+	title string
+	poll  time.Duration
 
 	mu           sync.Mutex
 	stats        *siteStats
@@ -50,7 +53,12 @@ func NewSiteWidget(id string, cfg *config.Widget, notify func(string)) (*SiteWid
 	if err != nil {
 		return nil, err
 	}
-	w := &SiteWidget{widgetBase: base, api: newSiteAPI(cfg), poll: sitePoll(cfg.PollMS)}
+	w := &SiteWidget{
+		widgetBase: base,
+		api:        newSiteAPI(cfg),
+		title:      siteTitle(cfg.Title, cfg.URL),
+		poll:       sitePoll(cfg.PollMS),
+	}
 	// Render the placeholder so the icon exists before the first fetch.
 	if _, err := w.writeIcon(w.renderImage()); err != nil {
 		_ = w.Close()
@@ -62,6 +70,23 @@ func NewSiteWidget(id string, cfg *config.Widget, notify func(string)) (*SiteWid
 }
 
 func (w *SiteWidget) resume() { w.refresh() }
+
+// siteTitle is the configured title, or else the site's name from its URL:
+// "https://www.xmlvalid.com" reads "xmlvalid".
+func siteTitle(title, rawURL string) string {
+	if strings.TrimSpace(title) != "" {
+		return strings.TrimSpace(title)
+	}
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || u.Hostname() == "" {
+		return ""
+	}
+	host := strings.TrimPrefix(u.Hostname(), "www.")
+	if i := strings.LastIndex(host, "."); i > 0 {
+		host = host[:i]
+	}
+	return host
+}
 
 // HandleGesture forces an immediate refresh on tap.
 func (w *SiteWidget) HandleGesture(kind ig.Kind) {
@@ -122,10 +147,10 @@ func (w *SiteWidget) render() error {
 
 func (w *SiteWidget) renderImage() *image.RGBA {
 	w.mu.Lock()
-	stats := w.stats
+	stats, title := w.stats, w.title
 	w.mu.Unlock()
 	img := image.NewRGBA(image.Rect(0, 0, icons.IconWidth, icons.IconHeight))
-	renderSiteCard(img, stats)
+	renderSiteCard(img, title, stats)
 	return img
 }
 
@@ -134,46 +159,60 @@ func (w *SiteWidget) renderImage() *image.RGBA {
 const (
 	// siteMargin insets all content from the icon edges.
 	siteMargin = 20
+	// The title along the top, as the project widget writes its name below
+	// its icon; the numbers fill the rest down to siteBottom.
+	siteTitleTop = 14
+	siteTitleH   = 34
+	siteBodyTop  = 54
+	siteBottom   = 16
 	// Starting sizes; each shrinks to fit its block.
-	siteOnlineSize = 82
-	siteViewsSize  = 44
+	siteTitleSize  = 28
+	siteOnlineSize = 60
+	siteViewsSize  = 40
 	siteBadgeSize  = 26
 	// The live dot before the online count.
 	siteDotRadius = 8
 	siteDotGap    = 10
 	// The change badge: height, corner radius, padding and width per digit.
 	siteBadgeH      = 36
-	siteBadgeRadius = 11
+	siteBadgeRadius = 6
 	siteBadgePad    = 22
 	siteBadgeDigitW = 15
 )
 
 var (
-	siteLive  = rgb("2ecc40")
-	siteViews = rgb("bbbbbb")
-	siteEmpty = rgb("444444")
-	siteRise  = rgb("27ae60")
-	siteFall  = rgb("e74c3c")
+	siteTitleColor = color.RGBA{0xf0, 0xf0, 0xf0, 0xff}
+	siteLive       = rgb("2ecc40")
+	siteViews      = rgb("bbbbbb")
+	siteEmpty      = rgb("444444")
+	siteRise       = rgb("27ae60")
+	siteFall       = rgb("e74c3c")
 )
 
-// renderSiteCard draws two rows on plain black:
+// renderSiteCard draws the title and two rows on plain black:
 //
+//	title  — the site's name, upper-cased
 //	online — a green live dot and the visitors on the site now, large
 //	daily  — the last 24 hours' page views, with the change against a typical
 //	         day as a badge on the right: green for a rise, red for a fall
-func renderSiteCard(img *image.RGBA, s *siteStats) {
+func renderSiteCard(img *image.RGBA, title string, s *siteStats) {
 	draw.Draw(img, img.Bounds(), &image.Uniform{color.Black}, image.Point{}, draw.Src)
 
+	drawText(img, strings.ToUpper(title),
+		FromLeft(8), FromTop(siteTitleTop),
+		icons.IconWidth-16, siteTitleH, AlignTopCenter,
+		siteTitleColor, siteTitleSize, true)
+
 	innerW := icons.IconWidth - siteMargin*2
-	innerH := icons.IconHeight - siteMargin*2
+	innerH := icons.IconHeight - siteBodyTop - siteBottom
 	// The online count takes the larger share of the vertical space.
 	topH := innerH * 11 / 20
 	bottomH := innerH - topH
-	bottomY := siteMargin + topH
+	bottomY := siteBodyTop + topH
 
 	if s == nil {
 		drawText(img, "--",
-			FromLeft(siteMargin), FromTop(siteMargin),
+			FromLeft(siteMargin), FromTop(siteBodyTop),
 			innerW, topH, AlignMiddleCenter,
 			siteEmpty, siteOnlineSize, true)
 		drawText(img, "--",
@@ -185,10 +224,10 @@ func renderSiteCard(img *image.RGBA, s *siteStats) {
 
 	// Exact count, not abbreviated: this is a live reading where the precise
 	// number is the point, and it shrinks to fit rather than losing digits.
-	fillCircle(img, siteMargin+siteDotRadius, siteMargin+topH/2, siteDotRadius, siteLive)
+	fillCircle(img, siteMargin+siteDotRadius, siteBodyTop+topH/2, siteDotRadius, siteLive)
 	countX := siteMargin + siteDotRadius*2 + siteDotGap
 	drawText(img, fmt.Sprintf("%d", s.Online.Visitors),
-		FromLeft(countX), FromTop(siteMargin),
+		FromLeft(countX), FromTop(siteBodyTop),
 		siteMargin+innerW-countX, topH, AlignMiddleLeft,
 		color.White, siteOnlineSize, true)
 
@@ -217,7 +256,7 @@ func drawSiteBadge(img *image.RGBA, pct float64, right, cy int) {
 	drawText(img, text,
 		FromLeft(x), FromTop(y),
 		w, siteBadgeH, AlignMiddleCenter,
-		color.White, siteBadgeSize, true)
+		color.Black, siteBadgeSize, true)
 }
 
 func fillRoundedRect(img *image.RGBA, rect image.Rectangle, r int, clr color.Color) {
