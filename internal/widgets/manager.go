@@ -330,6 +330,14 @@ func (m *Manager) newWidgetLocked(id string) (Widget, error) {
 		item, err = NewFreqtradeWidget(id, def.btn.Widget, m.notify)
 	case "wide_dashboard":
 		item, err = NewWideDashboardWidget(id, def.btn.Widget, m.notify)
+	case "volume":
+		item, err = NewVolumeWidget(id, def.btn.Widget, m.notify)
+	case "microphone":
+		item, err = NewMicrophoneWidget(id, def.btn.Widget, m.notify)
+	case "audio_output":
+		item, err = NewAudioOutputWidget(id, def.btn.Widget, m.notify)
+	case "media":
+		item, err = NewMediaWidget(id, def.btn.Widget, m.notify)
 	case "spotify_play_pause", "spotify_next", "spotify_artwork":
 		if m.spotify == nil {
 			service, err := newSpotifyService(def.btn.Widget.PollMS)
@@ -431,7 +439,10 @@ func (m *Manager) gestureOptions(id string) (ig.Options, bool) {
 			HasHold:   true,
 			HoldDelay: projectHoldDuration(def.btn.Widget.HoldMS),
 		}, true
-	case "memory", "freqtrade", "spotify_next", "spotify_artwork", "wide_dashboard", "weather_day", "site":
+	case "volume":
+		return volumeGestures(def.btn.Widget), true
+	case "memory", "freqtrade", "spotify_next", "spotify_artwork", "wide_dashboard", "weather_day", "site",
+		"microphone", "audio_output", "media":
 		return ig.Options{HasTap: true}, true
 	default:
 		return ig.Options{}, false

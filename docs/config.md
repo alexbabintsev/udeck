@@ -704,13 +704,118 @@ their own state.
 
 Supported widget types:
 
-- `memory`
-- `freqtrade`
-- `spotify_play_pause`
-- `spotify_next`
-- `spotify_artwork`
-- `wide_dashboard`
-- `project`
+- general purpose: `volume`, `microphone`, `audio_output`, `media`,
+  `memory`, `weather_day`, `wide_dashboard`
+- Spotify: `spotify_play_pause`, `spotify_next`, `spotify_artwork`
+- specialised: `freqtrade`, `site`, `project`
+
+Every widget is independent: it reads its own state and needs no other
+widget on the page. The general-purpose ones share one look: black
+background, a level ring with the value inside (`volume`, `memory`) or a
+large icon with an upper-case label (`microphone`, `audio_output`,
+`media`). Color carries the state the same way everywhere: green is
+live, red is muted/off/failing, blue is neutral information, grey is "no
+data".
+
+### `widget.type: volume`
+
+Output volume of the default device. The `mute` key shows the level on a
+ring with the percentage inside (a red crossed-out speaker when muted);
+the `up` and `down` keys show a speaker with a plus or minus and the percentage
+underneath.
+
+```yaml
+- at: [0, 0]
+  widget: {type: volume}              # tap mutes / unmutes
+- at: [0, 1]
+  widget: {type: volume, action: down}
+- at: [0, 2]
+  widget: {type: volume, action: up, step: 10}
+```
+
+Fields:
+
+- `action`
+  - optional, `mute` (default), `up` or `down`
+  - `mute`: tap toggles mute
+  - `up` / `down`: tap changes the volume by `step`; holding repeats
+    every 120 ms after 400 ms. Turning the volume up unmutes.
+- `step`
+  - optional, percent per press, `1..50`, default `5`
+  - values snap to multiples of `step`
+- `poll_ms`
+  - optional, default `500`, minimum `200`
+
+Devices without a mute switch are muted by setting the volume to 0 and
+restored to the previous level. Devices whose volume software cannot
+change (many USB DACs, HDMI/DisplayPort outputs) show a grey `FIXED`
+card and ignore presses.
+
+### `widget.type: microphone`
+
+Mutes and unmutes the default input device for every app at once, unlike
+the in-app buttons of Zoom, Meet or Discord. Green `LIVE` / red `MUTED`.
+
+```yaml
+widget:
+  type: microphone
+  title: "Mic"   # optional: replaces the LIVE/MUTED word, color still tells
+```
+
+Fields:
+
+- `title`
+  - optional label instead of the state word
+- `poll_ms`
+  - optional, default `500`, minimum `200`
+
+### `widget.type: audio_output`
+
+Shows the default output device (a headphones icon for AirPods,
+headphones and headsets, a speaker otherwise) and switches to the next
+device on tap.
+
+```yaml
+widget:
+  type: audio_output
+  devices:            # optional: cycle through these, in this order
+    - "AirPods"
+    - "MacBook Pro Speakers"
+```
+
+Fields:
+
+- `devices`
+  - optional list of partial, case-insensitive device names
+  - without it, tap cycles through all output devices
+  - devices that are not connected are skipped
+- `poll_ms`
+  - optional, default `1000`, minimum `500`
+
+### `widget.type: media`
+
+System media keys, like the keyboard's: they control whatever is
+playing (Music, Spotify, a browser tab, a podcast app).
+
+```yaml
+- at: [1, 0]
+  widget: {type: media, action: previous}
+- at: [1, 1]
+  widget: {type: media, action: play_pause}
+- at: [1, 2]
+  widget: {type: media, action: next}
+```
+
+Fields:
+
+- `action`
+  - required: `play_pause`, `next` or `previous`
+- `title`
+  - optional label under the icon
+
+Media keys need Accessibility access for the app running `ulanzi-deck`
+(the same permission as `type: key` actions); `run` asks for it at
+start-up when the config has a media widget.
 
 ### `widget.type: memory`
 
@@ -727,11 +832,14 @@ Fields:
 
 - `type`
 - `poll_ms`
-  - optional
+  - optional, default `2000`
   - minimum `1000`
 - `apps`
   - optional list of app names
-  - used by the widget's restart behavior
+  - tap quits and reopens them, to free memory
+
+Shows used memory on a ring: green below 70%, amber below 85%, red
+above.
 
 ### `widget.type: spotify_play_pause`
 
@@ -776,14 +884,8 @@ Optional:
 
 ### `widget.type: wide_dashboard`
 
-Double-wide multifunction widget for the physical `3_2` slot.
-
-Modes cycle on tap:
-
-- `clock`
-- `weather`
-- `clock+weather`
-- `spotify`
+Double-wide clock and weather for the physical `3_2` slot. Tap does
+nothing.
 
 Context-sensitive behavior:
 
@@ -805,10 +907,69 @@ Fields:
 - `type`
 - `city`
   - optional weather city name
-  - if omitted, weather modes render a setup placeholder
+  - if omitted, the weather part renders a setup placeholder
 - `poll_ms`
   - optional weather refresh override
   - minimum effective value is `60000`
+
+### `widget.type: weather_day`
+
+The forecast for one day on a regular key: date, high temperature,
+weather icon, humidity and wind.
+Keys for the same city (and a `wide_dashboard` with that city) share one
+request. Data comes from Open-Meteo, no API key needed.
+
+```yaml
+- at: [0, 0]
+  widget: {type: weather_day, city: "Kyiv"}               # today
+- at: [0, 1]
+  widget: {type: weather_day, city: "Kyiv", day_index: 1} # tomorrow
+```
+
+Fields:
+
+- `city`
+  - required
+- `day_index`
+  - optional, `0` (today, default) to `13`
+- `poll_ms`
+  - optional, default `600000`, minimum effective value `60000`
+
+### `widget.type: site`
+
+Visitors on a site right now and its page views over the last 24 hours,
+with the change against a typical day. Tap refreshes at once.
+
+```yaml
+widget:
+  type: site
+  url: "https://example.com"
+  token: "secret"      # optional bearer token
+  title: "example"     # optional, defaults to the site name from url
+```
+
+The widget requests `<url>/api/metrics` and expects:
+
+```json
+{
+  "online": {"visitors": 7, "views": 12},
+  "daily": {"views": 1520, "visitors": 410, "change": 12.5}
+}
+```
+
+`change` is a percentage, or `null` when there is nothing to compare
+with.
+
+Fields:
+
+- `url`
+  - required, `http://` or `https://`
+- `token`
+  - optional, sent as `Authorization: Bearer <token>`
+- `title`
+  - optional
+- `poll_ms`
+  - optional, default `60000`, minimum `30000`
 
 ### `widget.type: freqtrade`
 
@@ -977,6 +1138,11 @@ The loader validates:
 - valid toggle structure
 - valid chain structure
 - known widget types
+- `poll_ms` minimums per widget type
+- `wide_dashboard` only at `at: [2, 3]`
+- `volume.action` and `volume.step`, `media.action`
+- `weather_day` requires `city`; `site` requires an `http(s)` `url`
+- `freqtrade` requires `dsns`
 - `project` widgets require `project_dir`
 - known project widget gesture actions
 

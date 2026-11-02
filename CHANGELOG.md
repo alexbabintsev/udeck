@@ -9,6 +9,17 @@ actual development milestones rather than formal releases.
 
 - Keep updating this section for user-visible changes that have not been
   grouped into a tagged release yet.
+- New widgets: `volume` (mute or up/down with hold-to-repeat; handles
+  devices without a mute switch or with fixed volume), `microphone`
+  (system-wide input mute), `audio_output` (switch the default output
+  device) and `media` (system play/pause, next, previous keys).
+- General-purpose widgets share one look: level ring or large icon with
+  an upper-case label, with the same state colors. The `memory` widget
+  moved to it.
+- Lucide icons with rounded rectangles (349 of them: the mic, batteries,
+  panels, ...) are drawn with round corners again instead of square ones.
+- `docs/config.md` covers `weather_day` and `site` and no longer lists
+  the removed dashboard modes.
 - `run` without `--config` now reads
   `$XDG_CONFIG_HOME/ulanzi-deck/config.yaml` (default
   `~/.config/ulanzi-deck/config.yaml`) instead of the tracked demo

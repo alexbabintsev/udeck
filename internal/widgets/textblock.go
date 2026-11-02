@@ -202,6 +202,19 @@ func drawIcon(
 	blockW, blockH int,
 	clr color.Color,
 ) {
+	drawIconStroke(img, id, anchorX, anchorY, blockW, blockH, clr, 0)
+}
+
+// drawIconStroke is drawIcon with the line weight of an icon strokeOf
+// pixels in size (0: the icon's own size).
+func drawIconStroke(
+	img *image.RGBA,
+	id string,
+	anchorX, anchorY TextAnchor,
+	blockW, blockH int,
+	clr color.Color,
+	strokeOf int,
+) {
 	bounds := img.Bounds()
 	bx := resolveAnchorX(anchorX, blockW, bounds.Dx())
 	by := resolveAnchorY(anchorY, blockH, bounds.Dy())
@@ -213,7 +226,7 @@ func drawIcon(
 	x := bx + (blockW-side)/2
 	y := by + (blockH-side)/2
 	rect := image.Rect(x, y, x+side, y+side)
-	_ = icons.DrawPackIcon(img, id, rect, clr)
+	_ = icons.DrawPackIconStroke(img, id, rect, clr, strokeOf)
 }
 
 // drawWeatherIconAt draws the weather icon for a WMO code using drawIcon.

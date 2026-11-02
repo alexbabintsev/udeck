@@ -69,6 +69,12 @@ func TestValidateRejects(t *testing.T) {
 		"project no gesture": {btnYAML("widget: {type: project, project_dir: /p, on: {}}"), "has no gestures"},
 		"project bad double": {btnYAML("widget: {type: project, project_dir: /p, on: {double_tap: jump}}"), "unknown"},
 		"project bad repeat": {btnYAML("widget: {type: project, project_dir: /p, on: {repeat: jump}}"), "unknown"},
+		"volume action":      {btnYAML("widget: {type: volume, action: louder}"), "action \"louder\" unknown"},
+		"volume step":        {btnYAML("widget: {type: volume, action: up, step: 60}"), "step must be"},
+		"volume poll":        {btnYAML("widget: {type: volume, poll_ms: 50}"), "poll_ms too small"},
+		"media no action":    {btnYAML("widget: {type: media}"), "action is empty"},
+		"media bad action":   {btnYAML("widget: {type: media, action: stop}"), "action \"stop\" unknown"},
+		"mic poll":           {btnYAML("widget: {type: microphone, poll_ms: 10}"), "poll_ms too small"},
 		"toggle icon color":  {btnYAML("on: {tap: {toggle: [{icon_color: xyz, action: {type: shell, cmd: a}}, {action: {type: shell, cmd: b}}]}}"), "icon_color"},
 	}
 	for name, tc := range cases {
@@ -161,5 +167,35 @@ func TestUsesKeyActionsAcrossNesting(t *testing.T) {
 	}
 	if (&GestureBinding{}).Action() != nil {
 		t.Fatal("empty binding has no action")
+	}
+}
+
+func TestLoadAcceptsAudioAndMediaWidgets(t *testing.T) {
+	cfg, err := loadYAML(t, `
+buttons:
+  - at: [0, 0]
+    widget: {type: volume}
+  - at: [0, 1]
+    widget: {type: volume, action: down, step: 10, poll_ms: 200}
+  - at: [0, 2]
+    widget: {type: microphone, title: Zoom}
+  - at: [1, 0]
+    widget: {type: audio_output, devices: [airpods, smsl]}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Buttons[1].Widget.Step != 10 || cfg.Buttons[3].Widget.Devices[1] != "smsl" {
+		t.Fatalf("fields not parsed: %+v", cfg.Buttons)
+	}
+	if cfg.UsesKeyActions() {
+		t.Fatal("audio widgets need no Accessibility access")
+	}
+	cfg, err = loadYAML(t, "buttons:\n  - at: [0, 0]\n    folder:\n      buttons:\n        - at: [0, 0]\n          widget: {type: media, action: play_pause}\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.UsesKeyActions() {
+		t.Fatal("media keys need Accessibility access")
 	}
 }

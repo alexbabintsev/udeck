@@ -118,6 +118,14 @@ type Widget struct {
 	On           *WidgetOn     `yaml:"on,omitempty"`
 	HoldMS       int           `yaml:"hold_ms,omitempty"`
 	DayIndex     int           `yaml:"day_index,omitempty"`
+	// Action is what a press does: volume (mute|up|down) and media
+	// (play_pause|next|previous).
+	Action string `yaml:"action,omitempty"`
+	// Step is the volume change per press in percent (volume up/down).
+	Step int `yaml:"step,omitempty"`
+	// Devices are the output devices audio_output cycles through, by
+	// (partial, case-insensitive) name; empty means all of them.
+	Devices []string `yaml:"devices,omitempty"`
 }
 
 type WidgetScripts struct {
@@ -209,7 +217,8 @@ func (c *Config) IconPaths() []string {
 }
 
 // UsesKeyActions reports whether any button in the config tree triggers a
-// `type: key` action, directly, through a toggle step, or through a chain.
+// `type: key` action, directly, through a toggle step, or through a chain,
+// or is a media widget: all of them need Accessibility access.
 func (c *Config) UsesKeyActions() bool {
 	return pagesUseKeyActions(c.PagesOrDefault())
 }
@@ -443,6 +452,10 @@ var widgetMinPollMS = map[string]int{
 	"site":               30000,
 	"weather_day":        1000,
 	"project":            1000,
+	"volume":             200,
+	"microphone":         200,
+	"audio_output":       500,
+	"media":              1000,
 }
 
 func validateWidget(w *Widget, at [2]int, path string) error {
@@ -451,7 +464,7 @@ func validateWidget(w *Widget, at [2]int, path string) error {
 	}
 	minPoll, known := widgetMinPollMS[w.Type]
 	if !known {
-		return fmt.Errorf("%s.type %q unknown (memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|freqtrade|project|weather_day|site)", path, w.Type)
+		return fmt.Errorf("%s.type %q unknown (volume|microphone|audio_output|media|memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|weather_day|freqtrade|site|project)", path, w.Type)
 	}
 	switch w.Type {
 	case "wide_dashboard":
@@ -475,6 +488,23 @@ func validateWidget(w *Widget, at [2]int, path string) error {
 		}
 		if w.DayIndex < 0 || w.DayIndex > 13 {
 			return fmt.Errorf("%s.day_index must be 0-13, got %d", path, w.DayIndex)
+		}
+	case "volume":
+		switch w.Action {
+		case "", "mute", "up", "down":
+		default:
+			return fmt.Errorf("%s.action %q unknown (mute|up|down)", path, w.Action)
+		}
+		if w.Step < 0 || w.Step > 50 {
+			return fmt.Errorf("%s.step must be 1-50, got %d", path, w.Step)
+		}
+	case "media":
+		switch w.Action {
+		case "play_pause", "next", "previous":
+		case "":
+			return fmt.Errorf("%s.action is empty (play_pause|next|previous)", path)
+		default:
+			return fmt.Errorf("%s.action %q unknown (play_pause|next|previous)", path, w.Action)
 		}
 	case "project":
 		if strings.TrimSpace(w.ProjectDir) == "" {
@@ -520,6 +550,11 @@ func buttonsUseKeyActions(buttons []Button) bool {
 	for i := range buttons {
 		btn := buttons[i]
 		if handlersUseKeyActions(btn.On) {
+			return true
+		}
+		// Media keys are posted like key presses and need the same
+		// Accessibility permission.
+		if btn.Widget != nil && btn.Widget.Type == "media" {
 			return true
 		}
 		if btn.Folder != nil && buttonsUseKeyActions(btn.Folder.Buttons) {

@@ -6,7 +6,6 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"math"
 	"os/exec"
 	"strings"
 	"sync"
@@ -19,7 +18,6 @@ import (
 	"golang.org/x/image/math/fixed"
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
 )
 
 const (
@@ -126,16 +124,13 @@ func (w *MemoryWidget) renderImage() *image.RGBA {
 	busy := w.busy
 	w.mu.RUnlock()
 
-	img := image.NewRGBA(image.Rect(0, 0, memoryWidgetW, memoryWidgetH))
-	draw.Draw(img, img.Bounds(), image.Black, image.Point{}, draw.Src)
-
+	img := newCard()
 	col := memoryColor(percent)
-	drawMemoryRing(img, percent, col)
 	if busy {
-		_ = icons.DrawPackIcon(img, "lucide/refresh-cw", image.Rect(58, 58, 138, 138), col)
-	} else {
-		drawDashboardCenteredText(img, fmt.Sprintf("%d", percent), image.Rect(28, 48, memoryWidgetW-28, 146), col, 60)
+		drawGaugeCard(img, clampPercent(percent)/100, col, "", nil, "lucide/refresh-cw", col)
+		return img
 	}
+	drawGaugeCard(img, clampPercent(percent)/100, col, fmt.Sprintf("%d", percent), styleText, "lucide/memory-stick", styleDim)
 	return img
 }
 
@@ -149,11 +144,11 @@ func pollDuration(ms int) time.Duration {
 func memoryColor(percent int) color.RGBA {
 	switch {
 	case percent >= 85:
-		return color.RGBA{0xd7, 0x32, 0x32, 0xff}
+		return styleAlert
 	case percent >= 70:
-		return color.RGBA{0xe0, 0xa0, 0x20, 0xff}
+		return styleWarn
 	default:
-		return color.RGBA{0x0e, 0xab, 0x2d, 0xff}
+		return styleLive
 	}
 }
 
@@ -162,41 +157,6 @@ func drawCenteredFace(img *image.RGBA, text string, centerX, baselineY int, clr 
 	width := d.MeasureString(text).Round()
 	d.Dot = fixed.P(centerX-width/2, baselineY)
 	d.DrawString(text)
-}
-
-func drawMemoryRing(img *image.RGBA, percent int, clr color.Color) {
-	const (
-		cx       = memoryWidgetW / 2
-		cy       = memoryWidgetH / 2
-		outerR   = 65.0
-		innerR   = 55.0
-		trackDeg = 360.0
-	)
-
-	track := color.RGBA{0x1f, 0x1f, 0x1f, 0xff}
-	fillDeg := trackDeg * clampPercent(percent) / 100.0
-
-	for y := 0; y < memoryWidgetH; y++ {
-		dy := float64(y-cy) + 0.5
-		for x := 0; x < memoryWidgetW; x++ {
-			dx := float64(x-cx) + 0.5
-			dist := math.Hypot(dx, dy)
-			if dist < innerR || dist > outerR {
-				continue
-			}
-
-			ang := math.Atan2(dy, dx)*180/math.Pi + 90
-			if ang < 0 {
-				ang += 360
-			}
-
-			if ang <= fillDeg {
-				img.Set(x, y, clr)
-			} else {
-				img.Set(x, y, track)
-			}
-		}
-	}
 }
 
 func clampPercent(percent int) float64 {

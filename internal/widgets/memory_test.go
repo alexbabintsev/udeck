@@ -80,12 +80,12 @@ func TestMemoryWidgetRendersRingAndDigits(t *testing.T) {
 	if bg := rgbaAt(img, 8, 8); bg.R > 4 || bg.G > 4 || bg.B > 4 {
 		t.Fatalf("expected black background, got %#v", bg)
 	}
-	// Ring spans radii 55..65 around the center; sample its top.
-	if ring := rgbaAt(img, memoryWidgetW/2, memoryWidgetH/2-60); ring.R < 100 || ring.G < 100 {
+	// The ring spans radii styleRingInner..styleRingOuter; sample its top.
+	if ring := rgbaAt(img, memoryWidgetW/2, memoryWidgetH/2-66); ring.R < 100 || ring.G < 100 {
 		t.Fatalf("expected colored ring pixel, got %#v", ring)
 	}
 	if !anyPixel(img, image.Rect(56, 68, 140, 128), func(c color.RGBA) bool { return c.R > 100 || c.G > 100 }) {
-		t.Fatal("expected colored center digits")
+		t.Fatal("expected center digits")
 	}
 	if changed, _ := w.render(); changed {
 		t.Fatal("identical render must not report a change")

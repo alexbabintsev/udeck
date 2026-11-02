@@ -58,15 +58,15 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
   - `page_next`
   - `page_prev`
   - `close_all_projects`
-- Widgets:
-  - `memory`
-  - `freqtrade`
-  - `spotify_play_pause`
-  - `spotify_next`
-  - `spotify_artwork`
-  - `wide_dashboard`
-  - `weather_day`
-  - `project`
+- Widgets, each independent and in one shared style:
+  - `volume`: level ring; mute, or volume up/down with hold-to-repeat
+  - `microphone`: system-wide mic mute with a live/muted indicator
+  - `audio_output`: current output device; tap switches to the next one
+  - `media`: play/pause, next, previous for whatever app is playing
+  - `memory`: used memory ring
+  - `weather_day`, `wide_dashboard`: forecast and clock (Open-Meteo)
+  - `spotify_play_pause`, `spotify_next`, `spotify_artwork`
+  - `freqtrade`, `site`, `project`
 - Config hot reload while `run` is active
 - Runtime keepalive to keep the deck out of screensaver
 - Auto-recovery on common HID read/write/open failures
@@ -143,7 +143,7 @@ The demo config includes:
 - `memory` widget
 - `spotify_*` widgets
 - `wide_dashboard` widget for the double-wide `3_2` slot
-- `weather_day` widget for the double-wide `3_2` slot
+- `weather_day` widgets
 - `project` widget with demo `start/stop/focus` scripts
 - Lucide icon-pack examples via `icon: lucide/...`
 - gesture test buttons
@@ -181,6 +181,16 @@ Current config surface:
     - `folder.buttons`: nested page; runtime injects a `Back` button
       - if the current page has `widget.type: wide_dashboard` at `at: [2, 3]`, that wide widget becomes the folder `Back` button automatically
     - `widget`
+      - `type: volume`
+        - `action`: `mute` (default) | `up` | `down`
+        - `step`: percent per press for `up`/`down`, default `5`
+      - `type: microphone`
+        - `title`: optional label instead of `LIVE`/`MUTED`
+      - `type: audio_output`
+        - `devices`: optional partial device names to cycle through
+      - `type: media`
+        - `action`: `play_pause` | `next` | `previous` (needs
+          Accessibility access, like `type: key`)
       - `type: memory`
         - `apps`: optional app list restarted on press
         - `poll_ms`: optional polling override
@@ -201,6 +211,12 @@ Current config surface:
         - inside folders it turns into the folder `Back` button
         - on top-level pages `2+` it shows the page number in the corner
         - clock mode refreshes on minute changes instead of every second
+      - `type: weather_day`
+        - `city`: required
+        - `day_index`: `0` (today) to `13`
+      - `type: site`
+        - `url`: site serving `/api/metrics`; `token`: optional bearer token
+        - `title`: optional, defaults to the site name
       - `type: project`
         - `project_dir`: project root; relative paths are resolved relative
           to the config file

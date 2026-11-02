@@ -14,6 +14,7 @@ import (
 
 	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
 	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
+	"github.com/alexbabintsev/ulanzi-deck-go/internal/macos"
 )
 
 func stubSpotifyFactory(t *testing.T) {
@@ -33,6 +34,8 @@ func TestManagerGestureOptionsPerWidgetType(t *testing.T) {
 		btn("p-custom", "project", &config.WidgetOn{Tap: "start", Repeat: "focus"}),
 		btn("spp", "spotify_play_pause", nil),
 		btn("mem", "memory", nil),
+		{RuntimeID: "vol-up", Widget: &config.Widget{Type: "volume", Action: "up"}},
+		btn("mic", "microphone", nil),
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -51,6 +54,12 @@ func TestManagerGestureOptionsPerWidgetType(t *testing.T) {
 	}
 	if o, ok := m.gestureOptions("mem"); !ok || !o.HasTap || o.HasHold {
 		t.Fatalf("memory options %+v", o)
+	}
+	if o, _ := m.gestureOptions("vol-up"); !o.HasRepeat || o.RepeatEvery != volumeRepeatEvery {
+		t.Fatalf("volume up options %+v", o)
+	}
+	if o, ok := m.gestureOptions("mic"); !ok || !o.HasTap || o.HasHold {
+		t.Fatalf("microphone options %+v", o)
 	}
 	if _, ok := m.gestureOptions("missing"); ok {
 		t.Fatal("unknown id must have no options")
@@ -165,6 +174,10 @@ func TestManagerCreatesEveryWidgetType(t *testing.T) {
 	oldHas := projectHasSession
 	projectHasSession = func(string) (bool, error) { return false, nil }
 	defer func() { projectHasSession = oldHas }()
+	audio := newFakeAudio()
+	audio.set(macos.Output, macos.AudioState{Device: "Speakers", Volume: 0.5}, nil)
+	useFakeAudio(t, audio)
+	useFakeMedia(t, true, nil)
 
 	buttons := []config.Button{
 		{RuntimeID: "a", Widget: &config.Widget{Type: "spotify_play_pause"}},
@@ -174,6 +187,11 @@ func TestManagerCreatesEveryWidgetType(t *testing.T) {
 		{RuntimeID: "e", Widget: &config.Widget{Type: "weather_day", City: uniqueCity(t)}},
 		{RuntimeID: "f", Widget: &config.Widget{Type: "site", URL: "http://127.0.0.1:1"}},
 		{RuntimeID: "h", Widget: &config.Widget{Type: "project", ProjectDir: dir}},
+		{RuntimeID: "i", Widget: &config.Widget{Type: "volume"}},
+		{RuntimeID: "j", Widget: &config.Widget{Type: "microphone"}},
+		{RuntimeID: "k", Widget: &config.Widget{Type: "audio_output"}},
+		{RuntimeID: "l", Widget: &config.Widget{Type: "media", Action: "next"}},
+		{RuntimeID: "n", Widget: &config.Widget{Type: "memory"}},
 	}
 	m, err := NewManager(&config.Config{Buttons: buttons})
 	if err != nil {
