@@ -464,8 +464,10 @@ Each gesture can define one direct action:
 - `shell`
 - `key`
 - `http`
+- `window`
 - `page_next`
 - `page_prev`
+- `close_all_projects`
 
 ### `type: shell`
 
@@ -537,6 +539,41 @@ Notes:
 - For Hammerspoon on macOS, `type: shell` with the bundled `hs` CLI is
   usually more reliable than keeping a custom `hs.httpserver` running.
 
+### `type: window`
+
+Moves and resizes the focused window of the frontmost app, natively
+through the macOS Accessibility API (no Hammerspoon or Rectangle
+needed). Pressing a deck key does not take the focus, so the window you
+were working in is the one that moves.
+
+```yaml
+tap:
+  type: window
+  to: left_half
+```
+
+Values of `to`:
+
+- halves: `left_half`, `right_half`, `top_half`, `bottom_half`
+- quarters: `top_left`, `top_right`, `bottom_left`, `bottom_right`
+- thirds: `left_third`, `center_third`, `right_third`,
+  `left_two_thirds`, `right_two_thirds`
+- `maximize`: fill the screen without entering full-screen mode
+- `center`: keep the size, center on the screen
+- `next_display`, `previous_display`: move to the next display (left to
+  right), keeping the window's relative place and size
+- `restore`: undo the last window action on that app's window, unless
+  the window has been moved by hand since
+
+Layouts use the area of the display the window is on, without the menu
+bar and the Dock. Notes:
+
+- needs Accessibility access, like `type: key`; `run` asks for it at
+  start-up when the config has window actions
+- windows in native full-screen mode do not move
+- apps that size in steps (terminals) may stop a few pixels short
+- macOS has no public API to move windows between Spaces
+
 ### Hammerspoon via `hs.ipc`
 
 Recommended pattern for Hammerspoon integration on macOS:
@@ -544,7 +581,7 @@ Recommended pattern for Hammerspoon integration on macOS:
 ```yaml
 tap:
   type: shell
-  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.windowLeftHalf()"'
+  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.rotateDisplay()"'
 ```
 
 Expected Hammerspoon setup:
@@ -1227,6 +1264,7 @@ The loader validates:
 - reserved `Back` slot in folders
 - gesture timing minimums
 - known action types
+- `window` actions have a known `to`
 - valid toggle structure
 - valid chain structure
 - known widget types

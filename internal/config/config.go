@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -207,6 +208,7 @@ type GestureBinding struct {
 	Cmd    string       `yaml:"cmd,omitempty"`
 	Key    string       `yaml:"key,omitempty"`
 	URL    string       `yaml:"url,omitempty"`
+	To     string       `yaml:"to,omitempty"`
 	Toggle []ToggleStep `yaml:"toggle,omitempty"`
 	Chain  []ChainStep  `yaml:"chain,omitempty"`
 }
@@ -224,8 +226,8 @@ func (b Button) HIDIndex() int {
 
 // Action is the handler fired when a gesture resolves.
 type Action struct {
-	// Type is "shell", "key", "http", "page_next", "page_prev", or
-	// "close_all_projects".
+	// Type is "shell", "key", "http", "window", "page_next", "page_prev",
+	// or "close_all_projects".
 	Type string `yaml:"type"`
 
 	// Cmd is the shell command run for type=shell.
@@ -237,6 +239,17 @@ type Action struct {
 
 	// URL is the endpoint called for type=http.
 	URL string `yaml:"url,omitempty"`
+
+	// To is where type=window puts the focused window (WindowPositions).
+	To string `yaml:"to,omitempty"`
+}
+
+// WindowPositions are the values of `to` for type=window.
+var WindowPositions = []string{
+	"left_half", "right_half", "top_half", "bottom_half",
+	"top_left", "top_right", "bottom_left", "bottom_right",
+	"left_third", "center_third", "right_third", "left_two_thirds", "right_two_thirds",
+	"maximize", "center", "next_display", "previous_display", "restore",
 }
 
 func (g *GestureBinding) Action() *Action {
@@ -248,6 +261,7 @@ func (g *GestureBinding) Action() *Action {
 		Cmd:  g.Cmd,
 		Key:  g.Key,
 		URL:  g.URL,
+		To:   g.To,
 	}
 }
 
@@ -664,20 +678,26 @@ func handlersUseKeyActions(h *Handlers) bool {
 		gestureUsesKeyAction(h.Repeat)
 }
 
+// gestureUsesKeyAction reports actions that need Accessibility access:
+// key presses and window moves.
 func gestureUsesKeyAction(g *GestureBinding) bool {
 	if g == nil {
 		return false
 	}
-	if strings.EqualFold(strings.TrimSpace(g.Type), "key") {
+	needsAX := func(typ string) bool {
+		typ = strings.ToLower(strings.TrimSpace(typ))
+		return typ == "key" || typ == "window"
+	}
+	if needsAX(g.Type) {
 		return true
 	}
 	for i := range g.Toggle {
-		if strings.EqualFold(strings.TrimSpace(g.Toggle[i].Action.Type), "key") {
+		if needsAX(g.Toggle[i].Action.Type) {
 			return true
 		}
 	}
 	for i := range g.Chain {
-		if g.Chain[i].Action != nil && strings.EqualFold(strings.TrimSpace(g.Chain[i].Action.Type), "key") {
+		if g.Chain[i].Action != nil && needsAX(g.Chain[i].Action.Type) {
 			return true
 		}
 	}
@@ -698,9 +718,13 @@ func validateAction(a *Action, path string) error {
 		if a.URL == "" {
 			return fmt.Errorf("%s.url is empty", path)
 		}
+	case "window":
+		if !slices.Contains(WindowPositions, a.To) {
+			return fmt.Errorf("%s.to %q unknown (%s)", path, a.To, strings.Join(WindowPositions, "|"))
+		}
 	case "page_next", "page_prev", "close_all_projects":
 	default:
-		return fmt.Errorf("%s.type %q unknown (shell|key|http|page_next|page_prev|close_all_projects)", path, a.Type)
+		return fmt.Errorf("%s.type %q unknown (shell|key|http|window|page_next|page_prev|close_all_projects)", path, a.Type)
 	}
 	return nil
 }
@@ -709,7 +733,7 @@ func validateGestureBinding(g *GestureBinding, path string) (bool, error) {
 	if g == nil {
 		return false, nil
 	}
-	hasDirect := strings.TrimSpace(g.Type) != "" || strings.TrimSpace(g.Cmd) != "" || strings.TrimSpace(g.Key) != "" || strings.TrimSpace(g.URL) != ""
+	hasDirect := strings.TrimSpace(g.Type) != "" || strings.TrimSpace(g.Cmd) != "" || strings.TrimSpace(g.Key) != "" || strings.TrimSpace(g.URL) != "" || strings.TrimSpace(g.To) != ""
 	if len(g.Toggle) > 0 {
 		if hasDirect || len(g.Chain) > 0 {
 			return false, fmt.Errorf("%s cannot combine direct action fields, toggle, and chain", path)

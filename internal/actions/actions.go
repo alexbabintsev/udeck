@@ -27,6 +27,8 @@ func Run(a *config.Action) error {
 		return sendKey(a.Key)
 	case "http":
 		return runHTTP(a.URL)
+	case "window":
+		return moveWindow(a.To)
 	default:
 		return fmt.Errorf("unknown action type %q", a.Type)
 	}

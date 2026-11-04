@@ -55,6 +55,8 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
   - `shell`
   - `key`
   - `http`
+  - `window`: halves, quarters, thirds, maximize, center, next display,
+    restore, natively via Accessibility
   - `page_next`
   - `page_prev`
   - `close_all_projects`

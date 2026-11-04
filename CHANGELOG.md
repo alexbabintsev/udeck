@@ -18,6 +18,9 @@ actual development milestones rather than formal releases.
 - New `timer`, `stopwatch` and `pomodoro` widgets: tap to start/pause,
   hold to reset; timers and pomodoro phases ring with a system sound,
   even when their page is hidden.
+- New `type: window` action: halves, quarters, thirds, maximize,
+  center, next/previous display and restore for the focused window,
+  natively through the Accessibility API instead of Hammerspoon.
 - New system monitor widgets: `cpu`, `disk` (free space), `network`
   (download/upload rate) and `battery`, next to `memory`.
 - General-purpose widgets share one look: level ring or large icon with

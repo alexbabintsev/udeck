@@ -83,6 +83,8 @@ func TestValidateRejects(t *testing.T) {
 		"pomodoro rounds":    {btnYAML("widget: {type: pomodoro, rounds: 13}"), "rounds must be"},
 		"cpu poll":           {btnYAML("widget: {type: cpu, poll_ms: 100}"), "poll_ms too small"},
 		"disk poll":          {btnYAML("widget: {type: disk, poll_ms: 1000}"), "poll_ms too small"},
+		"window no to":       {btnYAML("on: {tap: {type: window}}"), ".to \"\" unknown"},
+		"window bad to":      {btnYAML("on: {tap: {type: window, to: diagonal}}"), "to \"diagonal\" unknown"},
 		"toggle icon color":  {btnYAML("on: {tap: {toggle: [{icon_color: xyz, action: {type: shell, cmd: a}}, {action: {type: shell, cmd: b}}]}}"), "icon_color"},
 	}
 	for name, tc := range cases {
@@ -219,5 +221,21 @@ buttons:
 	}
 	if !cfg.UsesKeyActions() {
 		t.Fatal("media keys need Accessibility access")
+	}
+}
+
+func TestLoadWindowActions(t *testing.T) {
+	cfg, err := loadYAML(t, btnYAML("on: {tap: {type: window, to: left_half}, hold: {type: window, to: restore}}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := cfg.Buttons[0].On.Tap.Action(); a == nil || a.Type != "window" || a.To != "left_half" {
+		t.Fatalf("action %+v", a)
+	}
+	if !cfg.UsesKeyActions() {
+		t.Fatal("window actions need Accessibility access")
+	}
+	if _, err := loadYAML(t, btnYAML("on: {tap: {chain: [{action: {type: window, to: maximize}}, {delay_ms: 50}, {action: {type: window, to: next_display}}]}}")); err != nil {
+		t.Fatal(err)
 	}
 }
