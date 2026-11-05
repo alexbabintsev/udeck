@@ -425,6 +425,10 @@ func (d *Device) Info(timeout time.Duration) (string, error) {
 	return "", errors.New("no device info received within timeout")
 }
 
+// shouldRetryOpen reports whether an open failure is worth repeating.
+// 0xE00002E2 (kIOReturnNotPermitted) is transient here: macOS returns it
+// for several seconds after the previous owner of the device exits and
+// after a system wake.
 func shouldRetryOpen(err error) bool {
 	if err == nil {
 		return false
@@ -435,7 +439,8 @@ func shouldRetryOpen(err error) bool {
 		strings.Contains(msg, "busy") ||
 		strings.Contains(msg, "no hid devices") ||
 		strings.Contains(msg, "not found") ||
-		strings.Contains(msg, "0xe00002c1")
+		strings.Contains(msg, "0xe00002c1") ||
+		strings.Contains(msg, "0xe00002e2")
 }
 
 func isNotFoundErr(err error) bool {

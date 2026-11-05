@@ -11,6 +11,8 @@ actual development milestones rather than formal releases.
   grouped into a tagged release yet.
 - The `project` widget's fallback focus now attaches tmux in a new
   Ghostty tab, as it already did for iTerm and Terminal.
+- Opening the deck now waits out the temporary "not permitted" error
+  macOS returns right after a restart or wake, instead of exiting.
 - New widgets: `volume` (mute or up/down with hold-to-repeat; handles
   devices without a mute switch or with fixed volume), `microphone`
   (system-wide input mute), `audio_output` (switch the default output

@@ -25,6 +25,12 @@ func TestShouldRetryOpenNoDevices(t *testing.T) {
 	}
 }
 
+func TestShouldRetryOpenNotPermitted(t *testing.T) {
+	if !shouldRetryOpen(errors.New("hid_open_path: failed to open IOHIDDevice from mach entry: (0xE00002E2) (iokit/common) not permitted")) {
+		t.Fatal("expected kIOReturnNotPermitted to be retried")
+	}
+}
+
 func TestShouldRetryOpenOtherErrors(t *testing.T) {
 	if shouldRetryOpen(errors.New("permission denied")) {
 		t.Fatal("did not expect permission denied to be retried")
