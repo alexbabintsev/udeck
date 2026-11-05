@@ -9,6 +9,9 @@ actual development milestones rather than formal releases.
 
 - Keep updating this section for user-visible changes that have not been
   grouped into a tagged release yet.
+
+## 0.2.0 - 2026-11-05
+
 - The `freqtrade`, `site` and `project` widgets and the
   `close_all_projects` action left the default build and the Homebrew
   package; `go build -tags personal` still includes them.
