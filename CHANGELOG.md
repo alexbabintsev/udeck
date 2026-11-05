@@ -22,6 +22,9 @@ actual development milestones rather than formal releases.
 - New `timer`, `stopwatch` and `pomodoro` widgets: tap to start/pause,
   hold to reset; timers and pomodoro phases ring with a system sound,
   even when their page is hidden.
+- New `ticker` widget: price, percent change and a day chart for
+  stocks, indices, currencies and coins from Yahoo or Binance, without
+  an API key.
 - New `type: window` action: halves, quarters, thirds, maximize,
   center, next/previous display and restore for the focused window,
   natively through the Accessibility API instead of Hammerspoon.

@@ -744,6 +744,7 @@ Supported widget types:
 - general purpose: `clock`, `timer`, `stopwatch`, `pomodoro`, `volume`,
   `microphone`, `audio_output`, `media`, `weather_day`, `wide_dashboard`
 - system monitor: `cpu`, `memory`, `disk`, `network`, `battery`
+- markets: `ticker`
 - Spotify: `spotify_play_pause`, `spotify_next`, `spotify_artwork`
 - specialised: `freqtrade`, `site`, `project`
 
@@ -845,6 +846,41 @@ deck only when the picture changes. Tap does nothing.
 - `battery`: charge on a ring; amber from 20%, red from 10% (not while
   plugged in); a bolt while charging, a plug when held on power. Shows
   NO BATTERY on desktop Macs. Default `poll_ms` `30000`, minimum `5000`.
+
+### `widget.type: ticker`
+
+The price of a stock, index, currency pair or coin: the symbol, the
+price, the change in percent (green up, red down) and a chart with a
+dotted line at the level the change is measured from. No API key is
+needed. Tap fetches the price right away.
+
+```yaml
+- at: [0, 0]
+  widget: {type: ticker, symbol: AAPL}
+- at: [0, 1]
+  widget: {type: ticker, symbol: "^GSPC", title: "S&P 500"}
+- at: [0, 2]
+  widget: {type: ticker, symbol: "EURUSD=X", title: "EUR/USD"}
+- at: [0, 3]
+  widget: {type: ticker, symbol: BTCUSDT, source: binance, title: BTC}
+```
+
+- `symbol` is required, spelled the way the source spells it.
+- `source` is `yahoo` (default) or `binance`.
+  - `yahoo`: stocks (`AAPL`), indices (`^GSPC`), currencies (`EURUSD=X`)
+    and coins (`BTC-USD`). The change is from the previous close and
+    the chart is the current or last trading day. Outside market hours
+    the key shows the last close. This is Yahoo's unofficial chart
+    endpoint: it has no guarantees and may change or rate-limit.
+  - `binance`: spot pairs (`BTCUSDT`). The change and the chart cover
+    the last 24 hours.
+- `title` replaces the symbol on the key.
+- Default `poll_ms` `60000`, minimum `15000`. Polling stops while the
+  page is hidden.
+
+When an update fails, the key keeps the last price and turns grey, and
+it recovers by itself. "no data" under the symbol means no price has
+arrived, usually a misspelled symbol.
 
 ### `widget.type: volume`
 

@@ -149,6 +149,11 @@ type Widget struct {
 	// Interface lists the network interface name prefixes to count,
 	// comma-separated ("en0", "en,bridge"); default en (Wi-Fi, Ethernet).
 	Interface string `yaml:"interface,omitempty"`
+	// Symbol is what a ticker follows, as its source spells it: AAPL,
+	// ^GSPC, EURUSD=X, BTC-USD (yahoo) or BTCUSDT (binance).
+	Symbol string `yaml:"symbol,omitempty"`
+	// Source is where a ticker gets prices: yahoo (default) or binance.
+	Source string `yaml:"source,omitempty"`
 }
 
 // TimerDuration parses a timer or pomodoro duration field; empty means
@@ -527,6 +532,7 @@ var widgetMinPollMS = map[string]int{
 	"network":            500,
 	"disk":               5000,
 	"battery":            5000,
+	"ticker":             15000,
 }
 
 func validateWidget(w *Widget, at [2]int, path string) error {
@@ -535,7 +541,7 @@ func validateWidget(w *Widget, at [2]int, path string) error {
 	}
 	minPoll, known := widgetMinPollMS[w.Type]
 	if !known {
-		return fmt.Errorf("%s.type %q unknown (clock|timer|stopwatch|pomodoro|cpu|disk|network|battery|volume|microphone|audio_output|media|memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|weather_day|freqtrade|site|project)", path, w.Type)
+		return fmt.Errorf("%s.type %q unknown (clock|timer|stopwatch|pomodoro|cpu|disk|network|battery|ticker|volume|microphone|audio_output|media|memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|weather_day|freqtrade|site|project)", path, w.Type)
 	}
 	switch w.Type {
 	case "wide_dashboard":
@@ -590,6 +596,15 @@ func validateWidget(w *Widget, at [2]int, path string) error {
 		}
 		if !validSoundName(w.Sound) {
 			return fmt.Errorf("%s.sound %q must be a system sound name such as Glass, or none", path, w.Sound)
+		}
+	case "ticker":
+		if strings.TrimSpace(w.Symbol) == "" {
+			return fmt.Errorf("%s.symbol is empty", path)
+		}
+		switch strings.TrimSpace(w.Source) {
+		case "", "yahoo", "binance":
+		default:
+			return fmt.Errorf("%s.source %q unknown (yahoo|binance)", path, w.Source)
 		}
 	case "media":
 		switch w.Action {

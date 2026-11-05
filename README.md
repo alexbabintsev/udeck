@@ -69,6 +69,8 @@ go build -o ulanzi-deck ./cmd/ulanzi-deck
   - `audio_output`: current output device; tap switches to the next one
   - `media`: play/pause, next, previous for whatever app is playing
   - `cpu`, `memory`, `disk`, `network`, `battery`: system monitor
+  - `ticker`: price, change and day chart of a stock, index, currency
+    or coin (Yahoo, Binance; no API key)
   - `weather_day`, `wide_dashboard`: forecast and clock (Open-Meteo)
   - `spotify_play_pause`, `spotify_next`, `spotify_artwork`
   - `freqtrade`, `site`, `project`
@@ -205,6 +207,9 @@ Current config surface:
       - `type: cpu` | `disk` | `network` | `battery`
         - `path` (disk): volume to show, default `/`
         - `interface` (network): interface name prefixes, default `en`
+      - `type: ticker`
+        - `symbol`: what to follow, e.g. `AAPL`, `^GSPC`, `BTCUSDT`
+        - `source`: `yahoo` (default) or `binance`
       - `type: memory`
         - `apps`: optional app list restarted on press
         - `poll_ms`: optional polling override
