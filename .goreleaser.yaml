@@ -48,6 +48,7 @@ archives:
       - CHANGELOG.md
       - LICENSE
       - docs/config.md
+      - examples/*.yaml
       - examples/**/*
 
 checksum:

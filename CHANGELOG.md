@@ -10,6 +10,11 @@ actual development milestones rather than formal releases.
 - Keep updating this section for user-visible changes that have not been
   grouped into a tagged release yet.
 
+## 0.1.2 - 2026-11-05
+
+- The Homebrew package now includes the demo profile,
+  `examples/test-config.yaml`.
+
 ## 0.1.1 - 2026-11-05
 
 - `brew services start udeck` runs the daemon at every login and
