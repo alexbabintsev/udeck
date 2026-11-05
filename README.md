@@ -1,16 +1,26 @@
-# udeck
+[![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/banner2-direct.svg)](https://vshymanskyy.github.io/StandWithUkraine/)
+[![Made in Ukraine](https://img.shields.io/badge/made_in-Ukraine-ffd700.svg?labelColor=0057b7)](https://stand-with-ukraine.pp.ua)
+[![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/badges/StandWithUkraine.svg)](https://stand-with-ukraine.pp.ua)
 
 [![CI](https://github.com/alexbabintsev/udeck/actions/workflows/ci.yml/badge.svg)](https://github.com/alexbabintsev/udeck/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/alexbabintsev/udeck)](https://github.com/alexbabintsev/udeck/releases/latest)
+[![Go](https://img.shields.io/github/go-mod/go-version/alexbabintsev/udeck)](go.mod)
+![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)
+[![License: MIT](https://img.shields.io/github/license/alexbabintsev/udeck)](LICENSE)
 
-Headless daemon for the **Ulanzi D200** stream deck. Single Go binary,
-YAML config, no GUI. Replaces the official "Ulanzi Studio" app for the
-subset of features implemented here and is designed for direct local
-automation.
+# udeck
 
-> Status: **usable, pre-1.0**. Direct HID control, pages and nested
-> folders, widgets, config hot reload, device recovery and macOS
-> sleep/wake handling work. SmallView and richer profile management are
-> still pending. Not affiliated with Ulanzi.
+**Your Ulanzi D200, without Ulanzi Studio.** A headless macOS daemon for
+the Ulanzi D200 stream deck: one binary, one YAML file, no GUI. Pages and
+folders, actions, live widgets, config hot reload, and recovery after
+sleep or a dropped connection.
+
+```sh
+brew install alexbabintsev/tap/udeck
+```
+
+> Status: **usable, pre-1.0**. Unofficial project, not affiliated with
+> Ulanzi. SmallView and richer profile management are still pending.
 
 ## Why
 
@@ -22,12 +32,20 @@ it with whatever automation you already run.
 ## Requirements
 
 - macOS (the HID, key-event and power code is macOS-specific)
-- Go 1.27.1+
-- Xcode Command Line Tools for cgo: `xcode-select --install`
-  (hidapi is bundled; no Homebrew packages are needed)
 - Optional: `tmux` for `project` widgets
 
 ## Install
+
+With Homebrew:
+
+```sh
+brew install alexbabintsev/tap/udeck
+```
+
+The demo profile is installed to `$(brew --prefix)/share/udeck/examples`.
+
+From source (Go 1.27.1+ and the Xcode Command Line Tools for cgo,
+`xcode-select --install`; hidapi is bundled):
 
 ```sh
 git clone https://github.com/alexbabintsev/udeck
@@ -95,12 +113,12 @@ osascript -e 'tell application "Ulanzi Studio" to quit'
 Then:
 
 ```sh
-./udeck info
-./udeck dump-events
-./udeck set-brightness 70
-./udeck run --config examples/test-config.yaml
-./udeck run
-./udeck run --debug   # or UDECK_DEBUG=1
+udeck info
+udeck dump-events
+udeck set-brightness 70
+udeck run --config examples/test-config.yaml
+udeck run
+udeck run --debug   # or UDECK_DEBUG=1
 ```
 
 `run` uploads the configured button layout, switches the device into
@@ -124,12 +142,13 @@ If `--config` is omitted, `run` reads
 
 ```sh
 mkdir -p ~/.config/udeck
-cp examples/test-config.yaml ~/.config/udeck/config.yaml
+cp -R "$(brew --prefix)/share/udeck/examples/" ~/.config/udeck/
+mv ~/.config/udeck/test-config.yaml ~/.config/udeck/config.yaml
 ```
 
 Relative icon and project paths are resolved against the config file's
-directory, so copy `examples/test-icons` (and `examples/project-demo`)
-next to it or adjust the paths.
+directory, so `test-icons` and `project-demo` stay next to it. From a
+source checkout, copy the same files from `examples/`.
 
 If something goes wrong on the device (frozen display, garbled output),
 **unplug the USB cable** to power-cycle. No persistent damage is

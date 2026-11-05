@@ -9,6 +9,11 @@ actual development milestones rather than formal releases.
 
 - Keep updating this section for user-visible changes that have not been
   grouped into a tagged release yet.
+
+## 0.1.0 - 2026-11-05
+
+- First public release, installable with
+  `brew install alexbabintsev/tap/udeck`.
 - Renamed the project from `ulanzi-deck` to `udeck`: the binary, the Go
   module, the config directory (`~/.config/udeck`), the log directory
   (`~/Library/Logs/udeck`) and the `UDECK_DEBUG` variable. Move an

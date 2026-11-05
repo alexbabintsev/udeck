@@ -1,0 +1,94 @@
+# GoReleaser config for udeck.
+# Docs: https://goreleaser.com
+#
+# Release flow:
+#   1. git tag v0.1.0 && git push origin v0.1.0
+#   2. GitHub Actions runs `goreleaser release` on a macOS runner, which:
+#      - builds the macOS binaries (arm64 + amd64)
+#      - publishes a GitHub Release with .tar.gz archives + checksums
+#      - commits an updated Formula/udeck.rb into alexbabintsev/homebrew-tap
+#
+# Then users install with:
+#   brew install alexbabintsev/tap/udeck
+
+version: 2
+
+project_name: udeck
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: udeck
+    main: ./cmd/udeck
+    binary: udeck
+    # hidapi and libwebp are compiled in through cgo, which is why this
+    # builds on macOS and only for macOS.
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    # Inject the version (from the git tag) into the `version` var in main.go.
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: udeck
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - CHANGELOG.md
+      - LICENSE
+      - docs/config.md
+      - examples/**/*
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+
+# Homebrew tap formula. HOMEBREW_TAP_TOKEN needs write access to
+# alexbabintsev/homebrew-tap (set in CI secrets).
+#
+# A formula rather than a cask, like laraport: `bin.install` puts the
+# binary on PATH with no signing or notarisation. Revisit once it is signed.
+brews:
+  - name: udeck
+    repository:
+      owner: alexbabintsev
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/alexbabintsev/udeck"
+    description: "Headless daemon for the Ulanzi D200 stream deck"
+    license: "MIT"
+    caveats: |
+      Quit Ulanzi Studio before running udeck: it locks the device.
+
+      Put your config at ~/.config/udeck/config.yaml, or start from the demo
+      profile: udeck run --config #{opt_pkgshare}/examples/test-config.yaml
+
+      Key and window actions need Accessibility access for the app that
+      launches udeck, such as your terminal.
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/udeck --version")
+    install: |
+      bin.install "udeck"
+      pkgshare.install "examples"
