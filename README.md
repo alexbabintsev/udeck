@@ -44,6 +44,21 @@ brew install alexbabintsev/tap/udeck
 
 The demo profile is installed to `$(brew --prefix)/share/udeck/examples`.
 
+To start it now and at every login:
+
+```sh
+brew services start udeck
+```
+
+This reads `~/.config/udeck/config.yaml` and logs to
+`$(brew --prefix)/var/log/udeck.log`. If the deck is unplugged or the
+config is broken, the service keeps retrying until it can start;
+`brew services stop udeck` stops it for good. It runs in your login
+session, so it starts when you log in, not at boot.
+
+Running as a service, `udeck` is its own app for macOS: grant
+Accessibility to the `udeck` binary, not to your terminal.
+
 From source (Go 1.27.1+ and the Xcode Command Line Tools for cgo,
 `xcode-select --install`; hidapi is bundled):
 
@@ -553,7 +568,7 @@ Notes:
 - v2: SmallView STATS / CLOCK modes (system stats feed)
 - v2: more widget polish and rendering improvements
 - v3: SmallView BACKGROUND image (needs more reverse-engineering)
-- v3: richer profile management, launchd plist
+- v3: richer profile management
 - Library split: migrate `internal/` → `pkg/d200/` and publish
 
 ## Credits

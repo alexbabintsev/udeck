@@ -87,6 +87,21 @@ brews:
 
       Key and window actions need Accessibility access for the app that
       launches udeck, such as your terminal.
+
+      To start udeck now and at every login:
+        brew services start udeck
+      As a service, udeck itself needs that Accessibility access.
+    # `brew services start udeck` installs a LaunchAgent: it starts at login,
+    # inside the GUI session that sleep/wake events and key actions need.
+    # Restart only on failure (no device yet, config error); SIGTERM exits 0.
+    # launchd's default PATH has no Homebrew, where tmux lives.
+    service: |
+      run [opt_bin/"udeck", "run"]
+      keep_alive successful_exit: false
+      process_type :interactive
+      environment_variables PATH: std_service_path_env
+      log_path var/"log/udeck.log"
+      error_log_path var/"log/udeck.log"
     test: |
       assert_match version.to_s, shell_output("#{bin}/udeck --version")
     install: |
