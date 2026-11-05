@@ -103,7 +103,7 @@ go build -o udeck ./cmd/udeck
   - `ticker`: price, change and day chart of a stock, index, currency
     or coin (Yahoo, Binance; no API key)
   - `weather_day`, `wide_dashboard`: forecast and clock (Open-Meteo)
-  - `spotify_play_pause`, `spotify_next`, `spotify_artwork`
+  - `spotify_play_pause`, `spotify_artwork`
 - Config hot reload while `run` is active
 - Runtime keepalive to keep the deck out of screensaver
 - Auto-recovery on common HID read/write/open failures
@@ -184,7 +184,7 @@ The demo config includes:
 - `weather_day` widgets
 - Lucide icon-pack examples via `icon: lucide/...`
 - gesture test buttons
-- Hammerspoon integration examples
+- native window management examples
 
 Current config surface:
 
@@ -239,7 +239,6 @@ Current config surface:
       - `type: spotify_play_pause`
         - tap toggles play/pause
         - hold skips to next track
-      - `type: spotify_next`
       - `type: spotify_artwork`
       - `type: wide_dashboard`
         - only valid at `at: [2, 3]`
@@ -384,17 +383,12 @@ Notes:
   launches but does not wait for the shell command to finish.
 - `key` actions are implemented on macOS; on other platforms they
   currently return an unsupported error.
-- `http` actions are useful for local automation bridges such as
-  Hammerspoon.
+- `http` actions are useful for local automation bridges.
 - `page_next` and `page_prev` loop across top-level pages and reset any
   currently open nested `folder`.
 - `run` hot-reloads the YAML config automatically when the file changes.
 - `run` also watches configured static icon files and reloads the page
   when those assets change on disk.
-- For Hammerspoon on macOS, prefer `type: shell` with the bundled
-  `hs` CLI and `UDECK_ACTIONS.*()` over `type: key` hotkeys or a custom
-  HTTP bridge. This avoids flaky synthetic shortcuts and long-lived
-  `hs.httpserver` state.
 - Gesture semantics:
   - `tap` fires on release
   - `double_tap` fires on the second tap
@@ -436,8 +430,6 @@ Notes:
   reliable for shortcuts like `cmd t` and `cmd shift 4`.
 - If the active config contains any `type: key` handlers, `run` now
   proactively asks macOS for Accessibility access during startup.
-- Hammerspoon integrations work best through `require("hs.ipc")` plus
-  shell actions that invoke `/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs`.
 - Static button icons support global and per-button margins, which lets
   you keep important pixels away from the D200's edge distortion zone.
 

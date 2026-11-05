@@ -13,6 +13,11 @@ actual development milestones rather than formal releases.
   `close_all_projects` action left the default build and the Homebrew
   package; `go build -tags personal` still includes them.
 - The `memory` widget no longer restarts apps on tap; `apps` is ignored.
+- Removed the `spotify_next` widget: use `media` with `action: next`,
+  or hold `spotify_play_pause`.
+- `udeck probe` left the default build.
+- The demo profile uses native `type: window` actions instead of
+  Hammerspoon.
 
 ## 0.1.2 - 2026-11-05
 

@@ -166,7 +166,6 @@ func TestManagerCreatesEveryWidgetType(t *testing.T) {
 
 	buttons := []config.Button{
 		{RuntimeID: "a", Widget: &config.Widget{Type: "spotify_play_pause"}},
-		{RuntimeID: "b", Widget: &config.Widget{Type: "spotify_next"}},
 		{RuntimeID: "c", Widget: &config.Widget{Type: "spotify_artwork"}},
 		{RuntimeID: "d", At: [2]int{3, 2}, Widget: &config.Widget{Type: "wide_dashboard"}},
 		{RuntimeID: "e", Widget: &config.Widget{Type: "weather_day", City: uniqueCity(t)}},

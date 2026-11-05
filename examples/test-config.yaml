@@ -146,7 +146,8 @@ pages:
 
             - at: [0, 1]
               widget:
-                type: spotify_next
+                type: media
+                action: next
 
             - at: [0, 2]
               widget:
@@ -161,7 +162,7 @@ pages:
                   cmd: "open -a Spotify"
 
       - at: [0, 4]
-        label: "Hammers"
+        label: "Windows"
         icon: test-icons/browser.png
         icon_margins:
           top: 12
@@ -175,40 +176,32 @@ pages:
               icon: test-icons/apps-folder.png
               on:
                 tap:
-                  type: shell
-                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "UDECK_ACTIONS.moveToNextScreen()"'
-
-            - at: [0, 1]
-              label: "Rotate"
-              icon: test-icons/system-folder.png
-              on:
-                tap:
-                  type: shell
-                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "UDECK_ACTIONS.rotateDisplay()"'
+                  type: window
+                  to: next_display
 
             - at: [0, 2]
               label: "Left"
               icon: test-icons/find.png
               on:
                 tap:
-                  type: shell
-                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "UDECK_ACTIONS.windowLeftHalf()"'
+                  type: window
+                  to: left_half
 
             - at: [1, 0]
               label: "Right"
               icon: test-icons/tab.png
               on:
                 tap:
-                  type: shell
-                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "UDECK_ACTIONS.windowRightHalf()"'
+                  type: window
+                  to: right_half
 
             - at: [1, 1]
               label: "Max"
               icon: test-icons/reload.png
               on:
                 tap:
-                  type: shell
-                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "UDECK_ACTIONS.windowMaximize()"'
+                  type: window
+                  to: maximize
 
             - at: [1, 2]
               label: "Sleep"
@@ -216,7 +209,7 @@ pages:
               on:
                 tap:
                   type: shell
-                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "UDECK_ACTIONS.systemSleep()"'
+                  cmd: "pmset sleepnow"
 
       - at: [1, 0]
         label: "Gestures"
@@ -407,7 +400,8 @@ pages:
                 type: spotify_play_pause
             - at: [0, 1]
               widget:
-                type: spotify_next
+                type: media
+                action: next
             - at: [0, 2]
               widget:
                 type: spotify_artwork

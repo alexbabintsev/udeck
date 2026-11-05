@@ -134,11 +134,6 @@ func TestFetchSpotifyArtworkRejectsHugeImages(t *testing.T) {
 func TestSpotifyWidgetsRender(t *testing.T) {
 	svc := &SpotifyService{}
 	rec := &recorder{}
-	next, err := NewSpotifyNextWidget("n", svc, rec.notify)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer next.Close()
 	art, err := NewSpotifyArtworkWidget("a", svc, rec.notify)
 	if err != nil {
 		t.Fatal(err)
@@ -150,7 +145,6 @@ func TestSpotifyWidgetsRender(t *testing.T) {
 		{Running: true, State: "stopped"},
 		{Running: true, State: "playing", Playing: true, TrackName: "T", Artist: "A", Artwork: image.NewRGBA(image.Rect(0, 0, 32, 32))},
 	} {
-		next.spotifyUpdate(s)
 		art.spotifyUpdate(s)
 	}
 	if rec.count() < 4 {
@@ -161,11 +155,10 @@ func TestSpotifyWidgetsRender(t *testing.T) {
 	var state atomic.Value
 	state.Store("")
 	calls := fakeOSA(t, &state)
-	next.HandleGesture(ig.Tap)
-	next.HandleGesture(ig.Hold)
+	svc.NextTrack()
 	svc.bg.Wait()
 	if calls.Load() != 1 {
-		t.Fatalf("next tap must run one osascript, got %d", calls.Load())
+		t.Fatalf("next track must run one osascript, got %d", calls.Load())
 	}
 }
 

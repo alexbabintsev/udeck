@@ -9,6 +9,15 @@ go build -tags personal -o udeck ./cmd/udeck
 
 The demo project lives in [personal-project-demo](personal-project-demo).
 
+The same build adds `udeck probe`, a research tool that sends test
+uploads to the device:
+
+```text
+udeck probe [--key N] [--sizes 3,8,14] [--gaps 2000,...,0] [--reps 3] [--read]
+udeck probe --playpause N [--key N]
+udeck probe --recovery
+```
+
 #### `widgets.project`
 
 Defaults for `widget.type: project`.

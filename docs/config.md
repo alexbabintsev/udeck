@@ -493,10 +493,6 @@ Notes:
 - On macOS, key actions require Accessibility permission.
 - `run` prompts for that permission automatically when the active config
   contains `key` actions.
-- For Hammerspoon hotkeys specifically, synthetic key events may reach
-  the foreground app without triggering `hs.hotkey`. Prefer the
-  Hammerspoon IPC CLI pattern shown below instead of binding deck
-  buttons to `type: key`.
 
 ### `type: http`
 
@@ -516,14 +512,12 @@ Required fields:
 Notes:
 
 - `http` is still useful for local or remote automation bridges.
-- For Hammerspoon on macOS, `type: shell` with the bundled `hs` CLI is
-  usually more reliable than keeping a custom `hs.httpserver` running.
 
 ### `type: window`
 
 Moves and resizes the focused window of the frontmost app, natively
-through the macOS Accessibility API (no Hammerspoon or Rectangle
-needed). Pressing a deck key does not take the focus, so the window you
+through the macOS Accessibility API, with no helper app
+needed. Pressing a deck key does not take the focus, so the window you
 were working in is the one that moves.
 
 ```yaml
@@ -553,26 +547,6 @@ bar and the Dock. Notes:
 - windows in native full-screen mode do not move
 - apps that size in steps (terminals) may stop a few pixels short
 - macOS has no public API to move windows between Spaces
-
-### Hammerspoon via `hs.ipc`
-
-Recommended pattern for Hammerspoon integration on macOS:
-
-```yaml
-tap:
-  type: shell
-  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "UDECK_ACTIONS.rotateDisplay()"'
-```
-
-Expected Hammerspoon setup:
-
-- `require("hs.ipc")` in `init.lua`
-- a global table such as `UDECK_ACTIONS = { ... }`
-
-This avoids two common problems:
-
-- synthetic `type: key` shortcuts that do not trigger `hs.hotkey`
-- long-lived `hs.httpserver` instances that can hang until config reload
 
 ### `type: page_next`
 
@@ -709,7 +683,7 @@ Supported widget types:
   `microphone`, `audio_output`, `media`, `weather_day`, `wide_dashboard`
 - system monitor: `cpu`, `memory`, `disk`, `network`, `battery`
 - markets: `ticker`
-- Spotify: `spotify_play_pause`, `spotify_next`, `spotify_artwork`
+- Spotify: `spotify_play_pause`, `spotify_artwork`
 
 Every widget is independent: it reads its own state and needs no other
 widget on the page. The general-purpose ones share one look: black
@@ -979,18 +953,6 @@ Optional:
   - tap toggles play/pause
   - hold skips to the next track
 
-### `widget.type: spotify_next`
-
-```yaml
-widget:
-  type: spotify_next
-```
-
-Optional:
-
-- `poll_ms`
-  - minimum `1000`
-
 ### `widget.type: spotify_artwork`
 
 ```yaml
@@ -1127,18 +1089,6 @@ The loader validates:
     tap:
       type: http
       url: "http://127.0.0.1:8080/action/ping"
-```
-
-### Hammerspoon Button
-
-```yaml
-- at: [0, 2]
-  label: "Left"
-  icon: test-icons/find.png
-  on:
-    tap:
-      type: shell
-      cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "UDECK_ACTIONS.windowLeftHalf()"'
 ```
 
 ### Next / Previous Page

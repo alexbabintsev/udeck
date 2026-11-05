@@ -463,37 +463,6 @@ func renderSpotifyPlayPauseImage(s spotifySnapshot) *image.RGBA {
 	return img
 }
 
-type SpotifyNextWidget struct {
-	*spotifyBaseWidget
-}
-
-func NewSpotifyNextWidget(id string, service *SpotifyService, notify func(string)) (*SpotifyNextWidget, error) {
-	base, err := newSpotifyBaseWidget(id, service, notify, "spotify-next")
-	if err != nil {
-		return nil, err
-	}
-	w := &SpotifyNextWidget{spotifyBaseWidget: base}
-	service.Subscribe(w)
-	return w, nil
-}
-
-func (w *SpotifyNextWidget) HandleGesture(kind ig.Kind) {
-	if kind == ig.Tap {
-		w.service.NextTrack()
-	}
-}
-
-func (w *SpotifyNextWidget) spotifyUpdate(s spotifySnapshot) {
-	img := image.NewRGBA(image.Rect(0, 0, icons.IconWidth, icons.IconHeight))
-	drawWidgetGradient(img, color.RGBA{0x10, 0x10, 0x10, 0xff}, color.RGBA{0x18, 0x18, 0x18, 0xff})
-	accent := spotifyAccent(s)
-	drawSmallBadge(img, spotifyStatusChip(s), accent)
-	drawScaledCenteredText(img, "NEXT", image.Rect(18, 28, icons.IconWidth-18, 78), accent)
-	drawNextGlyph(img, accent)
-	drawCenteredFace(img, shortenLine(trackLine(s), 15), icons.IconWidth/2, icons.IconHeight-18, color.RGBA{0xc0, 0xc0, 0xc0, 0xff}, basicfont.Face7x13)
-	_, _ = w.publish(img)
-}
-
 type SpotifyArtworkWidget struct {
 	*spotifyBaseWidget
 }
@@ -619,16 +588,6 @@ func shortenLine(s string, max int) string {
 		return string(r[:max])
 	}
 	return string(r[:max-1]) + "…"
-}
-
-func drawNextGlyph(img *image.RGBA, clr color.Color) {
-	for x := 0; x < 38; x++ {
-		top := 88 + x/2
-		bottom := 138 - x/2
-		draw.Draw(img, image.Rect(42+x, top, 44+x, bottom), &image.Uniform{clr}, image.Point{}, draw.Src)
-		draw.Draw(img, image.Rect(86+x, top, 88+x, bottom), &image.Uniform{clr}, image.Point{}, draw.Src)
-	}
-	draw.Draw(img, image.Rect(138, 88, 152, 138), &image.Uniform{clr}, image.Point{}, draw.Src)
 }
 
 func drawWidgetGradient(img *image.RGBA, top, bottom color.RGBA) {

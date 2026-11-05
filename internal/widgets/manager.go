@@ -298,7 +298,7 @@ func (m *Manager) newWidgetLocked(id string) (Widget, error) {
 		item, err = NewAudioOutputWidget(id, def.btn.Widget, m.notify)
 	case "media":
 		item, err = NewMediaWidget(id, def.btn.Widget, m.notify)
-	case "spotify_play_pause", "spotify_next", "spotify_artwork":
+	case "spotify_play_pause", "spotify_artwork":
 		if m.spotify == nil {
 			service, err := newSpotifyService(def.btn.Widget.PollMS)
 			if err != nil {
@@ -309,8 +309,6 @@ func (m *Manager) newWidgetLocked(id string) (Widget, error) {
 		switch def.kind {
 		case "spotify_play_pause":
 			item, err = NewSpotifyPlayPauseWidget(id, m.spotify, m.notify)
-		case "spotify_next":
-			item, err = NewSpotifyNextWidget(id, m.spotify, m.notify)
 		case "spotify_artwork":
 			item, err = NewSpotifyArtworkWidget(id, m.spotify, m.notify)
 		}
@@ -331,7 +329,7 @@ func (m *Manager) newWidgetLocked(id string) (Widget, error) {
 
 func isSpotifyWidgetType(kind string) bool {
 	switch kind {
-	case "spotify_play_pause", "spotify_next", "spotify_artwork":
+	case "spotify_play_pause", "spotify_artwork":
 		return true
 	default:
 		return false
@@ -374,7 +372,7 @@ func (m *Manager) gestureOptions(id string) (ig.Options, bool) {
 		return volumeGestures(def.btn.Widget), true
 	case "timer", "stopwatch", "pomodoro":
 		return timerGestures(), true
-	case "memory", "spotify_next", "spotify_artwork", "wide_dashboard", "weather_day",
+	case "memory", "spotify_artwork", "wide_dashboard", "weather_day",
 		"microphone", "audio_output", "media", "clock", "cpu", "disk", "network", "battery", "ticker":
 		return ig.Options{HasTap: true}, true
 	default:

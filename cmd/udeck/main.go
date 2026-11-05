@@ -51,9 +51,6 @@ Usage:
   udeck dump-events [--debug] [--log-file <path>]
   udeck set-brightness <0..100>
   udeck run [--config <path.yaml>] [--debug] [--log-file <path>]
-  udeck probe [--key N] [--sizes 3,8,14] [--gaps 2000,...,0] [--reps 3] [--read]
-  udeck probe --playpause N [--key N]
-  udeck probe --recovery
   udeck --version
 
 --debug (or UDECK_DEBUG=1) logs every HID error, retry, reconnect and
@@ -68,6 +65,9 @@ If --config is omitted, run reads $XDG_CONFIG_HOME/udeck/config.yaml
 (~/.config/udeck/config.yaml by default). A demo profile lives in
 examples/test-config.yaml.
 `
+
+// personalCommands are subcommands only `-tags personal` includes.
+var personalCommands = map[string]func(args []string, stdout, stderr io.Writer) error{}
 
 // External dependencies, replaced by tests.
 var (
@@ -112,8 +112,6 @@ func runCLI(args []string, stdout, stderr io.Writer) int {
 		err = cmdSetBrightness(rest, stdout, stderr)
 	case "run":
 		err = cmdRun(rest, stdout, stderr)
-	case "probe":
-		err = cmdProbe(rest, stdout, stderr)
 	case "-h", "--help", "help":
 		fmt.Fprint(stdout, usage)
 		return 0
@@ -121,8 +119,12 @@ func runCLI(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "udeck", version)
 		return 0
 	default:
-		fmt.Fprintf(stderr, "unknown subcommand: %s\n\n%s", sub, usage)
-		return 2
+		run, ok := personalCommands[sub]
+		if !ok {
+			fmt.Fprintf(stderr, "unknown subcommand: %s\n\n%s", sub, usage)
+			return 2
+		}
+		err = run(rest, stdout, stderr)
 	}
 	if errors.Is(err, flag.ErrHelp) {
 		return 0

@@ -573,7 +573,6 @@ func TestValidateAcceptsSpotifyWidgets(t *testing.T) {
 	cfg := &Config{
 		Buttons: []Button{
 			{At: [2]int{0, 0}, Widget: &Widget{Type: "spotify_play_pause"}},
-			{At: [2]int{1, 0}, Widget: &Widget{Type: "spotify_next"}},
 			{At: [2]int{2, 0}, Widget: &Widget{Type: "spotify_artwork", PollMS: 2000}},
 			{At: [2]int{3, 2}, Widget: &Widget{Type: "wide_dashboard", City: "Kyiv"}},
 		},

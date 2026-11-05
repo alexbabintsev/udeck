@@ -512,7 +512,6 @@ func validateHandlers(tr *Handlers, path string) error {
 var widgetMinPollMS = map[string]int{
 	"memory":             1000,
 	"spotify_play_pause": 1000,
-	"spotify_next":       1000,
 	"spotify_artwork":    1000,
 	"wide_dashboard":     1000,
 	"weather_day":        1000,
@@ -537,7 +536,7 @@ func validateWidget(w *Widget, at [2]int, path string) error {
 	}
 	minPoll, known := widgetMinPollMS[w.Type]
 	if !known {
-		return fmt.Errorf("%s.type %q unknown (clock|timer|stopwatch|pomodoro|cpu|disk|network|battery|ticker|volume|microphone|audio_output|media|memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|weather_day)", path, w.Type)
+		return fmt.Errorf("%s.type %q unknown (clock|timer|stopwatch|pomodoro|cpu|disk|network|battery|ticker|volume|microphone|audio_output|media|memory|spotify_play_pause|spotify_artwork|wide_dashboard|weather_day)", path, w.Type)
 	}
 	switch w.Type {
 	case "wide_dashboard":
