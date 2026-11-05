@@ -14,8 +14,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
+	"github.com/alexbabintsev/udeck/internal/config"
+	"github.com/alexbabintsev/udeck/internal/icons"
 )
 
 func TestSetBrightnessPacket(t *testing.T) {

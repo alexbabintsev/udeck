@@ -78,7 +78,7 @@ pages:
               on:
                 tap:
                   type: shell
-                  cmd: "date '+%F %T' >> /tmp/ulanzi-deck-test.log"
+                  cmd: "date '+%F %T' >> /tmp/udeck-test.log"
 
             - at: [0, 2]
               label: "Find"
@@ -182,7 +182,7 @@ pages:
               on:
                 tap:
                   type: shell
-                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.moveToNextScreen()"'
+                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "UDECK_ACTIONS.moveToNextScreen()"'
 
             - at: [0, 1]
               label: "Rotate"
@@ -190,7 +190,7 @@ pages:
               on:
                 tap:
                   type: shell
-                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.rotateDisplay()"'
+                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "UDECK_ACTIONS.rotateDisplay()"'
 
             - at: [0, 2]
               label: "Left"
@@ -198,7 +198,7 @@ pages:
               on:
                 tap:
                   type: shell
-                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.windowLeftHalf()"'
+                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "UDECK_ACTIONS.windowLeftHalf()"'
 
             - at: [1, 0]
               label: "Right"
@@ -206,7 +206,7 @@ pages:
               on:
                 tap:
                   type: shell
-                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.windowRightHalf()"'
+                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "UDECK_ACTIONS.windowRightHalf()"'
 
             - at: [1, 1]
               label: "Max"
@@ -214,7 +214,7 @@ pages:
               on:
                 tap:
                   type: shell
-                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.windowMaximize()"'
+                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "UDECK_ACTIONS.windowMaximize()"'
 
             - at: [1, 2]
               label: "Sleep"
@@ -222,7 +222,7 @@ pages:
               on:
                 tap:
                   type: shell
-                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.systemSleep()"'
+                  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "UDECK_ACTIONS.systemSleep()"'
 
       - at: [1, 0]
         label: "Gestures"
@@ -254,7 +254,7 @@ pages:
               on:
                 hold:
                   type: shell
-                  cmd: "date '+%F %T hold' >> /tmp/ulanzi-deck-test.log"
+                  cmd: "date '+%F %T hold' >> /tmp/udeck-test.log"
                 hold_ms: 700
 
             - at: [1, 0]
@@ -276,17 +276,17 @@ pages:
                       icon: test-icons/apps-folder.png
                       action:
                         type: shell
-                        cmd: "echo toggle-a >> /tmp/ulanzi-deck-test.log"
+                        cmd: "echo toggle-a >> /tmp/udeck-test.log"
                     - label: "Mode B"
                       icon: test-icons/media-folder.png
                       action:
                         type: shell
-                        cmd: "echo toggle-b >> /tmp/ulanzi-deck-test.log"
+                        cmd: "echo toggle-b >> /tmp/udeck-test.log"
                     - label: "Mode C"
                       icon: test-icons/system-folder.png
                       action:
                         type: shell
-                        cmd: "echo toggle-c >> /tmp/ulanzi-deck-test.log"
+                        cmd: "echo toggle-c >> /tmp/udeck-test.log"
 
             - at: [1, 2]
               label: "Chain"
@@ -296,11 +296,11 @@ pages:
                   chain:
                     - action:
                         type: shell
-                        cmd: "echo chain-a >> /tmp/ulanzi-deck-test.log"
+                        cmd: "echo chain-a >> /tmp/udeck-test.log"
                     - delay_ms: 400
                     - action:
                         type: shell
-                        cmd: "echo chain-b >> /tmp/ulanzi-deck-test.log"
+                        cmd: "echo chain-b >> /tmp/udeck-test.log"
 
       - at: [1, 1]
         label: "Memory"
@@ -414,7 +414,7 @@ pages:
         on:
           tap:
             type: shell
-            cmd: "date '+%F %T page-2' >> /tmp/ulanzi-deck-test.log"
+            cmd: "date '+%F %T page-2' >> /tmp/udeck-test.log"
 
       - at: [1, 0]
         label: "Terminal"

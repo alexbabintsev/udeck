@@ -15,20 +15,20 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/actions"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/device"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/mainloop"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/preflight"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/widgets"
+	"github.com/alexbabintsev/udeck/internal/actions"
+	"github.com/alexbabintsev/udeck/internal/config"
+	"github.com/alexbabintsev/udeck/internal/debug"
+	"github.com/alexbabintsev/udeck/internal/device"
+	"github.com/alexbabintsev/udeck/internal/icons"
+	"github.com/alexbabintsev/udeck/internal/mainloop"
+	"github.com/alexbabintsev/udeck/internal/preflight"
+	"github.com/alexbabintsev/udeck/internal/protocol"
+	"github.com/alexbabintsev/udeck/internal/widgets"
 )
 
 // defaultConfigPath is where run looks for the config without --config:
-// $XDG_CONFIG_HOME/ulanzi-deck/config.yaml, by default
-// ~/.config/ulanzi-deck/config.yaml.
+// $XDG_CONFIG_HOME/udeck/config.yaml, by default
+// ~/.config/udeck/config.yaml.
 var defaultConfigPath = func() string {
 	dir := os.Getenv("XDG_CONFIG_HOME")
 	if dir == "" {
@@ -38,30 +38,34 @@ var defaultConfigPath = func() string {
 		}
 		dir = filepath.Join(home, ".config")
 	}
-	return filepath.Join(dir, "ulanzi-deck", "config.yaml")
+	return filepath.Join(dir, "udeck", "config.yaml")
 }
 
-const usage = `ulanzi-deck — minimal headless daemon for the Ulanzi D200
+// version is set from the git tag at release time.
+var version = "dev"
+
+const usage = `udeck — minimal headless daemon for the Ulanzi D200
 
 Usage:
-  ulanzi-deck info
-  ulanzi-deck dump-events [--debug] [--log-file <path>]
-  ulanzi-deck set-brightness <0..100>
-  ulanzi-deck run [--config <path.yaml>] [--debug] [--log-file <path>]
-  ulanzi-deck probe [--key N] [--sizes 3,8,14] [--gaps 2000,...,0] [--reps 3] [--read]
-  ulanzi-deck probe --playpause N [--key N]
-  ulanzi-deck probe --recovery
+  udeck info
+  udeck dump-events [--debug] [--log-file <path>]
+  udeck set-brightness <0..100>
+  udeck run [--config <path.yaml>] [--debug] [--log-file <path>]
+  udeck probe [--key N] [--sizes 3,8,14] [--gaps 2000,...,0] [--reps 3] [--read]
+  udeck probe --playpause N [--key N]
+  udeck probe --recovery
+  udeck --version
 
---debug (or ULANZI_DEBUG=1) logs every HID error, retry, reconnect and
+--debug (or UDECK_DEBUG=1) logs every HID error, retry, reconnect and
 page upload, plus widget fetch failures, for diagnosing device drop-outs.
 --log-file also writes the log to a file (rotated at 10 MB). With
---debug it defaults to ~/Library/Logs/ulanzi-deck/debug.log.
+--debug it defaults to ~/Library/Logs/udeck/debug.log.
 
 Note: Ulanzi Studio holds an exclusive HID lock. Quit it before running:
   osascript -e 'tell application "Ulanzi Studio" to quit'
 
-If --config is omitted, run reads $XDG_CONFIG_HOME/ulanzi-deck/config.yaml
-(~/.config/ulanzi-deck/config.yaml by default). A demo profile lives in
+If --config is omitted, run reads $XDG_CONFIG_HOME/udeck/config.yaml
+(~/.config/udeck/config.yaml by default). A demo profile lives in
 examples/test-config.yaml.
 `
 
@@ -112,6 +116,9 @@ func runCLI(args []string, stdout, stderr io.Writer) int {
 		err = cmdProbe(rest, stdout, stderr)
 	case "-h", "--help", "help":
 		fmt.Fprint(stdout, usage)
+		return 0
+	case "-v", "--version", "version":
+		fmt.Fprintln(stdout, "udeck", version)
 		return 0
 	default:
 		fmt.Fprintf(stderr, "unknown subcommand: %s\n\n%s", sub, usage)
@@ -198,7 +205,7 @@ func cmdSetBrightness(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: ulanzi-deck set-brightness <0..100>")
+		return errors.New("usage: udeck set-brightness <0..100>")
 	}
 	level, err := strconv.Atoi(fs.Arg(0))
 	if err != nil {
@@ -328,7 +335,7 @@ var defaultDebugLogPath = func() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, "Library", "Logs", "ulanzi-deck", "debug.log")
+	return filepath.Join(home, "Library", "Logs", "udeck", "debug.log")
 }
 
 // setupLogging enables debug output and mirrors the standard logger into
@@ -349,7 +356,7 @@ func setupLogging(debugOn bool, path string, stderr io.Writer) (func(), error) {
 	}
 	prev := log.Writer()
 	log.SetOutput(io.MultiWriter(stderr, f))
-	log.Printf("---- ulanzi-deck started (pid %d), logging to %s", os.Getpid(), path)
+	log.Printf("---- udeck started (pid %d), logging to %s", os.Getpid(), path)
 	return func() {
 		log.SetOutput(prev)
 		_ = f.Close()

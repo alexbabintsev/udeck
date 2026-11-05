@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
+	"github.com/alexbabintsev/udeck/internal/config"
+	ig "github.com/alexbabintsev/udeck/internal/gestures"
 )
 
 func siteServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {

@@ -7,8 +7,8 @@ import (
 	"image/draw"
 	"sync"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
+	"github.com/alexbabintsev/udeck/internal/config"
+	"github.com/alexbabintsev/udeck/internal/icons"
 )
 
 // pageNavOverlay renders page-navigation button icons with the current page

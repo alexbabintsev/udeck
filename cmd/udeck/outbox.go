@@ -11,10 +11,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
+	"github.com/alexbabintsev/udeck/internal/config"
+	"github.com/alexbabintsev/udeck/internal/debug"
+	"github.com/alexbabintsev/udeck/internal/icons"
+	"github.com/alexbabintsev/udeck/internal/protocol"
 )
 
 // sendJob is one page (full) or set of keys (partial) to upload.

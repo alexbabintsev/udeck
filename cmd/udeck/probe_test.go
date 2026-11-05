@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
+	"github.com/alexbabintsev/udeck/internal/protocol"
 )
 
 func TestProbeSweepAndPlayPause(t *testing.T) {

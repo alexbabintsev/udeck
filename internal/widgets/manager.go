@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
-	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
+	"github.com/alexbabintsev/udeck/internal/config"
+	"github.com/alexbabintsev/udeck/internal/debug"
+	ig "github.com/alexbabintsev/udeck/internal/gestures"
 )
 
 type Widget interface {

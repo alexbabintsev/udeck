@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/mainloop"
+	"github.com/alexbabintsev/udeck/internal/mainloop"
 )
 
 // TestMain serves the main run loop like the daemon does, so
@@ -48,10 +48,10 @@ func TestSpotifyNotifierFansOutAndCloses(t *testing.T) {
 
 // TestSpotifyNotifierReceivesDistributedNotification posts the real
 // notification from another process. Opt-in: it talks to the user's
-// notification daemon (and wakes any running ulanzi-deck).
+// notification daemon (and wakes any running udeck).
 func TestSpotifyNotifierReceivesDistributedNotification(t *testing.T) {
-	if os.Getenv("ULANZI_E2E") == "" {
-		t.Skip("set ULANZI_E2E=1 to post a real distributed notification")
+	if os.Getenv("UDECK_E2E") == "" {
+		t.Skip("set UDECK_E2E=1 to post a real distributed notification")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

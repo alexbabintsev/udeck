@@ -7,10 +7,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
-	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/macos"
+	"github.com/alexbabintsev/udeck/internal/config"
+	"github.com/alexbabintsev/udeck/internal/debug"
+	ig "github.com/alexbabintsev/udeck/internal/gestures"
+	"github.com/alexbabintsev/udeck/internal/macos"
 )
 
 // mediaSystem posts media keys; tests replace systemMedia.
@@ -56,7 +56,7 @@ func (w *MediaWidget) HandleGesture(kind ig.Kind) {
 	}
 	if !w.sys.trusted() {
 		w.warnOnce.Do(func() {
-			log.Printf("media keys need Accessibility access for the app running ulanzi-deck (System Settings → Privacy & Security → Accessibility)")
+			log.Printf("media keys need Accessibility access for the app running udeck (System Settings → Privacy & Security → Accessibility)")
 		})
 	}
 	if err := w.sys.press(w.key); err != nil {

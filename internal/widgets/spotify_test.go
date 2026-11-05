@@ -4,7 +4,7 @@ import (
 	"image/color"
 	"testing"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
+	"github.com/alexbabintsev/udeck/internal/icons"
 )
 
 func TestParseSpotifyState(t *testing.T) {

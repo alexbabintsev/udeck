@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
+	"github.com/alexbabintsev/udeck/internal/debug"
+	"github.com/alexbabintsev/udeck/internal/protocol"
 )
 
 type infoDeck struct {
@@ -65,6 +65,9 @@ func cli(args ...string) (int, string, string) {
 func TestCLIUsageAndUnknown(t *testing.T) {
 	if code, _, stderr := cli(); code != 2 || !strings.Contains(stderr, "Usage:") {
 		t.Fatalf("no args: code=%d", code)
+	}
+	if code, stdout, _ := cli("--version"); code != 0 || stdout != "udeck "+version+"\n" {
+		t.Fatalf("version: code=%d stdout=%q", code, stdout)
 	}
 	if code, stdout, _ := cli("help"); code != 0 || !strings.Contains(stdout, "Usage:") {
 		t.Fatalf("help: code=%d", code)
@@ -223,7 +226,7 @@ func TestCLIDebugWritesLogFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("default debug log not written: %v", err)
 	}
-	if !strings.Contains(string(data), "ulanzi-deck started") || !strings.Contains(string(data), "running. Ctrl-C to exit.") {
+	if !strings.Contains(string(data), "udeck started") || !strings.Contains(string(data), "running. Ctrl-C to exit.") {
 		t.Fatalf("log file content: %q", data)
 	}
 	info, _ := os.Stat(defaultDebugLogPath())
@@ -254,12 +257,12 @@ func TestCLIExplicitLogFileAndRotation(t *testing.T) {
 
 func TestDefaultConfigPath(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/xdg")
-	if got := defaultConfigPath(); got != filepath.Join("/xdg", "ulanzi-deck", "config.yaml") {
+	if got := defaultConfigPath(); got != filepath.Join("/xdg", "udeck", "config.yaml") {
 		t.Fatalf("with XDG_CONFIG_HOME: %q", got)
 	}
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", "/home/u")
-	if got := defaultConfigPath(); got != filepath.Join("/home/u", ".config", "ulanzi-deck", "config.yaml") {
+	if got := defaultConfigPath(); got != filepath.Join("/home/u", ".config", "udeck", "config.yaml") {
 		t.Fatalf("default: %q", got)
 	}
 }

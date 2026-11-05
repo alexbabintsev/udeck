@@ -1,6 +1,6 @@
 # Config Reference
 
-This file is the canonical reference for the `ulanzi-deck-go` YAML
+This file is the canonical reference for the `udeck` YAML
 config format.
 
 When config functionality changes, update this document together with:
@@ -581,13 +581,13 @@ Recommended pattern for Hammerspoon integration on macOS:
 ```yaml
 tap:
   type: shell
-  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.rotateDisplay()"'
+  cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "UDECK_ACTIONS.rotateDisplay()"'
 ```
 
 Expected Hammerspoon setup:
 
 - `require("hs.ipc")` in `init.lua`
-- a global table such as `ULANZI_ACTIONS = { ... }`
+- a global table such as `UDECK_ACTIONS = { ... }`
 
 This avoids two common problems:
 
@@ -978,7 +978,7 @@ Fields:
 - `title`
   - optional label under the icon
 
-Media keys need Accessibility access for the app running `ulanzi-deck`
+Media keys need Accessibility access for the app running `udeck`
 (the same permission as `type: key` actions); `run` asks for it at
 start-up when the config has a media widget.
 
@@ -1173,7 +1173,7 @@ Fields:
 
 Behavior:
 
-- polls freqtrade REST APIs directly from `ulanzi-deck`
+- polls freqtrade REST APIs directly from `udeck`
 - no separate daemon or localhost bridge is needed
 - aggregates all configured bots into one combined view
 - ignores failed bots and keeps rendering data from the remaining ones
@@ -1360,7 +1360,7 @@ The loader validates:
   on:
     tap:
       type: shell
-      cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "ULANZI_ACTIONS.windowLeftHalf()"'
+      cmd: '/Applications/Hammerspoon.app/Contents/Frameworks/hs/hs -A -c "UDECK_ACTIONS.windowLeftHalf()"'
 ```
 
 ### Next / Previous Page

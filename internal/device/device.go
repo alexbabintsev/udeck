@@ -9,8 +9,8 @@ import (
 
 	hid "github.com/sstallion/go-hid"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
+	"github.com/alexbabintsev/udeck/internal/debug"
+	"github.com/alexbabintsev/udeck/internal/protocol"
 )
 
 const (
@@ -287,7 +287,7 @@ func (d *Device) SendPackets(pkts [][protocol.PacketSize]byte) error {
 // from an interrupted transfer. The D200 does not resynchronise on a new
 // header mid-transfer: it keeps counting bytes, so a resend would be
 // swallowed as the tail of the broken upload and the device then crawls
-// at ~1 packet/s (measured with `ulanzi-deck probe --recovery`: resend
+// at ~1 packet/s (measured with `udeck probe --recovery`: resend
 // right away or after 1-3s stalled 9/9 times; filler first, 0/3). The
 // failed packet is assumed lost; if it did arrive, one filler packet
 // lands while the device is idle, which it ignores.

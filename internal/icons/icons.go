@@ -22,7 +22,7 @@ import (
 	"github.com/srwiley/rasterx"
 	"golang.org/x/image/draw"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/assets"
+	"github.com/alexbabintsev/udeck/assets"
 )
 
 const (

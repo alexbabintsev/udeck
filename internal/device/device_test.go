@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
+	"github.com/alexbabintsev/udeck/internal/protocol"
 )
 
 func TestShouldRetryOpenPrivilegeViolation(t *testing.T) {

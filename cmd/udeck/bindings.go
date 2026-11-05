@@ -4,9 +4,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/actions"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/widgets"
+	"github.com/alexbabintsev/udeck/internal/actions"
+	"github.com/alexbabintsev/udeck/internal/config"
+	"github.com/alexbabintsev/udeck/internal/widgets"
 )
 
 // runExternalAction executes shell/key/http actions; tests replace it.

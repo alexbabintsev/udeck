@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
+	"github.com/alexbabintsev/udeck/internal/icons"
 	"gopkg.in/yaml.v3"
 )
 

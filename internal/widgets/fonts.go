@@ -10,7 +10,7 @@ import (
 	"golang.org/x/image/font/gofont/gomonobold"
 	"golang.org/x/image/font/opentype"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
+	"github.com/alexbabintsev/udeck/internal/debug"
 )
 
 // Widget text uses a custom TTF/OTF when widgets.font is configured and

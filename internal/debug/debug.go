@@ -1,5 +1,5 @@
 // Package debug provides opt-in verbose diagnostics. It is enabled by the
-// --debug flag or the ULANZI_DEBUG=1 environment variable and is silent
+// --debug flag or the UDECK_DEBUG=1 environment variable and is silent
 // otherwise, so call sites can log freely on hot paths.
 package debug
 
@@ -12,7 +12,7 @@ import (
 var enabled atomic.Bool
 
 func init() {
-	if v := os.Getenv("ULANZI_DEBUG"); v != "" && v != "0" {
+	if v := os.Getenv("UDECK_DEBUG"); v != "" && v != "0" {
 		enabled.Store(true)
 	}
 }

@@ -3,8 +3,8 @@ package main
 import (
 	"testing"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
+	"github.com/alexbabintsev/udeck/internal/config"
+	ig "github.com/alexbabintsev/udeck/internal/gestures"
 )
 
 func TestToggleManagerCyclesTapStates(t *testing.T) {

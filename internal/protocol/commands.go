@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
+	"github.com/alexbabintsev/udeck/internal/config"
 )
 
 // SetBrightnessPacket builds the OUT_SET_BRIGHTNESS frame. Level is

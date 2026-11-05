@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/macos"
+	"github.com/alexbabintsev/udeck/internal/config"
+	"github.com/alexbabintsev/udeck/internal/macos"
 )
 
 // A main display with the menu bar and a portrait display to its right,

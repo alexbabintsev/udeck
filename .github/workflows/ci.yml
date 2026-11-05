@@ -35,4 +35,4 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       - name: Build
-        run: go build -o ulanzi-deck ./cmd/ulanzi-deck
+        run: go build -o udeck ./cmd/udeck

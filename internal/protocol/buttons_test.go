@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
+	"github.com/alexbabintsev/udeck/internal/config"
 )
 
 func TestPageZIPUsesDifferentIconNamesForDifferentPages(t *testing.T) {

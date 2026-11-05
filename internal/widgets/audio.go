@@ -1,7 +1,7 @@
 package widgets
 
 import (
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/macos"
+	"github.com/alexbabintsev/udeck/internal/macos"
 )
 
 // audioSystem is the macOS audio API as the audio widgets use it. Each

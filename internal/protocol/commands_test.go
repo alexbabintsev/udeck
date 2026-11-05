@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
+	"github.com/alexbabintsev/udeck/internal/config"
 )
 
 func TestSetLabelStylePacketRejectsInvalidColor(t *testing.T) {

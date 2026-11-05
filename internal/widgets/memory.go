@@ -11,13 +11,13 @@ import (
 	"sync"
 	"time"
 
-	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
+	ig "github.com/alexbabintsev/udeck/internal/gestures"
 	xdraw "golang.org/x/image/draw"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/math/fixed"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
+	"github.com/alexbabintsev/udeck/internal/config"
 )
 
 const (

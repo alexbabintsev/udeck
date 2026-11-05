@@ -9,8 +9,8 @@ import (
 	"math/rand"
 	"sort"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
+	"github.com/alexbabintsev/udeck/internal/config"
+	"github.com/alexbabintsev/udeck/internal/icons"
 )
 
 // ButtonSlot is the per-key payload written into the ZIP manifest.

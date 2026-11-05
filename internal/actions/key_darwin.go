@@ -135,7 +135,7 @@ var sendShortcutFunc = func(spec parsedShortcut) error {
 func sendKey(key string) error {
 	if !isAXTrusted() {
 		promptAXAccess()
-		return fmt.Errorf("key actions require macOS Accessibility permission for the app running ulanzi-deck")
+		return fmt.Errorf("key actions require macOS Accessibility permission for the app running udeck")
 	}
 
 	spec, err := parseShortcut(key)

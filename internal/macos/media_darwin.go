@@ -38,7 +38,7 @@ import "C"
 import "errors"
 
 // PressMediaKey sends k. Like key actions it needs Accessibility access
-// for the app running ulanzi-deck.
+// for the app running udeck.
 func PressMediaKey(k MediaKey) error {
 	if C.post_media_key(C.int(k)) != 0 {
 		return errors.New("post media key failed")

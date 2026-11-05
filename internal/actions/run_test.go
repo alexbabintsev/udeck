@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
+	"github.com/alexbabintsev/udeck/internal/config"
 )
 
 func TestRunDispatchesByType(t *testing.T) {

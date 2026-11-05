@@ -1,4 +1,4 @@
-module github.com/alexbabintsev/ulanzi-deck-go
+module github.com/alexbabintsev/udeck
 
 go 1.27.1
 

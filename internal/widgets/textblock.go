@@ -6,7 +6,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
+	"github.com/alexbabintsev/udeck/internal/icons"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 )

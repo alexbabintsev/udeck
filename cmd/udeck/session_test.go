@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
+	"github.com/alexbabintsev/udeck/internal/icons"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/device"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
+	"github.com/alexbabintsev/udeck/internal/config"
+	"github.com/alexbabintsev/udeck/internal/device"
+	"github.com/alexbabintsev/udeck/internal/protocol"
 )
 
 func TestBindingNeedsLoopOnlyForPageActions(t *testing.T) {

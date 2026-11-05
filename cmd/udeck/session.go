@@ -11,11 +11,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/device"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/widgets"
+	"github.com/alexbabintsev/udeck/internal/config"
+	"github.com/alexbabintsev/udeck/internal/debug"
+	"github.com/alexbabintsev/udeck/internal/device"
+	"github.com/alexbabintsev/udeck/internal/protocol"
+	"github.com/alexbabintsev/udeck/internal/widgets"
 )
 
 const (

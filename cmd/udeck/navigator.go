@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/widgets"
+	"github.com/alexbabintsev/udeck/internal/config"
+	"github.com/alexbabintsev/udeck/internal/widgets"
 )
 
 // backButton is the synthetic key injected into every folder page.

@@ -13,10 +13,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
+	ig "github.com/alexbabintsev/udeck/internal/gestures"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/debug"
+	"github.com/alexbabintsev/udeck/internal/config"
+	"github.com/alexbabintsev/udeck/internal/debug"
 )
 
 const (

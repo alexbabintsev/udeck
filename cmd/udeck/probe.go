@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
+	"github.com/alexbabintsev/udeck/internal/config"
+	"github.com/alexbabintsev/udeck/internal/icons"
+	"github.com/alexbabintsev/udeck/internal/protocol"
 )
 
 // probeStallThreshold marks a transfer the device was too busy to take
@@ -78,7 +78,7 @@ func cmdProbe(args []string, stdout, stderr io.Writer) error {
 		}()
 	}
 
-	dir, err := os.MkdirTemp("", "ulanzi-probe-")
+	dir, err := os.MkdirTemp("", "udeck-probe-")
 	if err != nil {
 		return err
 	}

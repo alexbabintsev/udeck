@@ -1,6 +1,6 @@
-# ulanzi-deck-go
+# udeck
 
-[![CI](https://github.com/alexbabintsev/ulanzi-deck-go/actions/workflows/ci.yml/badge.svg)](https://github.com/alexbabintsev/ulanzi-deck-go/actions/workflows/ci.yml)
+[![CI](https://github.com/alexbabintsev/udeck/actions/workflows/ci.yml/badge.svg)](https://github.com/alexbabintsev/udeck/actions/workflows/ci.yml)
 
 Headless daemon for the **Ulanzi D200** stream deck. Single Go binary,
 YAML config, no GUI. Replaces the official "Ulanzi Studio" app for the
@@ -30,9 +30,9 @@ it with whatever automation you already run.
 ## Install
 
 ```sh
-git clone https://github.com/alexbabintsev/ulanzi-deck-go
-cd ulanzi-deck-go
-go build -o ulanzi-deck ./cmd/ulanzi-deck
+git clone https://github.com/alexbabintsev/udeck
+cd udeck
+go build -o udeck ./cmd/udeck
 ```
 
 ## Features
@@ -95,12 +95,12 @@ osascript -e 'tell application "Ulanzi Studio" to quit'
 Then:
 
 ```sh
-./ulanzi-deck info
-./ulanzi-deck dump-events
-./ulanzi-deck set-brightness 70
-./ulanzi-deck run --config examples/test-config.yaml
-./ulanzi-deck run
-./ulanzi-deck run --debug   # or ULANZI_DEBUG=1
+./udeck info
+./udeck dump-events
+./udeck set-brightness 70
+./udeck run --config examples/test-config.yaml
+./udeck run
+./udeck run --debug   # or UDECK_DEBUG=1
 ```
 
 `run` uploads the configured button layout, switches the device into
@@ -119,12 +119,12 @@ stopping a launchd service) dim the deck before exiting; Ctrl-C leaves
 it as it is.
 
 If `--config` is omitted, `run` reads
-`$XDG_CONFIG_HOME/ulanzi-deck/config.yaml` (by default
-`~/.config/ulanzi-deck/config.yaml`). To start from the demo profile:
+`$XDG_CONFIG_HOME/udeck/config.yaml` (by default
+`~/.config/udeck/config.yaml`). To start from the demo profile:
 
 ```sh
-mkdir -p ~/.config/ulanzi-deck
-cp examples/test-config.yaml ~/.config/ulanzi-deck/config.yaml
+mkdir -p ~/.config/udeck
+cp examples/test-config.yaml ~/.config/udeck/config.yaml
 ```
 
 Relative icon and project paths are resolved against the config file's
@@ -412,7 +412,7 @@ Notes:
 - `run` also watches configured static icon files and reloads the page
   when those assets change on disk.
 - For Hammerspoon on macOS, prefer `type: shell` with the bundled
-  `hs` CLI and `ULANZI_ACTIONS.*()` over `type: key` hotkeys or a custom
+  `hs` CLI and `UDECK_ACTIONS.*()` over `type: key` hotkeys or a custom
   HTTP bridge. This avoids flaky synthetic shortcuts and long-lived
   `hs.httpserver` state.
 - Gesture semantics:
@@ -454,7 +454,7 @@ Notes:
 - Project scripts are invoked through `/bin/sh`, so they do not need the
   executable bit as long as the script contents are valid shell.
 - Spotify widgets use one internal shared service inside the
-  `ulanzi-deck` process; no separate `spotify-daemon` is required.
+  `udeck` process; no separate `spotify-daemon` is required.
 - Freqtrade widget polls configured REST APIs directly; no separate
   freqtrade daemon or local bridge is required.
 - Widget instances are created when you first open the page that uses
@@ -491,7 +491,7 @@ Notes:
   reviewed, and keep the file writable only by you — it is hot-reloaded.
 - Keep secrets (`site` tokens, freqtrade `dsns`) out of git. The
   repository ignores `/config.yaml`, and the default config lives
-  outside the checkout in `~/.config/ulanzi-deck/config.yaml`.
+  outside the checkout in `~/.config/udeck/config.yaml`.
 - Use `https://` for endpoints that receive credentials. Widgets log a
   warning when a token or password would be sent over plain `http://`
   to a host that is not loopback or a private (LAN/VPN) address.
@@ -513,17 +513,17 @@ Notes:
     safest hard reset. While the device is unplugged the daemon keeps
     running and redraws the page when it comes back.
 - Keys flicker / the device seems to disconnect
-  - Run with `--debug` (or `ULANZI_DEBUG=1`). Every HID write/read
+  - Run with `--debug` (or `UDECK_DEBUG=1`). Every HID write/read
     error, retry, handle reopen, recovery decision, page upload and
     widget fetch failure is logged with a `[debug]` prefix. The log is
-    also written to `~/Library/Logs/ulanzi-deck/debug.log` (or the path
+    also written to `~/Library/Logs/udeck/debug.log` (or the path
     given with `--log-file`), rotated to `.1` past 10 MB.
 - Spotify artwork updates but then breaks
   - Check Spotify itself is running and that network access is
     available for cover-art lookup.
 - Key actions do nothing
   - Grant Accessibility permission to the app that launched
-    `ulanzi-deck` in macOS System Settings. For example, if you run it
+    `udeck` in macOS System Settings. For example, if you run it
     from Terminal or iTerm, that terminal app must be allowed under
     Privacy & Security → Accessibility. The runtime now also triggers
     the native macOS prompt automatically when key actions are
@@ -535,7 +535,7 @@ Notes:
 - v2: more widget polish and rendering improvements
 - v3: SmallView BACKGROUND image (needs more reverse-engineering)
 - v3: richer profile management, launchd plist
-- Library split: migrate `internal/` → `pkg/ulanzid200/` and publish
+- Library split: migrate `internal/` → `pkg/d200/` and publish
 
 ## Credits
 

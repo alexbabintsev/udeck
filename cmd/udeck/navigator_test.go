@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
+	"github.com/alexbabintsev/udeck/internal/config"
 )
 
 func TestNavigatorEnterFolderAndBack(t *testing.T) {

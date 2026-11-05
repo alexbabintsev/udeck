@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
+	"github.com/alexbabintsev/udeck/internal/config"
+	"github.com/alexbabintsev/udeck/internal/protocol"
 )
 
 // sent is one transfer observed by fakeDeck.

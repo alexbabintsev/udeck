@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
+	"github.com/alexbabintsev/udeck/internal/protocol"
 )
 
 func TestOpenRetriesTransientErrors(t *testing.T) {

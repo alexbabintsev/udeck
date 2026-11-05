@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
+	"github.com/alexbabintsev/udeck/internal/icons"
 )
 
 func TestWidgetBasePublishWriteAndClose(t *testing.T) {

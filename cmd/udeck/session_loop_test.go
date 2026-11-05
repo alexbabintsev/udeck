@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/device"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/protocol"
+	"github.com/alexbabintsev/udeck/internal/config"
+	"github.com/alexbabintsev/udeck/internal/device"
+	"github.com/alexbabintsev/udeck/internal/protocol"
 )
 
 // YAML coordinates are [row, col]; HID index = row*5 + col.

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/macos"
+	"github.com/alexbabintsev/udeck/internal/config"
+	ig "github.com/alexbabintsev/udeck/internal/gestures"
+	"github.com/alexbabintsev/udeck/internal/macos"
 )
 
 // fakeAudio is an in-memory audio system: one default device per scope.

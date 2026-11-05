@@ -1,7 +1,7 @@
 #!/bin/sh
 # Demo start script for the `project` widget.
 #
-# ulanzi-deck runs it with the project directory as the working directory
+# udeck runs it with the project directory as the working directory
 # and exports PROJECT_DIR, PROJECT_SESSION, PROJECT_TERMINAL,
 # PROJECT_EDITOR, PROJECT_EDITOR_SUBDIR and PROJECT_EDITOR_TARGET.
 # The widget shows the project as running while the tmux session exists.

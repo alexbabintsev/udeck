@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
+	ig "github.com/alexbabintsev/udeck/internal/gestures"
 )
 
 // recordOSA captures osascript scripts and answers state queries with

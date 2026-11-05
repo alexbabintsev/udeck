@@ -6,7 +6,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/macos"
+	"github.com/alexbabintsev/udeck/internal/macos"
 )
 
 // windowSystem is the Accessibility API as window actions use it; tests

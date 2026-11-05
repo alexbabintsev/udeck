@@ -7,7 +7,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
+	"github.com/alexbabintsev/udeck/internal/icons"
 )
 
 // The shared look of the general-purpose widgets (volume, microphone,

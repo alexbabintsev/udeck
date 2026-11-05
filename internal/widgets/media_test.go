@@ -5,9 +5,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/macos"
+	"github.com/alexbabintsev/udeck/internal/config"
+	ig "github.com/alexbabintsev/udeck/internal/gestures"
+	"github.com/alexbabintsev/udeck/internal/macos"
 )
 
 type fakeMedia struct {

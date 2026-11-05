@@ -9,6 +9,11 @@ actual development milestones rather than formal releases.
 
 - Keep updating this section for user-visible changes that have not been
   grouped into a tagged release yet.
+- Renamed the project from `ulanzi-deck` to `udeck`: the binary, the Go
+  module, the config directory (`~/.config/udeck`), the log directory
+  (`~/Library/Logs/udeck`) and the `UDECK_DEBUG` variable. Move an
+  existing config to the new path or pass `--config`.
+- New `udeck --version`.
 - The `project` widget's fallback focus now attaches tmux in a new
   Ghostty tab, as it already did for iTerm and Terminal.
 - Opening the deck now waits out the temporary "not permitted" error

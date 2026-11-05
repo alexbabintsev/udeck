@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/icons"
+	"github.com/alexbabintsev/udeck/internal/icons"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
-	ig "github.com/alexbabintsev/ulanzi-deck-go/internal/gestures"
+	"github.com/alexbabintsev/udeck/internal/config"
+	ig "github.com/alexbabintsev/udeck/internal/gestures"
 )
 
 // recorder collects notify calls.

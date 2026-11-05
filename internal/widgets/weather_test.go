@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexbabintsev/ulanzi-deck-go/internal/config"
+	"github.com/alexbabintsev/udeck/internal/config"
 )
 
 // openMeteo fakes the geocoding and forecast endpoints.
