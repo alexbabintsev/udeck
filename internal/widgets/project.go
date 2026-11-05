@@ -480,6 +480,19 @@ end tell`, app, shellCmd),
 	end if
 end tell`, shellCmd, shellCmd),
 		}, true
+	case "ghostty":
+		return "/usr/bin/osascript", []string{
+			"-e", fmt.Sprintf(`tell application "Ghostty"
+	activate
+	set cfg to new surface configuration
+	set initial input of cfg to %q & linefeed
+	if (count of windows) = 0 then
+		new window with configuration cfg
+	else
+		new tab in front window with configuration cfg
+	end if
+end tell`, shellCmd),
+		}, true
 	default:
 		return "", nil, false
 	}

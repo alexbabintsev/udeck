@@ -1236,7 +1236,7 @@ Current demo behavior:
 - `stop`
   - kills the tmux session
 - `focus`
-  - opens a new tab in `iTerm` or `Terminal`
+  - opens a new tab in `Ghostty`, `iTerm` or `Terminal`
   - runs `tmux attach-session -t <session>`
 
 ## Path Resolution Rules

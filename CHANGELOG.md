@@ -9,6 +9,8 @@ actual development milestones rather than formal releases.
 
 - Keep updating this section for user-visible changes that have not been
   grouped into a tagged release yet.
+- The `project` widget's fallback focus now attaches tmux in a new
+  Ghostty tab, as it already did for iTerm and Terminal.
 - New widgets: `volume` (mute or up/down with hold-to-repeat; handles
   devices without a mute switch or with fixed volume), `microphone`
   (system-wide input mute), `audio_output` (switch the default output

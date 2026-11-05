@@ -88,13 +88,14 @@ func TestProjectAttachCommandQuotesPaths(t *testing.T) {
 	}
 }
 
-func TestTerminalAttachInvocationSupportsITermAndTerminal(t *testing.T) {
+func TestTerminalAttachInvocationSupportsKnownTerminals(t *testing.T) {
 	tests := []struct {
 		app        string
 		wantMarker string
 	}{
 		{app: "iTerm", wantMarker: "create tab with default profile"},
 		{app: "Terminal", wantMarker: `do script "tmux attach-session -t demo"`},
+		{app: "Ghostty", wantMarker: `set initial input of cfg to "tmux attach-session -t demo" & linefeed`},
 	}
 
 	for _, tt := range tests {
@@ -113,8 +114,8 @@ func TestTerminalAttachInvocationSupportsITermAndTerminal(t *testing.T) {
 		}
 	}
 
-	if _, _, ok := terminalAttachInvocation("Ghostty", "tmux attach-session -t demo"); ok {
-		t.Fatal("Ghostty should fall back to plain open")
+	if _, _, ok := terminalAttachInvocation("Alacritty", "tmux attach-session -t demo"); ok {
+		t.Fatal("unknown terminals should fall back to plain open")
 	}
 }
 
