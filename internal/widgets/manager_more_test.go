@@ -1,11 +1,6 @@
 package widgets
 
 import (
-	"context"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -30,8 +25,6 @@ func TestManagerGestureOptionsPerWidgetType(t *testing.T) {
 		return config.Button{RuntimeID: id, Widget: &config.Widget{Type: typ, On: on, HoldMS: 900}}
 	}
 	m, err := NewManager(&config.Config{Buttons: []config.Button{
-		btn("p-default", "project", nil),
-		btn("p-custom", "project", &config.WidgetOn{Tap: "start", Repeat: "focus"}),
 		btn("spp", "spotify_play_pause", nil),
 		btn("mem", "memory", nil),
 		{RuntimeID: "vol-up", Widget: &config.Widget{Type: "volume", Action: "up"}},
@@ -43,13 +36,6 @@ func TestManagerGestureOptionsPerWidgetType(t *testing.T) {
 	}
 	defer m.Close()
 
-	if o, ok := m.gestureOptions("p-default"); !ok || !o.HasTap || !o.HasDoubleTap || !o.HasHold {
-		t.Fatalf("default project options %+v", o)
-	}
-	o, _ := m.gestureOptions("p-custom")
-	if !o.HasTap || o.HasDoubleTap || o.HasHold || !o.HasRepeat || o.RepeatEvery != o.HoldDelay {
-		t.Fatalf("custom project options %+v", o)
-	}
 	if o, _ := m.gestureOptions("spp"); !o.HasHold || o.HoldDelay != 900*time.Millisecond {
 		t.Fatalf("spotify options %+v", o)
 	}
@@ -173,11 +159,6 @@ func TestManagerRejectsUnknownWidget(t *testing.T) {
 func TestManagerCreatesEveryWidgetType(t *testing.T) {
 	stubSpotifyFactory(t)
 	newOpenMeteo(t)
-	dir := t.TempDir()
-	writeTestScript(t, filepath.Join(dir, "start"), "true\n")
-	oldHas := projectHasSession
-	projectHasSession = func(string) (bool, error) { return false, nil }
-	defer func() { projectHasSession = oldHas }()
 	audio := newFakeAudio()
 	audio.set(macos.Output, macos.AudioState{Device: "Speakers", Volume: 0.5}, nil)
 	useFakeAudio(t, audio)
@@ -189,8 +170,6 @@ func TestManagerCreatesEveryWidgetType(t *testing.T) {
 		{RuntimeID: "c", Widget: &config.Widget{Type: "spotify_artwork"}},
 		{RuntimeID: "d", At: [2]int{3, 2}, Widget: &config.Widget{Type: "wide_dashboard"}},
 		{RuntimeID: "e", Widget: &config.Widget{Type: "weather_day", City: uniqueCity(t)}},
-		{RuntimeID: "f", Widget: &config.Widget{Type: "site", URL: "http://127.0.0.1:1"}},
-		{RuntimeID: "h", Widget: &config.Widget{Type: "project", ProjectDir: dir}},
 		{RuntimeID: "i", Widget: &config.Widget{Type: "volume"}},
 		{RuntimeID: "j", Widget: &config.Widget{Type: "microphone"}},
 		{RuntimeID: "k", Widget: &config.Widget{Type: "audio_output"}},
@@ -221,84 +200,5 @@ func TestManagerCreatesEveryWidgetType(t *testing.T) {
 	m.SetContext(Context{FolderDepth: 1})
 	if err := m.Close(); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestProjectWidgetHelpersAndFallbacks(t *testing.T) {
-	if projectSessionName("/x/My Proj.v2", "") != "My_Proj_v2" || projectSessionName("/x", " custom ") != "custom" {
-		t.Fatalf("projectSessionName = %q", projectSessionName("/x/My Proj.v2", ""))
-	}
-	if projectEditorSubdir("www/", "") != "www" || projectEditorSubdir("www", "/app/") != "app" {
-		t.Fatal("projectEditorSubdir")
-	}
-	if projectHoldDuration(0) != defaultProjectHoldMS*time.Millisecond || projectHoldDuration(5) != 5*time.Millisecond {
-		t.Fatal("projectHoldDuration")
-	}
-	if resolveProjectScriptPath("/p", "", "start") != "/p/start" || resolveProjectScriptPath("/p", "/abs/s", "start") != "/abs/s" || resolveProjectScriptPath("/p", "bin/s", "start") != "/p/bin/s" {
-		t.Fatal("resolveProjectScriptPath")
-	}
-	if home, _ := os.UserHomeDir(); expandWidgetPath("~/x") != filepath.Join(home, "x") || expandWidgetPath("/y") != "/y" {
-		t.Fatal("expandWidgetPath")
-	}
-	if loadWidgetSeedIcon("/nonexistent.png") != nil {
-		t.Fatal("missing seed icon must be nil")
-	}
-	bad := filepath.Join(t.TempDir(), "bad.png")
-	os.WriteFile(bad, []byte("x"), 0o600)
-	if loadWidgetSeedIcon(bad) != nil {
-		t.Fatal("broken seed icon must be nil")
-	}
-	if projectTitle("", "Label", "/p/dir") != "Label" || projectTitle(" T ", "L", "/p") != "T" || projectTitle("", "", "/p/dir") != "dir" {
-		t.Fatal("projectTitle")
-	}
-}
-
-func TestProjectWidgetFocusFallbackAndTmux(t *testing.T) {
-	var mu sync.Mutex
-	var calls []string
-	run := func(ctx context.Context, name string, args ...string) *exec.Cmd {
-		mu.Lock()
-		calls = append(calls, name+" "+strings.Join(args, " "))
-		mu.Unlock()
-		if strings.Contains(strings.Join(args, " "), "has-session") {
-			return exec.CommandContext(ctx, "false")
-		}
-		return exec.CommandContext(ctx, "true")
-	}
-	w := &ProjectWidget{widgetBase: testBase(t, nil), projectDir: "/p", session: "s", terminal: "Ghostty", run: run}
-	if err := w.focusFallback(); err != nil {
-		t.Fatal(err)
-	}
-	w.terminal = "iTerm"
-	if err := w.focusFallback(); err != nil {
-		t.Fatal(err)
-	}
-	if ok, err := tmuxHasSession(run, "s"); ok || err != nil {
-		t.Fatalf("has-session false must mean not running: %v %v", ok, err)
-	}
-	if ok, _ := tmuxHasSession(run, " "); ok {
-		t.Fatal("blank session")
-	}
-	if err := tmuxKillSession(run, "s"); err != nil || tmuxKillSession(run, "") != nil {
-		t.Fatal("kill-session")
-	}
-	failing := func(ctx context.Context, name string, args ...string) *exec.Cmd {
-		return exec.CommandContext(ctx, "sh", "-c", "echo boom >&2; exit 1")
-	}
-	if err := tmuxKillSession(failing, "s"); err == nil || !strings.Contains(err.Error(), "boom") {
-		t.Fatalf("expected stderr in error, got %v", err)
-	}
-	w.run = failing
-	if err := w.focusFallback(); err == nil {
-		t.Fatal("expected focus fallback error")
-	}
-	if err := w.runAction(projectActionNone); err != nil {
-		t.Fatal(err)
-	}
-	mu.Lock()
-	n := len(calls)
-	mu.Unlock()
-	if n < 4 {
-		t.Fatalf("calls = %v", calls)
 	}
 }

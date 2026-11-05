@@ -32,7 +32,6 @@ it with whatever automation you already run.
 ## Requirements
 
 - macOS (the HID, key-event and power code is macOS-specific)
-- Optional: `tmux` for `project` widgets
 
 ## Install
 
@@ -92,7 +91,6 @@ go build -o udeck ./cmd/udeck
     restore, natively via Accessibility
   - `page_next`
   - `page_prev`
-  - `close_all_projects`
 - Widgets, each independent and in one shared style:
   - `clock`: local time or a world clock for any time zone
   - `timer`, `stopwatch`, `pomodoro`: tap to start/pause, hold to reset,
@@ -106,7 +104,6 @@ go build -o udeck ./cmd/udeck
     or coin (Yahoo, Binance; no API key)
   - `weather_day`, `wide_dashboard`: forecast and clock (Open-Meteo)
   - `spotify_play_pause`, `spotify_next`, `spotify_artwork`
-  - `freqtrade`, `site`, `project`
 - Config hot reload while `run` is active
 - Runtime keepalive to keep the deck out of screensaver
 - Auto-recovery on common HID read/write/open failures
@@ -161,9 +158,9 @@ cp -R "$(brew --prefix)/share/udeck/examples/" ~/.config/udeck/
 mv ~/.config/udeck/test-config.yaml ~/.config/udeck/config.yaml
 ```
 
-Relative icon and project paths are resolved against the config file's
-directory, so `test-icons` and `project-demo` stay next to it. From a
-source checkout, copy the same files from `examples/`.
+Relative icon paths are resolved against the config file's directory,
+so `test-icons` stays next to it. From a source checkout, copy the same
+files from `examples/`.
 
 If something goes wrong on the device (frozen display, garbled output),
 **unplug the USB cable** to power-cycle. No persistent damage is
@@ -185,7 +182,6 @@ The demo config includes:
 - `spotify_*` widgets
 - `wide_dashboard` widget for the double-wide `3_2` slot
 - `weather_day` widgets
-- `project` widget with demo `start/stop/focus` scripts
 - Lucide icon-pack examples via `icon: lucide/...`
 - gesture test buttons
 - Hammerspoon integration examples
@@ -203,12 +199,6 @@ Current config surface:
 - `device.icon_margins`: optional global static-icon insets
   - `top`, `right`, `bottom`, `left`: non-negative integers
   - useful when the D200 distorts pixels near the physical screen edges
-- `widgets.project`: optional global defaults for project widgets
-  - `terminal`: app name used by default `focus` behavior and passed to
-    scripts as `PROJECT_TERMINAL`
-  - `editor`: app name passed to scripts as `PROJECT_EDITOR`
-  - `editor_subdir`: optional subdirectory opened by the editor by
-    default, for example `www`
 - `pages[]`
   - `name`: optional human-readable page name
   - `buttons[]`
@@ -245,12 +235,7 @@ Current config surface:
         - `symbol`: what to follow, e.g. `AAPL`, `^GSPC`, `BTCUSDT`
         - `source`: `yahoo` (default) or `binance`
       - `type: memory`
-        - `apps`: optional app list restarted on press
         - `poll_ms`: optional polling override
-      - `type: freqtrade`
-        - `dsns`: newline-separated `user:password@http://host:port`
-        - `title`: optional short title shown at the top
-        - `poll_ms`: optional polling override, minimum `3000`
       - `type: spotify_play_pause`
         - tap toggles play/pause
         - hold skips to next track
@@ -267,25 +252,6 @@ Current config surface:
       - `type: weather_day`
         - `city`: required
         - `day_index`: `0` (today) to `13`
-      - `type: site`
-        - `url`: site serving `/api/metrics`; `token`: optional bearer token
-        - `title`: optional, defaults to the site name
-      - `type: project`
-        - `project_dir`: project root; relative paths are resolved relative
-          to the config file
-        - `session`: optional tmux session override; defaults to the project
-          directory name
-        - `editor_subdir`: optional per-project override for the editor
-          target subdirectory
-        - `on`: optional gesture mapping for project widgets
-          - `tap`: `start | stop | focus`
-          - `double_tap`: `start | stop | focus`
-          - `hold`: `start | stop | focus`
-          - `repeat`: `start | stop | focus`
-        - `hold_ms`: optional stop threshold override
-        - `scripts.start`: optional override for the start script path
-        - `scripts.stop`: optional override for the stop script path
-        - `scripts.focus`: optional override for the focus script path
     - `on`
       - `tap`
       - `double_tap`
@@ -305,8 +271,6 @@ Current config surface:
       - `type: http` with `url: "http://127.0.0.1:..."` to call a local or remote endpoint
       - `type: page_next` to switch to the next top-level page
       - `type: page_prev` to switch to the previous top-level page
-      - `type: close_all_projects` to run `stop` for every configured
-        `widget.type: project`
 - `smallview`: accepted but currently reserved for future work
 
 Example:
@@ -326,12 +290,6 @@ device:
     show_title: true
     size: 10
     weight: 80
-
-widgets:
-  project:
-    terminal: "Ghostty"
-    editor: "PhpStorm"
-    editor_subdir: "www"
 
 pages:
   - name: "Main"
@@ -365,18 +323,6 @@ pages:
       - at: [0, 2]
         widget:
           type: spotify_artwork
-
-      - at: [0, 3]
-        label: "Project"
-        icon: test-icons/work-folder.png
-        widget:
-          type: project
-          project_dir: project-demo
-          on:
-            tap: start
-            double_tap: focus
-            hold: stop
-          hold_ms: 800
 
   - name: "Shortcuts"
     buttons:
@@ -467,30 +413,8 @@ Notes:
 - Widget renders skip identical frames, and visible widget updates use a
   single-slot partial refresh path to reduce CPU use and avoid full-page
   flicker.
-- Project widgets detect status from a tmux session and run
-  `start` / `stop` / `focus` scripts from the configured project
-  directory. By default those paths are `<project_dir>/start`,
-  `<project_dir>/stop`, and `<project_dir>/focus`.
-- Project widgets can remap gestures explicitly with `widget.on`, for
-  example `tap: start`, `double_tap: focus`, `hold: stop`.
-- Project widgets inherit optional global defaults from `widgets.project`
-  and pass them into scripts as `PROJECT_TERMINAL` and
-  `PROJECT_EDITOR`.
-- Project widgets also compute `PROJECT_EDITOR_TARGET`, which resolves to
-  either `<project_dir>` or `<project_dir>/<editor_subdir>` depending on
-  global and per-widget config.
-- The built-in fallback `focus` behavior tries to open a new terminal tab
-  and run `tmux attach-session -t <session>` for `iTerm` and `Terminal`.
-  Other terminals currently fall back to opening the project directory.
-- The demo `start` script is idempotent: if the tmux session already
-  exists it does nothing. Otherwise it creates a two-pane `main` window;
-  replace its commands with your own.
-- Project scripts are invoked through `/bin/sh`, so they do not need the
-  executable bit as long as the script contents are valid shell.
 - Spotify widgets use one internal shared service inside the
   `udeck` process; no separate `spotify-daemon` is required.
-- Freqtrade widget polls configured REST APIs directly; no separate
-  freqtrade daemon or local bridge is required.
 - Widget instances are created when you first open the page that uses
   them and then stay cached until config reload or shutdown.
 - Spotify uses one shared runtime that is prewarmed when the config
@@ -519,11 +443,11 @@ Notes:
 
 ## Security
 
-- The config is code: `shell` actions and `project` scripts run with
-  your user's permissions, and `key` actions can type into any app once
+- The config is code: `shell` actions run with your user's
+  permissions, and `key` actions can type into any app once
   Accessibility access is granted. Only run configs you wrote or
   reviewed, and keep the file writable only by you — it is hot-reloaded.
-- Keep secrets (`site` tokens, freqtrade `dsns`) out of git. The
+- Keep secrets out of git. The
   repository ignores `/config.yaml`, and the default config lives
   outside the checkout in `~/.config/udeck/config.yaml`.
 - Use `https://` for endpoints that receive credentials. Widgets log a

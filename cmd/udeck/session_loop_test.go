@@ -48,7 +48,7 @@ pages:
               - label: B
                 action: {type: shell, cmd: "echo b"}
       - at: [0, 2]
-        widget: {type: memory}
+        widget: {type: stopwatch}
   - buttons:
       - at: [0, 0]
         label: Second
@@ -57,7 +57,7 @@ pages:
 const (
 	idxFolder = 0
 	idxToggle = 1
-	idxMemory = 2
+	idxWidget = 2
 	idxRun    = 5
 	idxNext   = 10
 	idxBack   = 13
@@ -230,7 +230,7 @@ func TestToggleRedrawsOnlyThatKey(t *testing.T) {
 
 func TestWidgetTapSendsPartialUpdateForThatWidget(t *testing.T) {
 	s, dev := newTestSession(t, loopConfig)
-	runReads(t, s, dev, append(tap(idxMemory),
+	runReads(t, s, dev, append(tap(idxWidget),
 		readStep{before: func() { time.Sleep(50 * time.Millisecond) }})...)
 	partial := dev.transfers(protocol.CmdPartiallyUpdateButtons)
 	if len(partial) == 0 {

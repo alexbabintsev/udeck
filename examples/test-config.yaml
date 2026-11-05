@@ -13,12 +13,6 @@ device:
     size: 7
     weight: 90
 
-widgets:
-  project:
-    terminal: "iTerm"
-    editor: "PhpStorm"
-    editor_subdir: "www"
-
 pages:
   - name: "Folders"
     buttons:
@@ -306,10 +300,6 @@ pages:
         label: "Memory"
         widget:
           type: memory
-          apps:
-            - "Google Chrome"
-            - "Slack"
-            - "Telegram"
 
       - at: [1, 2]
         label: "Notes"
@@ -358,23 +348,6 @@ pages:
           tap:
             type: key
             key: "cmd shift m"
-
-      - at: [2, 3]
-        label: "Projects"
-        icon: test-icons/work-folder.png
-        folder:
-          buttons:
-            - at: [0, 0]
-              label: "Demo"
-              icon: test-icons/work-folder.png
-              widget:
-                type: project
-                project_dir: project-demo
-                hold_ms: 500
-                on:
-                  tap: start
-                  double_tap: focus
-                  hold: stop
 
   - name: "Shortcuts"
     buttons:
@@ -443,26 +416,6 @@ pages:
         label: "Memory"
         widget:
           type: memory
-          apps:
-            - "Google Chrome"
-            - "Slack"
-
-      - at: [1, 3]
-        label: "Projects"
-        icon: test-icons/work-folder.png
-        folder:
-          buttons:
-            - at: [0, 0]
-              label: "Demo"
-              icon: test-icons/work-folder.png
-              widget:
-                type: project
-                project_dir: project-demo
-                hold_ms: 500
-                on:
-                  tap: start
-                  double_tap: focus
-                  hold: stop
 
       - at: [1, 4]
         label: "Notes"

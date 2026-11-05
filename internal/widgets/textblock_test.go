@@ -74,8 +74,6 @@ func TestTextDrawingHelpers(t *testing.T) {
 	drawClockText(img, "noon", image.Rect(0, 0, 300, 120), color.White, color.Gray{0x77}, 100, 0)
 	drawDashboardCenteredText(img, "42", image.Rect(0, 0, 100, 100), color.White, 60)
 	drawDashboardLeftText(img, "", image.Rect(0, 0, 100, 100), color.White, 60)
-	drawFreqtradeText(img, "+1.23%", image.Rect(0, 0, 100, 40), color.White, 30)
-	drawFreqtradeText(img, "", image.Rect(0, 0, 100, 40), color.White, 30)
 	if trackedTextWidth(nil, "", 2) != 0 {
 		t.Fatal("empty text width")
 	}

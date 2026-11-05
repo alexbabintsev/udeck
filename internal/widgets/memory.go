@@ -1,13 +1,10 @@
 package widgets
 
 import (
-	"context"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
-	"os/exec"
-	"strings"
 	"sync"
 	"time"
 
@@ -24,23 +21,16 @@ const (
 	memoryWidgetW       = 196
 	memoryWidgetH       = 196
 	defaultMemoryPollMS = 2000
-	appCommandTimeout   = 10 * time.Second
 )
-
-// execCommandContext runs helper binaries; tests replace it.
-var execCommandContext = exec.CommandContext
 
 type MemoryWidget struct {
 	*widgetBase
-	apps []string
 	poll time.Duration
-	// restart and readPercent are seams for tests.
-	restart     func(app string) error
+	// readPercent is a seam for tests.
 	readPercent func() (int, error)
 
 	mu      sync.RWMutex
 	percent int
-	busy    bool
 }
 
 func NewMemoryWidget(id string, cfg *config.Widget, notify func(string)) (*MemoryWidget, error) {
@@ -50,9 +40,7 @@ func NewMemoryWidget(id string, cfg *config.Widget, notify func(string)) (*Memor
 	}
 	w := &MemoryWidget{
 		widgetBase:  base,
-		apps:        append([]string(nil), cfg.Apps...),
 		poll:        pollDuration(cfg.PollMS),
-		restart:     restartApp,
 		readPercent: readMemoryPercent,
 	}
 	if percent, err := w.readPercent(); err == nil {
@@ -68,31 +56,7 @@ func NewMemoryWidget(id string, cfg *config.Widget, notify func(string)) (*Memor
 
 func (w *MemoryWidget) resume() { _, _ = w.updateMemory() }
 
-func (w *MemoryWidget) HandleGesture(kind ig.Kind) {
-	if kind != ig.Tap {
-		return
-	}
-	w.mu.Lock()
-	if w.busy || w.isClosed() {
-		w.mu.Unlock()
-		return
-	}
-	w.busy = true
-	w.mu.Unlock()
-	_, _ = w.render()
-
-	go func() {
-		for _, app := range w.apps {
-			_ = w.restart(app)
-		}
-		w.mu.Lock()
-		w.busy = false
-		w.mu.Unlock()
-		if _, err := w.updateMemory(); err != nil {
-			_, _ = w.render()
-		}
-	}()
-}
+func (w *MemoryWidget) HandleGesture(ig.Kind) {}
 
 // updateMemory re-reads usage and publishes a new icon when it changed.
 func (w *MemoryWidget) updateMemory() (bool, error) {
@@ -101,7 +65,7 @@ func (w *MemoryWidget) updateMemory() (bool, error) {
 		return false, err
 	}
 	w.mu.Lock()
-	if w.percent == percent && !w.busy {
+	if w.percent == percent {
 		w.mu.Unlock()
 		return false, nil
 	}
@@ -121,15 +85,10 @@ func (w *MemoryWidget) render() (bool, error) {
 func (w *MemoryWidget) renderImage() *image.RGBA {
 	w.mu.RLock()
 	percent := w.percent
-	busy := w.busy
 	w.mu.RUnlock()
 
 	img := newCard()
 	col := memoryColor(percent)
-	if busy {
-		drawGaugeCard(img, clampPercent(percent)/100, col, "", nil, "lucide/refresh-cw", col)
-		return img
-	}
 	drawGaugeCard(img, clampPercent(percent)/100, col, fmt.Sprintf("%d", percent), styleText, "lucide/memory-stick", styleDim)
 	return img
 }
@@ -232,64 +191,4 @@ func (s vmStats) usedPercent() (int, error) {
 	trulyFree := (s.free + s.inactive + s.speculative + s.purgeable) * s.pageSize
 	used := max(s.total-trulyFree, 0)
 	return int((used*100 + s.total/2) / s.total), nil
-}
-
-func execOut(cmd string, args []string, timeout time.Duration) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	out, err := execCommandContext(ctx, cmd, args...).Output()
-	if err != nil {
-		return "", err
-	}
-	return string(out), nil
-}
-
-func restartApp(appName string) error {
-	if appName == "" {
-		return nil
-	}
-	running, err := isAppRunning(appName)
-	if err != nil || !running {
-		return err
-	}
-	if err := osa(`tell application "` + escapeAS(appName) + `" to quit`); err != nil {
-		return err
-	}
-	if err := waitUntilQuit(appName, 15*time.Second); err != nil {
-		return err
-	}
-	_, err = execOut("/usr/bin/open", []string{"-g", "-a", appName}, appCommandTimeout)
-	return err
-}
-
-func waitUntilQuit(appName string, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		running, err := isAppRunning(appName)
-		if err != nil {
-			return err
-		}
-		if !running {
-			return nil
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	return fmt.Errorf("timeout waiting for %s to quit", appName)
-}
-
-func isAppRunning(appName string) (bool, error) {
-	out, err := execOut("/usr/bin/osascript", []string{"-e", `application "` + escapeAS(appName) + `" is running`}, appCommandTimeout)
-	if err != nil {
-		return false, err
-	}
-	return strings.TrimSpace(out) == "true", nil
-}
-
-func osa(script string) error {
-	_, err := execOut("/usr/bin/osascript", []string{"-e", script}, appCommandTimeout)
-	return err
-}
-
-func escapeAS(s string) string {
-	return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s)
 }

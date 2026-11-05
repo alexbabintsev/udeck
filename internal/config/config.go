@@ -106,7 +106,6 @@ type Folder struct {
 // Widget defines a dynamic button that manages its own icon and press logic.
 type Widget struct {
 	Type         string        `yaml:"type"`
-	Apps         []string      `yaml:"apps,omitempty"`
 	PollMS       int           `yaml:"poll_ms,omitempty"`
 	Title        string        `yaml:"title,omitempty"`
 	City         string        `yaml:"city,omitempty"`
@@ -232,7 +231,7 @@ func (b Button) HIDIndex() int {
 // Action is the handler fired when a gesture resolves.
 type Action struct {
 	// Type is "shell", "key", "http", "window", "page_next", "page_prev",
-	// or "close_all_projects".
+	// or a personal-build action.
 	Type string `yaml:"type"`
 
 	// Cmd is the shell command run for type=shell.
@@ -516,10 +515,7 @@ var widgetMinPollMS = map[string]int{
 	"spotify_next":       1000,
 	"spotify_artwork":    1000,
 	"wide_dashboard":     1000,
-	"freqtrade":          3000,
-	"site":               30000,
 	"weather_day":        1000,
-	"project":            1000,
 	"volume":             200,
 	"microphone":         200,
 	"audio_output":       500,
@@ -541,23 +537,12 @@ func validateWidget(w *Widget, at [2]int, path string) error {
 	}
 	minPoll, known := widgetMinPollMS[w.Type]
 	if !known {
-		return fmt.Errorf("%s.type %q unknown (clock|timer|stopwatch|pomodoro|cpu|disk|network|battery|ticker|volume|microphone|audio_output|media|memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|weather_day|freqtrade|site|project)", path, w.Type)
+		return fmt.Errorf("%s.type %q unknown (clock|timer|stopwatch|pomodoro|cpu|disk|network|battery|ticker|volume|microphone|audio_output|media|memory|spotify_play_pause|spotify_next|spotify_artwork|wide_dashboard|weather_day)", path, w.Type)
 	}
 	switch w.Type {
 	case "wide_dashboard":
 		if at != [2]int{3, 2} {
 			return fmt.Errorf("%s.type %q requires wide slot at [2, 3] in YAML", path, w.Type)
-		}
-	case "freqtrade":
-		if strings.TrimSpace(w.DSNs) == "" {
-			return fmt.Errorf("%s.dsns is empty", path)
-		}
-	case "site":
-		if strings.TrimSpace(w.URL) == "" {
-			return fmt.Errorf("%s.url is empty", path)
-		}
-		if !strings.HasPrefix(w.URL, "http://") && !strings.HasPrefix(w.URL, "https://") {
-			return fmt.Errorf("%s.url must start with http:// or https://", path)
 		}
 	case "weather_day":
 		if strings.TrimSpace(w.City) == "" {
@@ -614,16 +599,9 @@ func validateWidget(w *Widget, at [2]int, path string) error {
 		default:
 			return fmt.Errorf("%s.action %q unknown (play_pause|next|previous)", path, w.Action)
 		}
-	case "project":
-		if strings.TrimSpace(w.ProjectDir) == "" {
-			return fmt.Errorf("%s.project_dir is empty", path)
-		}
-		if w.HoldMS != 0 && w.HoldMS < 100 {
-			return fmt.Errorf("%s.hold_ms too small: %d", path, w.HoldMS)
-		}
-		if err := validateProjectWidgetOn(w.On, path+".on"); err != nil {
-			return err
-		}
+	}
+	if err := validatePersonalWidget(w, path); err != nil {
+		return err
 	}
 	if w.PollMS != 0 && w.PollMS < minPoll {
 		return fmt.Errorf("%s.poll_ms too small: %d", path, w.PollMS)
@@ -737,9 +715,11 @@ func validateAction(a *Action, path string) error {
 		if !slices.Contains(WindowPositions, a.To) {
 			return fmt.Errorf("%s.to %q unknown (%s)", path, a.To, strings.Join(WindowPositions, "|"))
 		}
-	case "page_next", "page_prev", "close_all_projects":
+	case "page_next", "page_prev":
 	default:
-		return fmt.Errorf("%s.type %q unknown (shell|key|http|window|page_next|page_prev|close_all_projects)", path, a.Type)
+		if !personalAction(a.Type) {
+			return fmt.Errorf("%s.type %q unknown (shell|key|http|window|page_next|page_prev)", path, a.Type)
+		}
 	}
 	return nil
 }
@@ -806,50 +786,6 @@ func validateGestureBinding(g *GestureBinding, path string) (bool, error) {
 		return false, err
 	}
 	return false, nil
-}
-
-func validateProjectWidgetOn(on *WidgetOn, path string) error {
-	if on == nil {
-		return nil
-	}
-	count := 0
-	if on.Tap != "" {
-		count++
-		if err := validateProjectWidgetActionName(on.Tap, path+".tap"); err != nil {
-			return err
-		}
-	}
-	if on.DoubleTap != "" {
-		count++
-		if err := validateProjectWidgetActionName(on.DoubleTap, path+".double_tap"); err != nil {
-			return err
-		}
-	}
-	if on.Hold != "" {
-		count++
-		if err := validateProjectWidgetActionName(on.Hold, path+".hold"); err != nil {
-			return err
-		}
-	}
-	if on.Repeat != "" {
-		count++
-		if err := validateProjectWidgetActionName(on.Repeat, path+".repeat"); err != nil {
-			return err
-		}
-	}
-	if count == 0 {
-		return fmt.Errorf("%s has no gestures", path)
-	}
-	return nil
-}
-
-func validateProjectWidgetActionName(value string, path string) error {
-	switch strings.TrimSpace(value) {
-	case "start", "stop", "focus":
-		return nil
-	default:
-		return fmt.Errorf("%s %q unknown (start|stop|focus)", path, value)
-	}
 }
 
 func resolvePageButtonPaths(pages []Page, baseDir string) {

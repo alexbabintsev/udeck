@@ -511,7 +511,6 @@ func TestValidateAcceptsRuntimeActions(t *testing.T) {
 				On: &Handlers{
 					Tap:       &GestureBinding{Type: "page_next"},
 					DoubleTap: &GestureBinding{Type: "page_prev"},
-					Hold:      &GestureBinding{Type: "close_all_projects"},
 				},
 			},
 		},
@@ -598,112 +597,6 @@ func TestValidateRejectsWideDashboardOutsideWideSlot(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), `requires wide slot`) {
 		t.Fatalf("expected wide slot error, got %v", err)
-	}
-}
-
-func TestValidateAcceptsFreqtradeWidget(t *testing.T) {
-	cfg := &Config{
-		Buttons: []Button{
-			{
-				At: [2]int{0, 0},
-				Widget: &Widget{
-					Type:   "freqtrade",
-					DSNs:   "trader:secret@http://127.0.0.1:9910",
-					Title:  "BTC",
-					PollMS: 5000,
-				},
-			},
-		},
-	}
-
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("expected freqtrade widget to validate, got %v", err)
-	}
-}
-
-func TestValidateRejectsFreqtradeWidgetWithoutDSNs(t *testing.T) {
-	cfg := &Config{
-		Buttons: []Button{
-			{
-				At:     [2]int{0, 0},
-				Widget: &Widget{Type: "freqtrade", PollMS: 5000},
-			},
-		},
-	}
-
-	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected missing dsns validation error")
-	}
-	if !strings.Contains(err.Error(), "widget.dsns is empty") {
-		t.Fatalf("expected missing dsns error, got %v", err)
-	}
-}
-
-func TestValidateAcceptsProjectWidget(t *testing.T) {
-	cfg := &Config{
-		Buttons: []Button{
-			{
-				At: [2]int{0, 0},
-				Widget: &Widget{
-					Type:       "project",
-					ProjectDir: "/tmp/demo-project",
-					On: &WidgetOn{
-						Tap:       "start",
-						DoubleTap: "focus",
-						Hold:      "stop",
-					},
-				},
-			},
-		},
-	}
-
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("expected project widget to validate, got %v", err)
-	}
-}
-
-func TestValidateRejectsUnknownProjectWidgetGestureAction(t *testing.T) {
-	cfg := &Config{
-		Buttons: []Button{
-			{
-				At: [2]int{0, 0},
-				Widget: &Widget{
-					Type:       "project",
-					ProjectDir: "/tmp/demo-project",
-					On: &WidgetOn{
-						Tap: "launch",
-					},
-				},
-			},
-		},
-	}
-
-	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected invalid project widget gesture action error")
-	}
-	if !strings.Contains(err.Error(), `widget.on.tap "launch" unknown`) {
-		t.Fatalf("expected invalid project widget gesture action error, got %v", err)
-	}
-}
-
-func TestValidateRejectsProjectWidgetWithoutDir(t *testing.T) {
-	cfg := &Config{
-		Buttons: []Button{
-			{
-				At:     [2]int{0, 0},
-				Widget: &Widget{Type: "project"},
-			},
-		},
-	}
-
-	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected missing project_dir validation error")
-	}
-	if !strings.Contains(err.Error(), "widget.project_dir is empty") {
-		t.Fatalf("expected missing project_dir error, got %v", err)
 	}
 }
 

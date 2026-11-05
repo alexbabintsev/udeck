@@ -1,7 +1,12 @@
+//go:build personal
+
 package widgets
 
 import (
+	"log"
 	"net/http"
+	"net/netip"
+	"net/url"
 	"strings"
 	"time"
 
@@ -52,4 +57,31 @@ func sitePoll(ms int) time.Duration {
 		return siteMinPoll
 	}
 	return d
+}
+
+// sendsCredentialsInClear reports whether credentials sent to rawURL
+// cross the network unencrypted: plain http to a host that is neither
+// loopback nor a private (LAN/VPN) address.
+func sendsCredentialsInClear(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil || !strings.EqualFold(u.Scheme, "http") {
+		return false
+	}
+	host := u.Hostname()
+	if strings.EqualFold(host, "localhost") {
+		return false
+	}
+	if addr, err := netip.ParseAddr(host); err == nil {
+		return !addr.IsLoopback() && !addr.IsPrivate()
+	}
+	return true // a host name: assume it is reached over the internet
+}
+
+// warnClearCredentials logs once per widget creation when its credentials
+// would travel over plain HTTP.
+func warnClearCredentials(widget, rawURL string) {
+	if sendsCredentialsInClear(rawURL) {
+		u, _ := url.Parse(rawURL)
+		log.Printf("warning: %s widget sends credentials over plain http to %s; use https", widget, u.Host)
+	}
 }

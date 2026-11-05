@@ -107,3 +107,41 @@ func pageNavIconID(btn config.Button) string {
 	}
 	return "lucide/arrow-right"
 }
+
+func fillRoundRect(img *image.RGBA, rect image.Rectangle, radius int, clr color.Color) {
+	for y := rect.Min.Y; y < rect.Max.Y; y++ {
+		for x := rect.Min.X; x < rect.Max.X; x++ {
+			if pointInRoundedRect(x, y, rect, radius) {
+				img.Set(x, y, clr)
+			}
+		}
+	}
+}
+
+func pointInRoundedRect(x, y int, rect image.Rectangle, radius int) bool {
+	if radius <= 0 {
+		return true
+	}
+	left, top, right, bottom := rect.Min.X, rect.Min.Y, rect.Max.X-1, rect.Max.Y-1
+	if x >= left+radius && x <= right-radius {
+		return true
+	}
+	if y >= top+radius && y <= bottom-radius {
+		return true
+	}
+
+	corners := [][2]int{
+		{left + radius, top + radius},
+		{right - radius, top + radius},
+		{left + radius, bottom - radius},
+		{right - radius, bottom - radius},
+	}
+	for _, c := range corners {
+		dx := x - c[0]
+		dy := y - c[1]
+		if dx*dx+dy*dy <= radius*radius {
+			return true
+		}
+	}
+	return false
+}

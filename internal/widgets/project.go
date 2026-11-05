@@ -1,3 +1,5 @@
+//go:build personal
+
 package widgets
 
 import (
@@ -25,7 +27,6 @@ import (
 
 const (
 	defaultProjectPollMS = 3000
-	defaultProjectHoldMS = 700
 	projectScriptTimeout = 20 * time.Second
 )
 
@@ -359,13 +360,6 @@ func projectGestureBindings(wcfg *config.Widget) map[ig.Kind]projectAction {
 	}
 }
 
-func projectHoldDuration(ms int) time.Duration {
-	if ms <= 0 {
-		ms = defaultProjectHoldMS
-	}
-	return time.Duration(ms) * time.Millisecond
-}
-
 func resolveProjectScriptPath(projectDir, override, defaultName string) string {
 	raw := strings.TrimSpace(override)
 	switch {
@@ -376,15 +370,6 @@ func resolveProjectScriptPath(projectDir, override, defaultName string) string {
 	default:
 		return filepath.Join(projectDir, raw)
 	}
-}
-
-func expandWidgetPath(path string) string {
-	if strings.HasPrefix(path, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
-			return filepath.Join(home, path[2:])
-		}
-	}
-	return path
 }
 
 func loadWidgetSeedIcon(path string) image.Image {

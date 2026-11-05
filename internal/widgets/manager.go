@@ -1,7 +1,6 @@
 package widgets
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -227,51 +226,6 @@ func (m *Manager) HandleEvent(id string, pressed bool, now time.Time) bool {
 	return true
 }
 
-// CloseAllProjects stops every configured project, including ones on
-// pages that were never shown. The stop scripts run without holding the
-// manager lock: they can take seconds each, and the event loop needs the
-// lock for every page switch and widget update.
-func (m *Manager) CloseAllProjects() error {
-	var (
-		errs     []error
-		projects []*ProjectWidget
-	)
-	m.mu.Lock()
-	for id, def := range m.defs {
-		if def.kind != "project" {
-			continue
-		}
-		item, ok := m.items[id]
-		if !ok {
-			created, err := m.newWidgetLocked(id)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("%s: %w", id, err))
-				continue
-			}
-			// Off screen: no polling until its page is shown.
-			if p, ok := created.(pausable); ok {
-				p.setActive(false)
-			}
-			m.items[id] = created
-			item = created
-		}
-		project, ok := item.(*ProjectWidget)
-		if !ok {
-			errs = append(errs, fmt.Errorf("%s: project widget type assertion failed", id))
-			continue
-		}
-		projects = append(projects, project)
-	}
-	m.mu.Unlock()
-
-	for _, project := range projects {
-		if err := project.stopNow(); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", project.id, err))
-		}
-	}
-	return errors.Join(errs...)
-}
-
 func (m *Manager) Tick(buttons []config.Button, now time.Time) bool {
 	var bindings []ig.Binding
 	for _, btn := range buttons {
@@ -326,8 +280,6 @@ func (m *Manager) newWidgetLocked(id string) (Widget, error) {
 	switch def.kind {
 	case "memory":
 		item, err = NewMemoryWidget(id, def.btn.Widget, m.notify)
-	case "freqtrade":
-		item, err = NewFreqtradeWidget(id, def.btn.Widget, m.notify)
 	case "wide_dashboard":
 		item, err = NewWideDashboardWidget(id, def.btn.Widget, m.notify)
 	case "clock":
@@ -364,12 +316,8 @@ func (m *Manager) newWidgetLocked(id string) (Widget, error) {
 		}
 	case "weather_day":
 		item, err = NewWeatherDayWidget(id, def.btn.Widget, m.notify)
-	case "site":
-		item, err = NewSiteWidget(id, def.btn.Widget, m.notify)
-	case "project":
-		item, err = NewProjectWidget(id, def.btn, m.settings.Project, m.notify)
 	default:
-		return nil, fmt.Errorf("widget %q type %q unsupported", id, def.kind)
+		item, err = m.newPersonalWidget(id, def)
 	}
 
 	if err != nil {
@@ -416,45 +364,30 @@ func (m *Manager) gestureOptions(id string) (ig.Options, bool) {
 		return ig.Options{}, false
 	}
 	switch def.kind {
-	case "project":
-		opts := ig.Options{HoldDelay: projectHoldDuration(def.btn.Widget.HoldMS)}
-		on := def.btn.Widget.On
-		if on == nil {
-			opts.HasTap = true
-			opts.HasDoubleTap = true
-			opts.HasHold = true
-			return opts, true
-		}
-		opts.HasTap = on.Tap != ""
-		opts.HasDoubleTap = on.DoubleTap != ""
-		opts.HasHold = on.Hold != ""
-		opts.HasRepeat = on.Repeat != ""
-		if opts.HasRepeat {
-			opts.RepeatEvery = opts.HoldDelay
-		}
-		return ig.Options{
-			HasTap:         opts.HasTap,
-			HasDoubleTap:   opts.HasDoubleTap,
-			HasHold:        opts.HasHold,
-			HasRepeat:      opts.HasRepeat,
-			HoldDelay:      opts.HoldDelay,
-			DoubleTapDelay: 300 * time.Millisecond,
-			RepeatEvery:    opts.RepeatEvery,
-		}, true
 	case "spotify_play_pause":
 		return ig.Options{
 			HasTap:    true,
 			HasHold:   true,
-			HoldDelay: projectHoldDuration(def.btn.Widget.HoldMS),
+			HoldDelay: holdDuration(def.btn.Widget.HoldMS),
 		}, true
 	case "volume":
 		return volumeGestures(def.btn.Widget), true
 	case "timer", "stopwatch", "pomodoro":
 		return timerGestures(), true
-	case "memory", "freqtrade", "spotify_next", "spotify_artwork", "wide_dashboard", "weather_day", "site",
+	case "memory", "spotify_next", "spotify_artwork", "wide_dashboard", "weather_day",
 		"microphone", "audio_output", "media", "clock", "cpu", "disk", "network", "battery", "ticker":
 		return ig.Options{HasTap: true}, true
 	default:
-		return ig.Options{}, false
+		return personalGestures(def)
 	}
+}
+
+// defaultHoldMS is how long a press must last to count as a hold.
+const defaultHoldMS = 700
+
+func holdDuration(ms int) time.Duration {
+	if ms <= 0 {
+		ms = defaultHoldMS
+	}
+	return time.Duration(ms) * time.Millisecond
 }

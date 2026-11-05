@@ -184,10 +184,6 @@ Currently supported:
 ```yaml
 widgets:
   font: ~/Library/Fonts/MyFont-Regular.ttf
-  project:
-    terminal: "iTerm"
-    editor: "PhpStorm"
-    editor_subdir: "www"
 ```
 
 #### `widgets.font`
@@ -196,21 +192,6 @@ Optional path (`~` expanded) to a TTF/OTF file used for all widget text.
 When omitted, or when the file cannot be loaded, the embedded Go Mono
 family is used, so widgets render the same on every machine. A custom
 font is used for both regular and bold text.
-
-#### `widgets.project`
-
-Defaults for `widget.type: project`.
-
-Fields:
-
-- `terminal`
-  - App name used by fallback focus behavior
-  - Also passed to scripts as `PROJECT_TERMINAL`
-- `editor`
-  - Passed to scripts as `PROJECT_EDITOR`
-- `editor_subdir`
-  - Default subdirectory for editor target
-  - Also used to build `PROJECT_EDITOR_TARGET`
 
 ### `pages`
 
@@ -467,7 +448,6 @@ Each gesture can define one direct action:
 - `window`
 - `page_next`
 - `page_prev`
-- `close_all_projects`
 
 ### `type: shell`
 
@@ -622,22 +602,6 @@ Behavior:
 - loops at the beginning
 - clears currently open nested `folder`
 
-### `type: close_all_projects`
-
-Runs the `stop` lifecycle for every configured `widget.type: project`.
-
-```yaml
-tap:
-  type: close_all_projects
-```
-
-Behavior:
-
-- visits all configured project widgets, even if their folder has not
-  been opened yet in the current run
-- uses each project's explicit `scripts.stop` when present
-- otherwise falls back to the built-in tmux session shutdown logic
-
 ## Toggle Actions
 
 A gesture can own a `toggle` instead of a direct action.
@@ -746,7 +710,6 @@ Supported widget types:
 - system monitor: `cpu`, `memory`, `disk`, `network`, `battery`
 - markets: `ticker`
 - Spotify: `spotify_play_pause`, `spotify_next`, `spotify_artwork`
-- specialised: `freqtrade`, `site`, `project`
 
 Every widget is independent: it reads its own state and needs no other
 widget on the page. The general-purpose ones share one look: black
@@ -988,9 +951,6 @@ start-up when the config has a media widget.
 widget:
   type: memory
   poll_ms: 2000
-  apps:
-    - "Google Chrome"
-    - "Slack"
 ```
 
 Fields:
@@ -999,9 +959,6 @@ Fields:
 - `poll_ms`
   - optional, default `2000`
   - minimum `1000`
-- `apps`
-  - optional list of app names
-  - tap quits and reopens them, to free memory
 
 Shows used memory on a ring: green below 70%, amber below 85%, red
 above.
@@ -1100,190 +1057,14 @@ Fields:
 - `poll_ms`
   - optional, default `600000`, minimum effective value `60000`
 
-### `widget.type: site`
-
-Visitors on a site right now and its page views over the last 24 hours,
-with the change against a typical day. Tap refreshes at once.
-
-```yaml
-widget:
-  type: site
-  url: "https://example.com"
-  token: "secret"      # optional bearer token
-  title: "example"     # optional, defaults to the site name from url
-```
-
-The widget requests `<url>/api/metrics` and expects:
-
-```json
-{
-  "online": {"visitors": 7, "views": 12},
-  "daily": {"views": 1520, "visitors": 410, "change": 12.5}
-}
-```
-
-`change` is a percentage, or `null` when there is nothing to compare
-with.
-
-Fields:
-
-- `url`
-  - required, `http://` or `https://`
-- `token`
-  - optional, sent as `Authorization: Bearer <token>`
-- `title`
-  - optional
-- `poll_ms`
-  - optional, default `60000`, minimum `30000`
-
-### `widget.type: freqtrade`
-
-Combined freqtrade widget with two modes:
-
-- `summary`
-  - closed P&L on top
-  - open P&L on bottom
-- `log`
-  - last 3 closed trades by `profit_abs`
-
-Tap the widget to cycle `summary -> log -> summary`.
-
-```yaml
-widget:
-  type: freqtrade
-  title: "BTC"
-  dsns: |
-    trader:secret@http://10.8.0.1:9910
-    trader:secret@http://10.8.0.2:9910
-  poll_ms: 10000
-```
-
-Fields:
-
-- `type`
-- `dsns`
-  - required
-  - newline-separated list of `user:password@http://host:port`
-  - empty lines and lines starting with `#` are ignored
-- `title`
-  - optional short title shown at the top of the widget
-- `poll_ms`
-  - optional
-  - minimum `3000`
-
-Behavior:
-
-- polls freqtrade REST APIs directly from `udeck`
-- no separate daemon or localhost bridge is needed
-- aggregates all configured bots into one combined view
-- ignores failed bots and keeps rendering data from the remaining ones
-
-### `widget.type: project`
-
-Project widget manages a tmux-backed project lifecycle.
-
-```yaml
-widget:
-  type: project
-  project_dir: project-demo
-  session: "project_demo"
-  editor_subdir: "www"
-  hold_ms: 500
-  on:
-    tap: start
-    double_tap: focus
-    hold: stop
-  scripts:
-    start: start
-    stop: stop
-    focus: focus
-```
-
-Fields:
-
-- `type`
-- `project_dir`
-  - required
-  - relative paths resolve relative to the config file
-- `session`
-  - optional tmux session name override
-  - default is derived from the project directory name
-- `editor_subdir`
-  - optional per-project editor subdirectory override
-- `poll_ms`
-  - optional
-  - minimum `1000`
-- `hold_ms`
-  - optional
-  - minimum `100`
-- `on`
-  - optional mapping from gestures to project actions
-- `scripts`
-  - optional overrides for script paths
-
-#### Project Widget Gesture Values
-
-Allowed values for `widget.on.*`:
-
-- `start`
-- `stop`
-- `focus`
-
-Example:
-
-```yaml
-on:
-  tap: start
-  double_tap: focus
-  hold: stop
-```
-
-#### Project Scripts
-
-Default script lookup:
-
-- `<project_dir>/start`
-- `<project_dir>/stop`
-- `<project_dir>/focus`
-
-Override example:
-
-```yaml
-scripts:
-  start: scripts/dev-start
-  stop: scripts/dev-stop
-  focus: scripts/dev-focus
-```
-
-Project scripts receive environment variables such as:
-
-- `PROJECT_DIR`
-- `PROJECT_SESSION`
-- `PROJECT_TERMINAL`
-- `PROJECT_EDITOR`
-- `PROJECT_EDITOR_SUBDIR`
-- `PROJECT_EDITOR_TARGET`
-
-Current demo behavior:
-
-- `start`
-  - creates a tmux session with a two-pane layout if missing
-  - opens `PROJECT_EDITOR` on `PROJECT_EDITOR_TARGET` when configured
-- `stop`
-  - kills the tmux session
-- `focus`
-  - opens a new tab in `Ghostty`, `iTerm` or `Terminal`
-  - runs `tmux attach-session -t <session>`
-
 ## Path Resolution Rules
 
 Relative paths are resolved relative to the config file for:
 
 - `button.icon`
-- `widget.project_dir`
 - nested icons inside `toggle` steps
 
-`~/...` is expanded for icon paths and widget project paths.
+`~/...` is expanded for icon paths.
 
 ## Validation Rules Summary
 
@@ -1308,10 +1089,7 @@ The loader validates:
 - `wide_dashboard` only at `at: [2, 3]`
 - `volume.action` and `volume.step`, `media.action`, `clock.timezone`
 - timer and pomodoro durations, `rounds` and `sound`
-- `weather_day` requires `city`; `site` requires an `http(s)` `url`
-- `freqtrade` requires `dsns`
-- `project` widgets require `project_dir`
-- known project widget gesture actions
+- `weather_day` requires `city`
 
 ## Example Patterns
 
@@ -1435,31 +1213,6 @@ The loader validates:
         - action:
             type: shell
             cmd: "echo second"
-```
-
-### Project Widget
-
-```yaml
-widgets:
-  project:
-    terminal: "iTerm"
-    editor: "PhpStorm"
-    editor_subdir: "www"
-
-pages:
-  - name: "Projects"
-    buttons:
-      - at: [0, 0]
-        label: "Demo"
-        icon: test-icons/work-folder.png
-        widget:
-          type: project
-          project_dir: project-demo
-          on:
-            tap: start
-            double_tap: focus
-            hold: stop
-          hold_ms: 500
 ```
 
 ## Canonical Demo Config

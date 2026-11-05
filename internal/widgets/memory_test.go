@@ -92,67 +92,6 @@ func TestMemoryWidgetRendersRingAndDigits(t *testing.T) {
 	}
 }
 
-func TestMemoryWidgetBusyRendersLucideIcon(t *testing.T) {
-	w := &MemoryWidget{widgetBase: testBase(t, nil), percent: 86, busy: true}
-	if _, err := w.render(); err != nil {
-		t.Fatal(err)
-	}
-	img := readIcon(t, w.iconPath)
-	if !anyPixel(img, image.Rect(58, 58, 138, 138), func(c color.RGBA) bool { return c.R > 150 && c.G < 120 && c.B < 120 }) {
-		t.Fatal("expected lucide busy icon pixels")
-	}
-}
-
-func TestMemoryWidgetTapShowsBusyThenRestartsApps(t *testing.T) {
-	rec := &recorder{}
-	block := make(chan struct{})
-	restarted := make(chan string, 2)
-	w := &MemoryWidget{
-		widgetBase:  testBase(t, rec.notify),
-		percent:     63,
-		apps:        []string{"A", "B"},
-		readPercent: func() (int, error) { return 40, nil },
-		restart: func(app string) error {
-			<-block
-			restarted <- app
-			return nil
-		},
-	}
-	if _, err := w.render(); err != nil {
-		t.Fatal(err)
-	}
-	before := rec.count()
-
-	w.HandleGesture(ig.Tap)
-	if rec.count() != before+1 {
-		t.Fatal("expected immediate widget update on tap")
-	}
-	img := readIcon(t, w.iconPath)
-	if !anyPixel(img, image.Rect(58, 58, 138, 138), func(c color.RGBA) bool { return c.G > 120 && c.G > c.R }) {
-		t.Fatal("expected busy icon right after tap")
-	}
-	// A second tap while busy is ignored.
-	w.HandleGesture(ig.Tap)
-	w.HandleGesture(ig.Hold)
-	close(block)
-	if a, b := <-restarted, <-restarted; a != "A" || b != "B" {
-		t.Fatalf("restart order %s,%s", a, b)
-	}
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		w.mu.RLock()
-		done := !w.busy && w.percent == 40
-		w.mu.RUnlock()
-		if done {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("widget did not leave busy state")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-}
-
 func TestMemoryWidgetUpdateMemory(t *testing.T) {
 	rec := &recorder{}
 	pct, failing := 50, false
@@ -207,9 +146,6 @@ func TestMemoryHelpers(t *testing.T) {
 	}
 	if clampPercent(-1) != 0 || clampPercent(150) != 100 || clampPercent(42) != 42 {
 		t.Fatal("clampPercent")
-	}
-	if escapeAS(`a"b\c`) != `a\"b\\c` {
-		t.Fatalf("escapeAS = %q", escapeAS(`a"b\c`))
 	}
 	img := image.NewRGBA(image.Rect(0, 0, 100, 40))
 	drawScaledCenteredText(img, "42", img.Bounds(), color.White)
@@ -267,35 +203,5 @@ func TestReadMemoryPercentLive(t *testing.T) {
 	}
 	if got, err := readMemoryPercent(); err != nil || got < 1 || got > 100 {
 		t.Fatalf("got %d err=%v", got, err)
-	}
-}
-
-func TestRestartApp(t *testing.T) {
-	if err := restartApp(""); err != nil {
-		t.Fatal(err)
-	}
-	// osascript reports "false": app not running, nothing to do.
-	calls := fakeExec(t, map[string]string{"/usr/bin/osascript": "false"})
-	if err := restartApp("Foo"); err != nil {
-		t.Fatal(err)
-	}
-	if len(*calls) != 1 {
-		t.Fatalf("calls = %v", *calls)
-	}
-	// osascript fails.
-	fakeExec(t, map[string]string{})
-	if err := restartApp("Foo"); err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestWaitUntilQuitTimesOut(t *testing.T) {
-	fakeExec(t, map[string]string{"/usr/bin/osascript": "true"})
-	if err := waitUntilQuit("Foo", time.Millisecond); err == nil {
-		t.Fatal("expected timeout")
-	}
-	fakeExec(t, map[string]string{"/usr/bin/osascript": "false"})
-	if err := waitUntilQuit("Foo", time.Second); err != nil {
-		t.Fatal(err)
 	}
 }
