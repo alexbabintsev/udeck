@@ -134,8 +134,8 @@ buttons:
 	if !filepath.IsAbs(b[0].On.Tap.Toggle[0].Icon) || b[0].On.Tap.Toggle[1].Icon != "lucide/play" {
 		t.Fatal("toggle icons not resolved correctly")
 	}
-	if !filepath.IsAbs(b[1].Widget.ProjectDir) {
-		t.Fatal("project_dir not resolved")
+	if b[1].Widget.Params["project_dir"] != "proj" || b[1].Widget.Params["type"] != "memory" {
+		t.Fatalf("widget params: %v", b[1].Widget.Params)
 	}
 	if b[2].Folder.Buttons[0].Icon != "~/x.png" || b[2].Folder.Buttons[0].IconMargins.Top != 4 {
 		t.Fatal("folder defaults")

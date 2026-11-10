@@ -20,6 +20,11 @@ type Config struct {
 	Pages     []Page          `yaml:"pages,omitempty"`
 	Buttons   []Button        `yaml:"buttons,omitempty"`
 	SmallView *SmallViewBlock `yaml:"smallview,omitempty"` // reserved for v3
+
+	// WidgetsDir holds the script widgets, <type>.js: the widgets folder
+	// next to the config file. Empty for configs not read by Load, which
+	// then accept built-in widget types only.
+	WidgetsDir string `yaml:"-"`
 }
 
 type Page struct {
@@ -30,14 +35,10 @@ type Page struct {
 type WidgetSettings struct {
 	// Font is an optional TTF/OTF path (~ expanded) for widget text; the
 	// built-in Go Mono family is used when empty.
-	Font    string                `yaml:"font,omitempty"`
-	Project ProjectWidgetSettings `yaml:"project,omitempty"`
-}
-
-type ProjectWidgetSettings struct {
-	Terminal     string `yaml:"terminal,omitempty"`
-	Editor       string `yaml:"editor,omitempty"`
-	EditorSubdir string `yaml:"editor_subdir,omitempty"`
+	Font string `yaml:"font,omitempty"`
+	// Scripts are the shared settings of script widgets, by type:
+	// widgets.<type> in YAML, handed to every widget of that type.
+	Scripts map[string]any `yaml:",inline"`
 }
 
 type DeviceConfig struct {
@@ -105,20 +106,12 @@ type Folder struct {
 
 // Widget defines a dynamic button that manages its own icon and press logic.
 type Widget struct {
-	Type         string        `yaml:"type"`
-	PollMS       int           `yaml:"poll_ms,omitempty"`
-	Title        string        `yaml:"title,omitempty"`
-	City         string        `yaml:"city,omitempty"`
-	DSNs         string        `yaml:"dsns,omitempty"`
-	ProjectDir   string        `yaml:"project_dir,omitempty"`
-	Session      string        `yaml:"session,omitempty"`
-	URL          string        `yaml:"url,omitempty"`
-	Token        string        `yaml:"token,omitempty"`
-	EditorSubdir string        `yaml:"editor_subdir,omitempty"`
-	Scripts      WidgetScripts `yaml:"scripts,omitempty"`
-	On           *WidgetOn     `yaml:"on,omitempty"`
-	HoldMS       int           `yaml:"hold_ms,omitempty"`
-	DayIndex     int           `yaml:"day_index,omitempty"`
+	Type     string `yaml:"type"`
+	PollMS   int    `yaml:"poll_ms,omitempty"`
+	Title    string `yaml:"title,omitempty"`
+	City     string `yaml:"city,omitempty"`
+	HoldMS   int    `yaml:"hold_ms,omitempty"`
+	DayIndex int    `yaml:"day_index,omitempty"`
 	// Action is what a press does: volume (mute|up|down) and media
 	// (play_pause|next|previous).
 	Action string `yaml:"action,omitempty"`
@@ -153,6 +146,25 @@ type Widget struct {
 	Symbol string `yaml:"symbol,omitempty"`
 	// Source is where a ticker gets prices: yahoo (default) or binance.
 	Source string `yaml:"source,omitempty"`
+
+	// Params is every key of the widget's YAML, the ones above included,
+	// as decoded: script widgets read their options from it.
+	Params map[string]any `yaml:"-"`
+}
+
+// UnmarshalYAML decodes the known fields and keeps the whole mapping in
+// Params, so script widgets can take options the schema does not know.
+func (w *Widget) UnmarshalYAML(node *yaml.Node) error {
+	type plain Widget
+	if err := node.Decode((*plain)(w)); err != nil {
+		return err
+	}
+	var params map[string]any
+	if err := node.Decode(&params); err != nil {
+		return err
+	}
+	w.Params = params
+	return nil
 }
 
 // TimerDuration parses a timer or pomodoro duration field; empty means
@@ -181,19 +193,6 @@ const (
 	DefaultPomodoroRounds = 4
 	DefaultTimerSound     = "Glass"
 )
-
-type WidgetScripts struct {
-	Start string `yaml:"start,omitempty"`
-	Stop  string `yaml:"stop,omitempty"`
-	Focus string `yaml:"focus,omitempty"`
-}
-
-type WidgetOn struct {
-	Tap       string `yaml:"tap,omitempty"`
-	DoubleTap string `yaml:"double_tap,omitempty"`
-	Hold      string `yaml:"hold,omitempty"`
-	Repeat    string `yaml:"repeat,omitempty"`
-}
 
 // Handlers defines interaction handlers for a button. This is only valid
 // for action buttons and is mutually exclusive with Folder/Widget.
@@ -230,8 +229,7 @@ func (b Button) HIDIndex() int {
 
 // Action is the handler fired when a gesture resolves.
 type Action struct {
-	// Type is "shell", "key", "http", "window", "page_next", "page_prev",
-	// or a personal-build action.
+	// Type is "shell", "key", "http", "window", "page_next" or "page_prev".
 	Type string `yaml:"type"`
 
 	// Cmd is the shell command run for type=shell.
@@ -283,6 +281,32 @@ func (c *Config) IconPaths() []string {
 	return out
 }
 
+// ScriptPaths returns the scripts of the script widgets the config uses,
+// existing or not, so the reloader notices when one is edited or created.
+func (c *Config) ScriptPaths() []string {
+	if c.WidgetsDir == "" {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	var walk func([]Button)
+	walk = func(buttons []Button) {
+		for _, btn := range buttons {
+			if w := btn.Widget; w != nil && !IsBuiltinWidget(w.Type) && validScriptWidgetType(w.Type) && !seen[w.Type] {
+				seen[w.Type] = true
+				out = append(out, ScriptWidgetPath(c.WidgetsDir, w.Type))
+			}
+			if btn.Folder != nil {
+				walk(btn.Folder.Buttons)
+			}
+		}
+	}
+	for _, page := range c.PagesOrDefault() {
+		walk(page.Buttons)
+	}
+	return out
+}
+
 // UsesKeyActions reports whether any button in the config tree triggers a
 // `type: key` action, directly, through a toggle step, or through a chain,
 // or is a media widget: all of them need Accessibility access.
@@ -301,6 +325,7 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+	c.WidgetsDir = filepath.Join(filepath.Dir(path), "widgets")
 	normalizePageButtonCoordinates(c.PagesOrDefault())
 	assignPageButtonIDs(c.PagesOrDefault())
 	resolvePageButtonPaths(c.PagesOrDefault(), filepath.Dir(path))
@@ -359,7 +384,7 @@ func (c *Config) Validate() error {
 	if len(pages) == 0 {
 		return fmt.Errorf("config must define at least one page")
 	}
-	return validatePages(pages)
+	return validatePages(pages, c.WidgetsDir)
 }
 
 func (c *Config) PagesOrDefault() []Page {
@@ -403,19 +428,19 @@ func validateInsetsForSize(in *Insets, path string, width, height int) error {
 	return nil
 }
 
-func validatePages(pages []Page) error {
+func validatePages(pages []Page, widgetsDir string) error {
 	for i, page := range pages {
 		if len(page.Buttons) == 0 {
 			return fmt.Errorf("pages[%d].buttons is empty", i)
 		}
-		if err := validateButtons(page.Buttons, fmt.Sprintf("pages[%d].buttons", i), false); err != nil {
+		if err := validateButtons(page.Buttons, fmt.Sprintf("pages[%d].buttons", i), false, widgetsDir); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateButtons(buttons []Button, path string, reserveBack bool) error {
+func validateButtons(buttons []Button, path string, reserveBack bool, widgetsDir string) error {
 	seen := make(map[[2]int]int, len(buttons))
 	for i, btn := range buttons {
 		if !validButtonSlot(btn.At) {
@@ -453,7 +478,7 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 		if err := validateHandlers(btn.On, fmt.Sprintf("%s[%d].on", path, i)); err != nil {
 			return err
 		}
-		if err := validateWidget(btn.Widget, btn.At, fmt.Sprintf("%s[%d].widget", path, i)); err != nil {
+		if err := validateWidget(btn.Widget, btn.At, fmt.Sprintf("%s[%d].widget", path, i), widgetsDir); err != nil {
 			return err
 		}
 		if d := btn.Folder; d != nil {
@@ -461,7 +486,7 @@ func validateButtons(buttons []Button, path string, reserveBack bool) error {
 				return fmt.Errorf("%s[%d].folder.buttons is empty", path, i)
 			}
 			childPath := fmt.Sprintf("%s[%d].folder.buttons", path, i)
-			if err := validateButtons(d.Buttons, childPath, true); err != nil {
+			if err := validateButtons(d.Buttons, childPath, true, widgetsDir); err != nil {
 				return err
 			}
 		}
@@ -530,13 +555,64 @@ var widgetMinPollMS = map[string]int{
 	"ticker":             15000,
 }
 
-func validateWidget(w *Widget, at [2]int, path string) error {
+// builtinWidgetTypes lists the built-in widgets for error messages.
+const builtinWidgetTypes = "clock|timer|stopwatch|pomodoro|cpu|disk|network|battery|ticker|volume|microphone|audio_output|media|memory|spotify_play_pause|spotify_artwork|wide_dashboard|weather_day"
+
+// IsBuiltinWidget reports whether typ is a built-in widget rather than a
+// script in the widgets folder.
+func IsBuiltinWidget(typ string) bool {
+	_, ok := widgetMinPollMS[typ]
+	return ok
+}
+
+// ScriptWidgetPath is the script that implements widget type typ.
+func ScriptWidgetPath(widgetsDir, typ string) string {
+	return filepath.Join(widgetsDir, typ+".js")
+}
+
+// CheckScriptWidget validates a script widget's options against its
+// script (compiling it and calling its validate). The widgets package
+// sets it; until then only the script's presence is checked.
+var CheckScriptWidget func(scriptPath string, w *Widget) error
+
+// validScriptWidgetType keeps type names to plain file names, so a type
+// cannot point outside the widgets folder.
+func validScriptWidgetType(typ string) bool {
+	if typ == "" || len(typ) > 64 {
+		return false
+	}
+	for _, r := range typ {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_' || r == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+func validateScriptWidget(w *Widget, path, widgetsDir string) error {
+	if widgetsDir == "" || !validScriptWidgetType(w.Type) {
+		return fmt.Errorf("%s.type %q unknown (%s)", path, w.Type, builtinWidgetTypes)
+	}
+	script := ScriptWidgetPath(widgetsDir, w.Type)
+	if _, err := os.Stat(script); err != nil {
+		return fmt.Errorf("%s.type %q unknown (%s) and there is no %s", path, w.Type, builtinWidgetTypes, script)
+	}
+	if CheckScriptWidget == nil {
+		return nil
+	}
+	if err := CheckScriptWidget(script, w); err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	return nil
+}
+
+func validateWidget(w *Widget, at [2]int, path, widgetsDir string) error {
 	if w == nil {
 		return nil
 	}
 	minPoll, known := widgetMinPollMS[w.Type]
 	if !known {
-		return fmt.Errorf("%s.type %q unknown (clock|timer|stopwatch|pomodoro|cpu|disk|network|battery|ticker|volume|microphone|audio_output|media|memory|spotify_play_pause|spotify_artwork|wide_dashboard|weather_day)", path, w.Type)
+		return validateScriptWidget(w, path, widgetsDir)
 	}
 	switch w.Type {
 	case "wide_dashboard":
@@ -598,9 +674,6 @@ func validateWidget(w *Widget, at [2]int, path string) error {
 		default:
 			return fmt.Errorf("%s.action %q unknown (play_pause|next|previous)", path, w.Action)
 		}
-	}
-	if err := validatePersonalWidget(w, path); err != nil {
-		return err
 	}
 	if w.PollMS != 0 && w.PollMS < minPoll {
 		return fmt.Errorf("%s.poll_ms too small: %d", path, w.PollMS)
@@ -716,9 +789,7 @@ func validateAction(a *Action, path string) error {
 		}
 	case "page_next", "page_prev":
 	default:
-		if !personalAction(a.Type) {
-			return fmt.Errorf("%s.type %q unknown (shell|key|http|window|page_next|page_prev)", path, a.Type)
-		}
+		return fmt.Errorf("%s.type %q unknown (shell|key|http|window|page_next|page_prev)", path, a.Type)
 	}
 	return nil
 }
@@ -816,10 +887,6 @@ func resolveButtonPaths(buttons []Button, baseDir string) {
 			}
 		}
 		resolveTogglePaths(buttons[i].On, baseDir)
-		if buttons[i].Widget != nil && buttons[i].Widget.ProjectDir != "" &&
-			!filepath.IsAbs(buttons[i].Widget.ProjectDir) && !strings.HasPrefix(buttons[i].Widget.ProjectDir, "~/") {
-			buttons[i].Widget.ProjectDir = filepath.Join(baseDir, buttons[i].Widget.ProjectDir)
-		}
 		if buttons[i].Folder != nil {
 			resolveButtonPaths(buttons[i].Folder.Buttons, baseDir)
 		}

@@ -4,6 +4,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/alexbabintsev/udeck/internal/config"
 )
 
 // configReloadPollInterval is a var so tests can poll faster.
@@ -125,4 +127,10 @@ func statFile(path string) fileState {
 		mod:    info.ModTime(),
 		size:   info.Size(),
 	}
+}
+
+// watchedPaths are the files besides the config whose changes reload it:
+// its icons and the scripts of its script widgets.
+func watchedPaths(cfg *config.Config) []string {
+	return append(cfg.IconPaths(), cfg.ScriptPaths()...)
 }

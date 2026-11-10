@@ -66,9 +66,6 @@ If --config is omitted, run reads $XDG_CONFIG_HOME/udeck/config.yaml
 examples/test-config.yaml.
 `
 
-// personalCommands are subcommands only `-tags personal` includes.
-var personalCommands = map[string]func(args []string, stdout, stderr io.Writer) error{}
-
 // External dependencies, replaced by tests.
 var (
 	openDevice = func() (deck, error) {
@@ -112,6 +109,9 @@ func runCLI(args []string, stdout, stderr io.Writer) int {
 		err = cmdSetBrightness(rest, stdout, stderr)
 	case "run":
 		err = cmdRun(rest, stdout, stderr)
+	case "probe":
+		// Undocumented: measures upload pacing on real hardware.
+		err = cmdProbe(rest, stdout, stderr)
 	case "-h", "--help", "help":
 		fmt.Fprint(stdout, usage)
 		return 0
@@ -119,12 +119,8 @@ func runCLI(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "udeck", version)
 		return 0
 	default:
-		run, ok := personalCommands[sub]
-		if !ok {
-			fmt.Fprintf(stderr, "unknown subcommand: %s\n\n%s", sub, usage)
-			return 2
-		}
-		err = run(rest, stdout, stderr)
+		fmt.Fprintf(stderr, "unknown subcommand: %s\n\n%s", sub, usage)
+		return 2
 	}
 	if errors.Is(err, flag.ErrHelp) {
 		return 0

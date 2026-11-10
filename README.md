@@ -104,6 +104,9 @@ go build -o udeck ./cmd/udeck
     or coin (Yahoo, Binance; no API key)
   - `weather_day`, `wide_dashboard`: forecast and clock (Open-Meteo)
   - `spotify_play_pause`, `spotify_artwork`
+- Script widgets: your own widget types in JavaScript, one file each in
+  `widgets/` next to the config, run by the same binary
+  ([docs/script-widgets.md](docs/script-widgets.md))
 - Config hot reload while `run` is active
 - Runtime keepalive to keep the deck out of screensaver
 - Auto-recovery on common HID read/write/open failures
@@ -251,6 +254,8 @@ Current config surface:
       - `type: weather_day`
         - `city`: required
         - `day_index`: `0` (today) to `13`
+      - any other `type`: a [script widget](docs/script-widgets.md),
+        `widgets/<type>.js` next to the config
     - `on`
       - `tap`
       - `double_tap`
@@ -387,8 +392,8 @@ Notes:
 - `page_next` and `page_prev` loop across top-level pages and reset any
   currently open nested `folder`.
 - `run` hot-reloads the YAML config automatically when the file changes.
-- `run` also watches configured static icon files and reloads the page
-  when those assets change on disk.
+- `run` also watches configured static icon files and script widgets
+  and reloads the page when they change on disk.
 - Gesture semantics:
   - `tap` fires on release
   - `double_tap` fires on the second tap
@@ -439,6 +444,8 @@ Notes:
   permissions, and `key` actions can type into any app once
   Accessibility access is granted. Only run configs you wrote or
   reviewed, and keep the file writable only by you — it is hot-reloaded.
+  The same goes for script widgets in `widgets/`: they run with your
+  permissions too.
 - Keep secrets out of git. The
   repository ignores `/config.yaml`, and the default config lives
   outside the checkout in `~/.config/udeck/config.yaml`.

@@ -179,11 +179,11 @@ Notes:
 
 Optional global defaults for widgets.
 
-Currently supported:
-
 ```yaml
 widgets:
   font: ~/Library/Fonts/MyFont-Regular.ttf
+  http_status:          # any other key: settings for a script widget type
+    timeout: 5000
 ```
 
 #### `widgets.font`
@@ -192,6 +192,11 @@ Optional path (`~` expanded) to a TTF/OTF file used for all widget text.
 When omitted, or when the file cannot be loaded, the embedded Go Mono
 family is used, so widgets render the same on every machine. A custom
 font is used for both regular and bold text.
+
+#### `widgets.<type>`
+
+Settings shared by every key of a [script widget](script-widgets.md)
+type, handed to its script as `w.settings`.
 
 ### `pages`
 
@@ -1018,6 +1023,22 @@ Fields:
   - optional, `0` (today, default) to `13`
 - `poll_ms`
   - optional, default `600000`, minimum effective value `60000`
+
+### Script widgets
+
+Any other `widget.type` is a widget written in JavaScript:
+`widgets/<type>.js` next to the config file, e.g.
+`~/.config/udeck/widgets/http_status.js`. Its options are whatever the
+script reads from the `widget:` mapping; the script checks them when the
+config loads. Type names are lower case letters, digits, `_` and `-`.
+
+```yaml
+- at: [0, 0]
+  widget: {type: http_status, url: "https://example.com/health"}
+```
+
+See [script-widgets.md](script-widgets.md) for writing one and
+[examples/widgets](../examples/widgets) for an example.
 
 ## Path Resolution Rules
 

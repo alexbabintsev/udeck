@@ -95,7 +95,7 @@ type session struct {
 func (s *session) run(ctx context.Context) error {
 	var reloader *configReloader
 	if s.cfgPath != "" {
-		reloader = newConfigReloader(s.cfgPath, s.cfg.IconPaths())
+		reloader = newConfigReloader(s.cfgPath, watchedPaths(s.cfg))
 		defer reloader.Close()
 	}
 	if s.out == nil {
@@ -507,7 +507,7 @@ func (s *session) reloadConfig(reloader *configReloader) {
 	s.gestures = newGestureManager()
 	s.toggles = nextToggles
 	s.widgets = nextWidgetMgr
-	reloader.UpdatePaths(s.cfgPath, nextCfg.IconPaths())
+	reloader.UpdatePaths(s.cfgPath, watchedPaths(nextCfg))
 	log.Println("config reloaded")
 }
 

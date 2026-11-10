@@ -51,6 +51,10 @@ type Manager struct {
 	engine   *ig.Engine
 	context  Context
 	pageNav  *pageNavOverlay
+	// scripts are the script widget types in use, by type; scriptGestures
+	// their keys' gestures, by widget ID.
+	scripts        map[string]*scriptType
+	scriptGestures map[string]ig.Options
 }
 
 func NewManager(cfg *config.Config) (*Manager, error) {
@@ -67,9 +71,16 @@ func NewManager(cfg *config.Config) (*Manager, error) {
 		settings: cfg.Widgets,
 		engine:   ig.New(),
 		pageNav:  nav,
+
+		scripts:        map[string]*scriptType{},
+		scriptGestures: map[string]ig.Options{},
 	}
 	for _, page := range cfg.PagesOrDefault() {
 		m.collectDefs(page.Buttons)
+	}
+	if err := m.loadScripts(cfg.WidgetsDir); err != nil {
+		nav.close()
+		return nil, err
 	}
 	if pollMS, ok := m.spotifyPollMS(); ok {
 		service, err := newSpotifyService(pollMS)
@@ -315,7 +326,11 @@ func (m *Manager) newWidgetLocked(id string) (Widget, error) {
 	case "weather_day":
 		item, err = NewWeatherDayWidget(id, def.btn.Widget, m.notify)
 	default:
-		item, err = m.newPersonalWidget(id, def)
+		typ := m.scripts[def.kind]
+		if typ == nil {
+			return nil, fmt.Errorf("widget %q type %q unsupported", id, def.kind)
+		}
+		item, err = newScriptWidget(id, typ, def.btn, m.settings.Scripts[def.kind], m.notify)
 	}
 
 	if err != nil {
@@ -376,8 +391,36 @@ func (m *Manager) gestureOptions(id string) (ig.Options, bool) {
 		"microphone", "audio_output", "media", "clock", "cpu", "disk", "network", "battery", "ticker":
 		return ig.Options{HasTap: true}, true
 	default:
-		return personalGestures(def)
+		opts, ok := m.scriptGestures[id]
+		return opts, ok
 	}
+}
+
+// loadScripts compiles the script widgets the config uses and resolves
+// their keys' gestures.
+func (m *Manager) loadScripts(widgetsDir string) error {
+	for id, def := range m.defs {
+		if config.IsBuiltinWidget(def.kind) {
+			continue
+		}
+		if widgetsDir == "" {
+			return fmt.Errorf("widget %q type %q unsupported", id, def.kind)
+		}
+		typ, ok := m.scripts[def.kind]
+		if !ok {
+			var err error
+			if typ, err = loadScriptType(config.ScriptWidgetPath(widgetsDir, def.kind)); err != nil {
+				return fmt.Errorf("widget %s: %w", id, err)
+			}
+			m.scripts[def.kind] = typ
+		}
+		opts, err := typ.gestures(def.btn.Widget)
+		if err != nil {
+			return fmt.Errorf("widget %s: %w", id, err)
+		}
+		m.scriptGestures[id] = opts
+	}
+	return nil
 }
 
 // defaultHoldMS is how long a press must last to count as a hold.

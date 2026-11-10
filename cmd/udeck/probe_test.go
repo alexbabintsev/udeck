@@ -1,5 +1,3 @@
-//go:build personal
-
 package main
 
 import (

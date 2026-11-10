@@ -36,7 +36,7 @@ func TestRunBindingChainDelaysStopsOnErrorAndTracksPageChange(t *testing.T) {
 }
 
 func TestRunActionWithoutNavigatorOrManager(t *testing.T) {
-	for _, typ := range []string{"page_next", "page_prev", "close_all_projects"} {
+	for _, typ := range []string{"page_next", "page_prev"} {
 		if changed, err := runAction(&config.Action{Type: typ}, nil, nil); changed || err != nil {
 			t.Fatalf("%s: changed=%v err=%v", typ, changed, err)
 		}

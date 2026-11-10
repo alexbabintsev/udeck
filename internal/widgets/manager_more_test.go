@@ -21,15 +21,15 @@ func stubSpotifyFactory(t *testing.T) {
 
 func TestManagerGestureOptionsPerWidgetType(t *testing.T) {
 	stubSpotifyFactory(t)
-	btn := func(id, typ string, on *config.WidgetOn) config.Button {
-		return config.Button{RuntimeID: id, Widget: &config.Widget{Type: typ, On: on, HoldMS: 900}}
+	btn := func(id, typ string) config.Button {
+		return config.Button{RuntimeID: id, Widget: &config.Widget{Type: typ, HoldMS: 900}}
 	}
 	m, err := NewManager(&config.Config{Buttons: []config.Button{
-		btn("spp", "spotify_play_pause", nil),
-		btn("mem", "memory", nil),
+		btn("spp", "spotify_play_pause"),
+		btn("mem", "memory"),
 		{RuntimeID: "vol-up", Widget: &config.Widget{Type: "volume", Action: "up"}},
-		btn("mic", "microphone", nil),
-		btn("pomo", "pomodoro", nil),
+		btn("mic", "microphone"),
+		btn("pomo", "pomodoro"),
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -143,14 +143,14 @@ func TestManagerResolveButtonsOverlaysPageNumber(t *testing.T) {
 }
 
 func TestManagerRejectsUnknownWidget(t *testing.T) {
-	m, err := NewManager(&config.Config{Buttons: []config.Button{{RuntimeID: "x", Widget: &config.Widget{Type: "nope"}}}})
+	if _, err := NewManager(&config.Config{Buttons: []config.Button{{RuntimeID: "x", Widget: &config.Widget{Type: "nope"}}}}); err == nil {
+		t.Fatal("expected unsupported widget error")
+	}
+	m, err := NewManager(&config.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer m.Close()
-	if _, err := m.ResolveButtons([]config.Button{{RuntimeID: "x", Widget: &config.Widget{Type: "nope"}}}); err == nil {
-		t.Fatal("expected unsupported widget error")
-	}
 	if _, err := m.ResolveButtons([]config.Button{{RuntimeID: "missing", Widget: &config.Widget{Type: "memory"}}}); err == nil {
 		t.Fatal("expected unknown widget id error")
 	}

@@ -1,5 +1,3 @@
-//go:build personal
-
 package main
 
 import (
@@ -20,8 +18,6 @@ import (
 	"github.com/alexbabintsev/udeck/internal/icons"
 	"github.com/alexbabintsev/udeck/internal/protocol"
 )
-
-func init() { personalCommands["probe"] = cmdProbe }
 
 // probeStallThreshold marks a transfer the device was too busy to take
 // promptly; a healthy upload of a few packets takes milliseconds.

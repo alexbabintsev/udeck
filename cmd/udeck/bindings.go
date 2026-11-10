@@ -88,11 +88,6 @@ func runAction(action *config.Action, nav pager, widgetMgr *widgets.Manager) (bo
 			return false, nil
 		}
 		return nav.prevPage(), nil
-	case "close_all_projects":
-		if widgetMgr == nil {
-			return false, nil
-		}
-		return false, widgetMgr.CloseAllProjects()
 	default:
 		return false, runExternalAction(action)
 	}

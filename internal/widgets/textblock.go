@@ -78,22 +78,26 @@ func drawText(
 		return
 	}
 	bounds := img.Bounds()
-	canvasW := bounds.Dx()
-	canvasH := bounds.Dy()
-
-	blockX := resolveAnchorX(anchorX, blockW, canvasW)
-	blockY := resolveAnchorY(anchorY, blockH, canvasH)
-
-	face, display := textFaceForBlock(text, blockW, size, bold)
-	if face == nil {
-		return
-	}
-	defer face.Close()
-
+	blockX := resolveAnchorX(anchorX, blockW, bounds.Dx())
+	blockY := resolveAnchorY(anchorY, blockH, bounds.Dy())
 	tr := 0.0
 	if len(tracking) > 0 {
 		tr = tracking[0]
 	}
+	drawTextBlock(img, text, blockX, blockY, blockW, blockH, align, clr, size, textMinSize, bold, tr)
+}
+
+// drawTextBlock is drawText at an absolute block position, shrinking
+// the text down to minSize before shortening it.
+func drawTextBlock(img *image.RGBA, text string, blockX, blockY, blockW, blockH int, align TextAlign, clr color.Color, size, minSize float64, bold bool, tr float64) {
+	if text == "" {
+		return
+	}
+	face, display := fitFace(text, blockW, size, minSize, 1, bold)
+	if face == nil {
+		return
+	}
+	defer face.Close()
 
 	metrics := face.Metrics()
 	textH := metrics.Height.Ceil()
@@ -186,11 +190,6 @@ func fitFace(text string, maxWidth int, startSize, minSize, step float64, bold b
 		}
 	}
 	return newFace(minSize), candidate
-}
-
-// textFaceForBlock fits text for drawText (minimum size textMinSize).
-func textFaceForBlock(text string, maxWidth int, startSize float64, bold bool) (font.Face, string) {
-	return fitFace(text, maxWidth, startSize, textMinSize, 1, bold)
 }
 
 // drawIcon draws a lucide icon by ID into a square inscribed in the block.

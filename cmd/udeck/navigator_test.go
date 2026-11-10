@@ -170,16 +170,6 @@ func TestRunBindingHandlesPageActions(t *testing.T) {
 	}
 }
 
-func TestRunBindingCloseAllProjectsWithoutWidgetManager(t *testing.T) {
-	changed, err := runBinding(&config.GestureBinding{Type: "close_all_projects"}, nil, nil)
-	if err != nil {
-		t.Fatalf("run binding: %v", err)
-	}
-	if changed {
-		t.Fatal("expected no page change")
-	}
-}
-
 func actionIndex(at [2]int) int {
 	return at[1]*5 + at[0]
 }
