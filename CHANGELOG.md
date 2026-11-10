@@ -10,6 +10,19 @@ actual development milestones rather than formal releases.
 - Keep updating this section for user-visible changes that have not been
   grouped into a tagged release yet.
 
+## 0.3.0 - 2026-11-10
+
+- Script widgets: a `widget.type` udeck does not ship runs
+  `widgets/<type>.js` next to the config, a JavaScript widget with HTTP,
+  commands, timers and drawing at hand
+  ([docs/script-widgets.md](docs/script-widgets.md)). `widgets.<type>`
+  holds settings shared by a type's keys. Editing a script reloads the
+  config.
+- The personal build is gone: `-tags personal`, the `freqtrade`, `site`
+  and `project` widgets and the `close_all_projects` action were removed;
+  such widgets now live as scripts outside the repository.
+- `udeck probe` is in every build again, undocumented.
+
 ## 0.2.0 - 2026-11-05
 
 - The `freqtrade`, `site` and `project` widgets and the
